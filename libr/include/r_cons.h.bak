@@ -1,4 +1,4 @@
-﻿#ifndef R2_CONS_H
+#ifndef R2_CONS_H
 #define R2_CONS_H
 
 #ifdef __cplusplus
