@@ -3887,8 +3887,11 @@ escape_backtick:
 
 		*ptr++ = '\0';
 repeat_arroba:
-		arroba = (ptr[0] && ptr[1] && ptr[2])?
-				 strchr (ptr + 2, '@'): NULL;
+		arroba = (ptr[0] && ptr[1] && ptr[2])?  strchr (ptr + 2, '@'): NULL;
+		if (!strncmp (ptr, "@@@", 3)) { // "@@@@"
+			eprintf ("Cannot iterate that much.\n");
+			goto fuji;
+		}
 		if (arroba) {
 			*arroba = 0;
 		}
@@ -4216,8 +4219,8 @@ next_arroba:
 		if (core->fixedblock) {
 			r_core_block_read (core);
 		}
-		if (ptr[1] == '@') {
-			if (ptr[2] == '@') {
+		if (ptr[1] == '@') { // @@
+			if (ptr[2] == '@') { // @@@
 				char *rule = ptr + 3;
 				while (*rule && *rule == ' ') {
 					rule++;
@@ -4701,6 +4704,15 @@ R_API int r_core_cmd_foreach3(RCore *core, const char *cmd, char *each) { // "@@
 			r_core_cmdf (core, "dp %d", origpid);
 		}
 		break;
+	case 0:
+		eprintf ("Nothing to repeat. Check @@@?\n");
+		break;
+	case '@':
+		eprintf ("I can't iterate that much!\n");
+		break;
+	default:
+		eprintf ("Invalid repeat type, Check @@@? for help\n");
+		break;
 	}
 	r_list_free (list);
 	free (glob);
@@ -4848,6 +4860,9 @@ R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each) {
 		}
 		free (ostr);
 		return 0;
+	case 0:
+		eprintf ("Nothing to repeat. Check @@?\n");
+		break;
 	case '?': // "@@?"
 		r_core_cmd_help (core, help_msg_at_at);
 		break;
@@ -5310,7 +5325,7 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 	size_t line_count = r_str_char_count(lines, '\n');
 
 #if __UNIX__
-	const bool istty = r_cons_isatty ();
+	const bool istty = r_cons_is_tty ();
 #else
 	const bool istty = true;
 #endif

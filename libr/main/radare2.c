@@ -387,11 +387,11 @@ R_API int r_main_radare2(int argc, const char **argv) {
 	if (r_sys_getenv_asbool ("R2_DEBUG")) {
 		char *sysdbg = r_sys_getenv ("R2_DEBUG_TOOL");
 		char *fmt = (sysdbg && *sysdbg)
-			? r_str_newf ("%s %%d", sysdbg)
+			? strdup (sysdbg)
 #if __APPLE__
-			: r_str_newf ("lldb -p %%d");
+			: strdup ("lldb -p");
 #else
-			: r_str_newf ("gdb --pid %%d");
+			: strdup ("gdb --pid");
 #endif
 		r_sys_crash_handler (fmt);
 		free (fmt);
@@ -1392,7 +1392,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 	}
 #if UNCOLORIZE_NONTTY
 #if __UNIX__
-	if (!r_cons_isatty ()) {
+	if (!r_cons_is_tty ()) {
 		r_config_set_i (r->config, "scr.color", COLOR_MODE_DISABLED);
 	}
 #endif
