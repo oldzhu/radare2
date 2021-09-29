@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2021 - nibble, pancake */
+﻿/* radare - LGPL - Copyright 2009-2021 - nibble, pancake */
 
 #define INTERACTIVE_MAX_REP 1024
 

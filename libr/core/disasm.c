@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2021 - nibble, pancake, dso, lazula */
+﻿/* radare - LGPL - Copyright 2009-2021 - nibble, pancake, dso, lazula */
 
 #include "r_core.h"
 

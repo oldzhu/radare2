@@ -136,3 +136,4 @@ libr/include/sdb
 **/d/*.gperf
 **/d/*.out
 **/d/*.inc
+radare2_dist
