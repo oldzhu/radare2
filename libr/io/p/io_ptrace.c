@@ -271,25 +271,21 @@ static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 	return io->off;
 }
 
-static int __close(RIODesc *desc) {
-	int pid, fd;
+static bool __close(RIODesc *desc) {
 	if (!desc || !desc->data) {
-		return -1;
+		return false;
 	}
-	pid = RIOPTRACE_PID (desc);
-	fd = RIOPTRACE_FD (desc);
+	int pid = RIOPTRACE_PID (desc);
+	int fd = RIOPTRACE_FD (desc);
 	if (fd != -1) {
 		close (fd);
 	}
 	RIOPtrace *riop = desc->data;
 	desc->data = NULL;
-	long ret = r_io_ptrace (desc->io, PTRACE_DETACH, pid, 0, 0);
-	if (errno == ESRCH) {
-		// process does not exist, may have been killed earlier -- continue as normal
-		ret = 0;
-	}
+	(void) r_io_ptrace (desc->io, PTRACE_DETACH, pid, 0, 0);
 	free (riop);
-	return ret;
+	// always return true, even if ptrace fails, otherwise the link is lost and the fd cant be removed
+	return true;
 }
 
 static void show_help(void) {
