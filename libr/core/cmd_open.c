@@ -1608,7 +1608,7 @@ static int cmd_open(void *data, const char *input) {
 			break;
 		case '?': // "oa?"
 			r_core_cmd_help (core, help_msg_oa);
-			break;
+			return 1;
 		case ' ': // "oa "
 			{
 				int i;
@@ -1655,7 +1655,8 @@ static int cmd_open(void *data, const char *input) {
 		default:
 			r_core_cmd_help (core, help_msg_oa);
 			return 0;
-	}
+		}
+		break;
 	case 'n': // "on"
 		if (input[1] == '?') {
 			r_core_cmd_help (core, help_msg_on);
