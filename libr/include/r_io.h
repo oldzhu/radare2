@@ -325,7 +325,6 @@ R_API bool r_io_map_exists_for_id(RIO *io, ut32 id);
 R_API RIOMap *r_io_map_get(RIO *io, ut32 id);
 R_API RIOMap *r_io_map_add(RIO *io, int fd, int flags, ut64 delta, ut64 addr, ut64 size);
 // same as r_io_map_add but used when many maps need to be added. Call r_io_update when all maps have been added.
-R_API RIOMap *r_io_map_add_batch(RIO *io, int fd, int flags, ut64 delta, ut64 addr, ut64 size);
 R_API RIOMap *r_io_map_get_at(RIO *io, ut64 addr);		//returns the map at vaddr with the highest priority
 R_API RIOMap *r_io_map_get_by_ref(RIO *io, RIOMapRef *ref);
 // update the internal state of RIO after a series of _batch operations
@@ -333,7 +332,7 @@ R_API void r_io_update(RIO *io);
 R_API bool r_io_map_is_mapped(RIO* io, ut64 addr);
 R_API RIOMap *r_io_map_get_paddr(RIO *io, ut64 paddr);		//returns the map at paddr with the highest priority
 R_API void r_io_map_reset(RIO* io);
-R_API bool r_io_map_del(RIO *io, ut32 id);
+R_API void r_io_map_del(RIO *io, ut32 id);
 R_API bool r_io_map_del_for_fd(RIO *io, int fd);
 R_API bool r_io_map_depriorize(RIO* io, ut32 id);
 R_API bool r_io_map_priorize(RIO *io, ut32 id);
@@ -347,7 +346,7 @@ R_API RList* r_io_map_get_by_fd(RIO *io, int fd);
 R_API bool r_io_map_resize(RIO *io, ut32 id, ut64 newsize);
 
 // next free address to place a map.. maybe just unify
-R_API ut64 r_io_map_next_available(RIO* io, ut64 addr, ut64 size, ut64 load_align);
+R_API bool r_io_map_locate(RIO *io, ut64 *addr, const ut64 size, ut64 load_align);
 
 // p2v/v2p
 
@@ -374,7 +373,7 @@ R_API bool r_io_bank_map_add_bottom(RIO *io, const ut32 bankid, const ut32 mapid
 R_API bool r_io_bank_map_priorize (RIO *io, const ut32 bankid, const ut32 mapid);
 R_API bool r_io_bank_map_depriorize(RIO *io, const ut32 bankid, const ut32 mapid);
 R_API bool r_io_bank_update_map_boundaries(RIO *io, const ut32 bankid, const ut32 mapid, ut64 ofrom, ut64 oto);
-R_API bool r_io_bank_locate(RIO *io, const ut32 bankid, const ut64 size, ut64 *addr, ut64 load_align);
+R_API bool r_io_bank_locate(RIO *io, const ut32 bankid, ut64 *addr, const ut64 size, ut64 load_align);
 R_API void r_io_bank_del_map(RIO *io, const ut32 bankid, const ut32 mapid);
 R_API RIOMap *r_io_bank_get_map_at(RIO *io, const ut32 bankid, const ut64 addr);
 R_API bool r_io_bank_read_at(RIO *io, const ut32 bankid, ut64 addr, ut8 *buf, int len);

@@ -24,7 +24,7 @@ static void io_map_calculate_skyline(RIO *io) {
 	}
 }
 
-RIOMap* io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
+R_API RIOMap *r_io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
 	r_return_val_if_fail (io && io->map_ids, NULL);
 	if (!size) {
 		return NULL;
@@ -39,7 +39,7 @@ RIOMap* io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) 
 	map->delta = delta;
 	map->ts = io->mts++;
 	if ((UT64_MAX - size + 1) < addr) {
-		io_map_new (io, fd, perm, delta - addr, 0LL, size + addr);
+		r_io_map_new (io, fd, perm, delta - addr, 0LL, size + addr);
 		size = -(st64)addr;
 	}
 	// RIOMap describes an interval of addresses
@@ -49,12 +49,16 @@ RIOMap* io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) 
 	map->delta = delta;
 	// new map lives on the top, being top the list's tail
 	r_pvector_push (&io->maps, map);
-	r_skyline_add (&io->map_skyline, map->itv, map);
+	if (io->use_banks) {
+		if (!r_io_bank_map_add_top (io, io->bank, map->id)) {
+			r_id_pool_kick_id (io->map_ids, map->id);
+			free (map);
+			return NULL;
+		}
+	} else {
+		r_skyline_add (&io->map_skyline, map->itv, map);
+	}
 	return map;
-}
-
-R_API RIOMap *r_io_map_new(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	return io_map_new (io, fd, perm, delta, addr, size);
 }
 
 R_API bool r_io_map_remap(RIO *io, ut32 id, ut64 addr) {
@@ -134,27 +138,21 @@ R_API RIOMap* r_io_map_get(RIO *io, ut32 id) {
 	return NULL;
 }
 
-RIOMap* io_map_add(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
+R_API RIOMap *r_io_map_add(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
 	//check if desc exists
 	RIODesc* desc = r_io_desc_get (io, fd);
 	if (desc) {
 		//a map cannot have higher permissions than the desc belonging to it
-		return io_map_new (io, fd, (perm & desc->perm) | (perm & R_PERM_X),
+		return r_io_map_new (io, fd, (perm & desc->perm) | (perm & R_PERM_X),
 				delta, addr, size);
 	}
 	return NULL;
 }
 
-R_API RIOMap *r_io_map_add(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	return io_map_add (io, fd, perm, delta, addr, size);
-}
-
-R_API RIOMap *r_io_map_add_batch(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	return io_map_add (io, fd, perm, delta, addr, size);
-}
-
 R_API void r_io_update(RIO *io) {
-	io_map_calculate_skyline (io);
+	if (io && !io->use_banks) {
+		io_map_calculate_skyline (io);
+	}
 }
 
 R_API RIOMap* r_io_map_get_paddr(RIO* io, ut64 paddr) {
@@ -187,20 +185,28 @@ R_API void r_io_map_reset(RIO* io) {
 	io_map_calculate_skyline (io);
 }
 
-R_API bool r_io_map_del(RIO *io, ut32 id) {
-	r_return_val_if_fail (io, false);
+R_API void r_io_map_del(RIO *io, ut32 id) {
+	r_return_if_fail (io);
 	size_t i;
 	for (i = 0; i < r_pvector_len (&io->maps); i++) {
 		RIOMap *map = r_pvector_at (&io->maps, i);
 		if (map->id == id) {
+			if (io->use_banks) {
+				ut32 bankid;
+				r_return_if_fail (r_id_storage_get_lowest (io->banks, &bankid));
+				do {
+					// TODO: use threads for every bank, except the current bank (io->bank)
+					r_io_bank_del_map (io, bankid, id);
+				} while (r_id_storage_get_next (io->banks, &bankid));
+			}
 			r_pvector_remove_at (&io->maps, i);
 			_map_free (map);
 			r_id_pool_kick_id (io->map_ids, id);
-			io_map_calculate_skyline (io);
-			return true;
+			if (!io->use_banks) {
+				io_map_calculate_skyline (io);
+			}
 		}
 	}
-	return false;
 }
 
 //delete all maps with specified fd
@@ -339,13 +345,16 @@ R_API void r_io_map_del_name(RIOMap* map) {
 	R_FREE (map->name);
 }
 
-R_API ut64 r_io_map_next_available(RIO* io, ut64 addr, ut64 size, ut64 load_align) {
-	r_return_val_if_fail (io, UT64_MAX);
+R_API bool r_io_map_locate(RIO *io, ut64 *addr, const ut64 size, ut64 load_align) {
+	r_return_val_if_fail (io, false);
 	if (load_align == 0) {
 		load_align = 1;
 	}
-	ut64 next_addr = addr,
-	end_addr = next_addr + size;
+	if (io->use_banks) {
+		return r_io_bank_locate (io, io->bank, addr, size, load_align);
+	}
+	ut64 next_addr = *addr;
+	ut64 end_addr = next_addr + size;
 	void **it;
 	r_pvector_foreach (&io->maps, it) {
 		RIOMap *map = *it;
@@ -356,14 +365,17 @@ R_API ut64 r_io_map_next_available(RIO* io, ut64 addr, ut64 size, ut64 load_alig
 		// memory mapping with multiple files. infinite loop ahead?
 		if ((r_io_map_begin (map) <= next_addr && next_addr < to) || r_io_map_contain (map, end_addr)) {
 			next_addr = to + (load_align - (to % load_align)) % load_align;
-			if (next_addr == addr) {
-				return UT64_MAX;
+			if (next_addr == *addr) {
+				return false;
 			}
-			return r_io_map_next_available (io, next_addr, size, load_align);
+			*addr = next_addr;
+			return r_io_map_locate (io, addr, size, load_align);
 		}
+		// wtf is this garbage
 		break;
 	}
-	return next_addr;
+	*addr = next_addr;
+	return true;
 }
 
 R_API RList* r_io_map_get_by_fd(RIO* io, int fd) {
