@@ -905,14 +905,20 @@ static R2RProcessOutput *run_r2_test(R2RRunConfig *config, ut64 timeout_ms, cons
 
 R_API R2RProcessOutput *r2r_run_cmd_test(R2RRunConfig *config, R2RCmdTest *test, R2RCmdRunner runner, void *user) {
 	RList *extra_args = test->args.value ? r_str_split_duplist (test->args.value, " ", true) : NULL;
-	RList *files = r_str_split_duplist (test->file.value, "\n", true);
+	RList *files = test->file.value? r_str_split_duplist (test->file.value, "\n", true): NULL;
 	RListIter *it;
 	RListIter *tmpit;
 	char *token;
-	r_list_foreach_safe (extra_args, it, tmpit, token) {
-		if (!*token) {
-			r_list_delete (extra_args, it);
+	if (extra_args) {
+		r_list_foreach_safe (extra_args, it, tmpit, token) {
+			if (!*token) {
+				r_list_delete (extra_args, it);
+			}
 		}
+	}
+	if (!files) {
+		files = r_list_newf (free);
+		r_list_append (files, strdup ("-"));
 	}
 	r_list_foreach_safe (files, it, tmpit, token) {
 		if (!*token) {
@@ -1214,8 +1220,7 @@ R_API R2RTestResultInfo *r2r_run_test(R2RRunConfig *config, R2RTest *test) {
 			R2RAsmTestOutput *out = r2r_run_asm_test (config, at);
 			success = r2r_check_asm_test (out, at);
 			if (!success) {
-				eprintf ("\n");
-				eprintf ("[rasm2:error] code: %s vs %s\n", at->disasm, out->disasm);
+				eprintf ("\n[rasm2:error] code: %s vs %s\n", at->disasm, out->disasm);
 				char *b0 = r_hex_bin2strdup (at->bytes, at->bytes_size);
 				char *b1 = r_hex_bin2strdup (out->bytes, out->bytes_size);
 				eprintf ("[rasm2:error] data: %s vs %s\n", b0, b1);
