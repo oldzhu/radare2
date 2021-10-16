@@ -175,13 +175,27 @@ R_API void r_io_update(RIO *io) {
 	}
 }
 
-R_API RIOMap* r_io_map_get_paddr(RIO* io, ut64 paddr) {
+R_API RIOMap *r_io_map_get_paddr(RIO* io, ut64 paddr) {
 	r_return_val_if_fail (io, NULL);
-	void **it;
-	r_pvector_foreach_prev (&io->maps, it) {
-		RIOMap *map = *it;
-		if (map->delta <= paddr && paddr < map->delta + r_io_map_size (map)) {
-			return map;
+	if (io->use_banks) {
+		RIOBank *bank = r_io_bank_get (io, io->bank);
+		if (bank) {
+			RListIter *iter;
+			RIOMapRef *mapref;
+			r_list_foreach_prev (bank->maprefs, iter, mapref) {
+				RIOMap *map = r_io_map_get_by_ref (io, mapref);
+				if (map && map->delta <= paddr && paddr < map->delta + r_io_map_size (map)) {
+					return map;
+				}
+			}
+		}
+	} else {
+		void **it;
+		r_pvector_foreach_prev (&io->maps, it) {
+			RIOMap *map = *it;
+			if (map->delta <= paddr && paddr < map->delta + r_io_map_size (map)) {
+				return map;
+			}
 		}
 	}
 	return NULL;
@@ -239,10 +253,16 @@ R_API bool r_io_map_del_for_fd(RIO* io, int fd) {
 		if (!map) {
 			r_pvector_remove_at (&io->maps, i);
 		} else if (map->fd == fd) {
-			r_id_pool_kick_id (io->map_ids, map->id);
-			//delete iter and map
-			r_pvector_remove_at (&io->maps, i);
-			_map_free (map);
+			if(io->use_banks) {
+				// this is slower than it needs to be
+				// TODO: use RIDStorage instead of RPVector to speed this up
+				r_io_map_del (io, map->id);
+			} else {
+				r_id_pool_kick_id (io->map_ids, map->id);
+				//delete iter and map
+				r_pvector_remove_at (&io->maps, i);
+				_map_free (map);
+			}
 			ret = true;
 		} else {
 			i++;
@@ -268,7 +288,7 @@ R_API bool r_io_map_priorize(RIO* io, ut32 id) {
 		if (map->id == id) {
 			r_pvector_remove_at (&io->maps, i);
 			r_pvector_push (&io->maps, map);
-			io_map_calculate_skyline (io);
+			io_map_calculate_skyline (io);	//done
 			return true;
 		}
 	}
