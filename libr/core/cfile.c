@@ -679,11 +679,9 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 
 	if (plugin && plugin->name) {
 		if (!strcmp (plugin->name, "any")) {
-			if (r_str_startswith (desc->name, "rap") && strstr (desc->name, "://")) {
-				r_io_map_new (r->io, desc->fd, desc->perm, 0, laddr, UT64_MAX);
-			} else {
-				r_io_map_new (r->io, desc->fd, desc->perm, 0, laddr, r_io_desc_size (desc));
-			}
+			ut64 size = (r_str_startswith (desc->name, "rap") && strstr (desc->name, "://"))
+				? UT64_MAX : r_io_desc_size (desc);
+			r_io_map_new (r->io, desc->fd, desc->perm, 0, laddr, size);
 			// set use of raw strings
 			//r_config_set (r->config, "bin.rawstr", "true");
 			// r_config_set_i (r->config, "io.va", false);
@@ -766,8 +764,6 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 				ut64 a = linkdata.addr;
 				ut64 b = imp_addr;
 				r_core_cmdf (r, "ax 0x%08"PFMT64x" 0x%08"PFMT64x, a, b);
-			} else {
-				eprintf ("NO\n");
 			}
 		}
 	}
@@ -836,8 +832,6 @@ beach:
 }
 
 R_API RIODesc *r_core_file_open_many(RCore *r, const char *file, int perm, ut64 loadaddr) {
-	const bool openmany = r_config_get_i (r->config, "file.openmany");
-	int opened_count = 0;
 	RListIter *fd_iter, *iter2;
 	RIODesc *fd;
 
@@ -849,15 +843,6 @@ R_API RIODesc *r_core_file_open_many(RCore *r, const char *file, int perm, ut64 
 	}
 
 	r_list_foreach_safe (list_fds, fd_iter, iter2, fd) {
-		opened_count++;
-		if (openmany && opened_count > 1) {
-			// XXX - Open Many should limit the number of files
-			// loaded in io plugin area this needs to be more premptive
-			// like down in the io plugin layer.
-			// start closing down descriptors
-			r_list_delete (list_fds, fd_iter);
-			continue;
-		}
 		r_core_bin_load (r, fd->name, loadaddr);
 	}
 	return NULL;
@@ -867,7 +852,6 @@ R_API RIODesc *r_core_file_open_many(RCore *r, const char *file, int perm, ut64 
 R_API RIODesc *r_core_file_open(RCore *r, const char *file, int flags, ut64 loadaddr) {
 	r_return_val_if_fail (r && file, NULL);
 	ut64 prev = r_time_now_mono ();
-	const bool openmany = r_config_get_i (r->config, "file.openmany");
 
 	if (!strcmp (file, "-")) {
 		file = "malloc://512";
@@ -881,7 +865,7 @@ R_API RIODesc *r_core_file_open(RCore *r, const char *file, int flags, ut64 load
 	if (r_cons_is_breaked()) {
 		goto beach;
 	}
-	if (!fd && openmany) {
+	if (!fd) {
 		// XXX - make this an actual option somewhere?
 		fd = r_core_file_open_many (r, file, flags, loadaddr);
 		if (fd) {
