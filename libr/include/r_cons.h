@@ -415,6 +415,7 @@ typedef struct r_cons_context_t {
 	RList *sorted_lines;
 	RList *unsorted_lines;
 	int sorted_column; // -1
+	bool demo;
 	bool is_html;
 	bool was_html;
 	bool grep_color;
@@ -480,7 +481,7 @@ typedef struct r_cons_t {
 	bool enable_highlight;
 	int null; // if set, does not show anything
 	int mouse;
-	bool is_wine;
+	int is_wine; // -1, 0, 1
 	struct r_line_t *line;
 	const char **vline;
 	int refcnt;
