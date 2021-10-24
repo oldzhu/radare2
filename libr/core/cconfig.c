@@ -1391,21 +1391,11 @@ static bool cb_cfg_fortunes_type(void *user, void *data) {
 	return true;
 }
 
-static void check_decompiler(const char* name) {
-	char *path = r_file_path (name);
-	if (path && path[0] == '/') {
-		r_cons_printf ("!*%s\n", name);
-	}
-	free (path);
-}
-
 static bool cb_cmdpdc(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *)data;
 	if (*node->value == '?') {
 		r_cons_printf ("pdc\n");
-		// spaguetti
-		check_decompiler ("r2retdec");
 		RListIter *iter;
 		RCorePlugin *cp;
 		r_list_foreach (core->rcmd->plist, iter, cp) {
@@ -1415,9 +1405,6 @@ static bool cb_cmdpdc(void *user, void *data) {
 				r_cons_printf ("pdg\n");
 			}
 		}
-		check_decompiler ("r2ghidra");
-		check_decompiler ("r2jadx");
-		check_decompiler ("r2snow");
 		RConfigNode *r2dec = r_config_node_get (core->config, "r2dec.asm");
 		if (r2dec) {
 			r_cons_printf ("pdd\n");
@@ -2320,12 +2307,6 @@ static bool cb_scrhtml(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	r_cons_context ()->is_html = node->i_value;
 	// TODO: control error and restore old value (return false?) show errormsg?
-	return true;
-}
-
-static bool cb_newshell(void *user, void *data) {
-	// uncommenting this will break 39 tests
-	// eprintf ("Warning: newshell has been temporarily disabled\n");
 	return true;
 }
 
@@ -3302,9 +3283,9 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("dbg.malloc", "jemalloc", &cb_malloc, "Choose malloc structure parser");
 #endif
 #if __GLIBC_MINOR__ > 25
-	SETBPREF ("dbg.glibc.tcache", "true", "Set glib tcache parsing");
+	SETBPREF ("dbg.glibc.tcache", "true", "Parse the tcache (glibc.minor > 2.25.x)");
 #else
-	SETBPREF ("dbg.glibc.tcache", "false", "Set glib tcache parsing");
+	SETBPREF ("dbg.glibc.tcache", "false", "Parse the tcache (glibc.minor > 2.25.x)");
 #endif
 #if __x86_64__
 	SETI ("dbg.glibc.ma_offset", 0x000000, "Main_arena offset from his symbol");
@@ -3568,9 +3549,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("cfg.sandbox", "false", &cb_cfgsanbox, "Sandbox mode disables systems and open on upper directories");
 	SETBPREF ("cfg.wseek", "false", "Seek after write");
 	SETCB ("cfg.bigendian", "false", &cb_bigendian, "Use little (false) or big (true) endianness");
-	p = r_sys_getenv ("R2_CFG_NEWSHELL");
-	SETCB ("cfg.newshell", r_str_bool (p && atoi (p)), &cb_newshell, "Use new commands parser");
-	free (p);
 	SETI ("cfg.cpuaffinity", 0, "Run on cpuid");
 
 	/* log */
@@ -3951,6 +3929,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("scr.highlight.grep", "false", &cb_scr_color_grep_highlight, "Highlight (INVERT) the grepped words");
 	SETCB ("scr.prompt.popup", "false", &cb_scr_prompt_popup, "Show widget dropdown for autocomplete");
 	SETCB ("scr.prompt.vi", "false", &cb_scr_vi, "Use vi mode for input prompt");
+	SETPREF ("scr.prompt.tabhelp", "true", "Show command help when pressing the TAB key");
 	SETCB ("scr.prompt.mode", "false", &cb_scr_prompt_mode,  "Set prompt color based on vi mode");
 	SETBPREF ("scr.prompt.file", "false", "Show user prompt file (used by r2 -q)");
 	SETBPREF ("scr.prompt.flag", "false", "Show flag name in the prompt");
@@ -4129,17 +4108,17 @@ R_API void r_core_parse_radare2rc(RCore *r) {
 			RListIter *iter;
 			RList *files = r_sys_dir (homerc);
 			r_list_foreach (files, iter, file) {
-					if (*file != '.') {
-						char *path = r_str_newf ("%s/%s", homerc, file);
-						if (r_file_is_regular (path)) {
-							if (has_debug) {
-								eprintf ("USER CONFIG loaded from %s\n", homerc);
-							}
-							r_core_cmd_file (r, path);
+				if (*file != '.') {
+					char *path = r_str_newf ("%s/%s", homerc, file);
+					if (r_file_is_regular (path)) {
+						if (has_debug) {
+							eprintf ("USER CONFIG loaded from %s\n", homerc);
 						}
-						free (path);
+						r_core_cmd_file (r, path);
 					}
+					free (path);
 				}
+			}
 			r_list_free (files);
 		}
 		free (homerc);
