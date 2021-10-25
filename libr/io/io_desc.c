@@ -59,8 +59,8 @@ R_API bool r_io_desc_del(RIO* io, int fd) {
 	if (desc == io->desc) {
 		io->desc = NULL;
 	}
-	// remove all dead maps
-	r_io_map_cleanup (io);
+	// remove all related maps
+	r_io_map_del_for_fd (io, desc->fd);
 	r_io_desc_free (desc);
 	return true;
 }
@@ -178,8 +178,6 @@ R_API bool r_io_desc_close(RIODesc *desc) {
 	if (desc->plugin->close && !desc->plugin->close (desc)) {
 		return false;
 	}
-	// remove all related maps
-	r_io_map_del_for_fd (io, desc->fd);
 	// remove entry from idstorage and free the desc-struct
 	r_io_desc_del (io, desc->fd);
 	return true;
@@ -279,14 +277,16 @@ R_API bool r_io_desc_exchange(RIO* io, int fd, int fdx) {
 		r_io_desc_cache_cleanup (desc);
 		r_io_desc_cache_cleanup (descx);
 	}
-	void **it;
-	r_pvector_foreach (&io->maps, it) {
-		RIOMap *map = *it;
-		if (map->fd == fdx) {
-			map->perm &= (desc->perm | R_PERM_X);
-		} else if (map->fd == fd) {
-			map->perm &= (descx->perm | R_PERM_X);
-		}
+	ut32 map_id;
+	if (r_id_storage_get_lowest (io->maps, &map_id)) {
+		do {
+			RIOMap *map = r_id_storage_get (io->maps, map_id);
+			if (map->fd == fdx) {
+				map->perm &= (desc->perm | R_PERM_X);
+			} else if (map->fd == fd) {
+				map->perm &= (descx->perm | R_PERM_X);
+			}
+		} while (r_id_storage_get_next (io->maps, &map_id));
 	}
 	return true;
 }

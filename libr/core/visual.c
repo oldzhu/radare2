@@ -233,9 +233,13 @@ static bool __core_visual_gogo(RCore *core, int ch) {
 	switch (ch) {
 	case 'g':
 		if (core->io->va) {
-			RIOMap *map = r_io_map_get_at (core->io, core->offset);
-			if (!map && !r_pvector_empty (&core->io->maps)) {
-				map = r_pvector_at (&core->io->maps, r_pvector_len (&core->io->maps) - 1);
+			map = r_io_map_get_at (core->io, core->offset);
+			if (!map) {
+				RIOBank *bank = r_io_bank_get (core->io, core->io->bank);
+				if (bank && r_list_length (bank->maprefs)) {
+					map = r_io_map_get (core->io,
+						((RIOMapRef *)r_list_get_top (bank->maprefs))->id);
+				}
 			}
 			if (map) {
 				r_core_seek (core, r_io_map_begin (map), true);
@@ -247,8 +251,12 @@ static bool __core_visual_gogo(RCore *core, int ch) {
 		return true;
 	case 'G':
 		map = r_io_map_get_at (core->io, core->offset);
-		if (!map && !r_pvector_empty (&core->io->maps)) {
-			map = r_pvector_at (&core->io->maps, 0);
+		if (!map) {
+			RIOBank *bank = r_io_bank_get (core->io, core->io->bank);
+			if (bank && r_list_length (bank->maprefs)) {
+				map = r_io_map_get (core->io,
+					((RIOMapRef *)r_list_get_top (bank->maprefs))->id);
+			}
 		}
 		if (map) {
 			RPrint *p = core->print;
@@ -3529,10 +3537,14 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 						if (s) {
 							entry = s->vaddr;
 						} else {
-							RIOMap *map = r_pvector_pop (&core->io->maps);
+							RIOMap *map = NULL;
+							RIOBank *bank = r_io_bank_get (core->io, core->io->bank);
+							if (bank && r_list_length (bank->maprefs)) {
+								map = r_io_map_get (core->io,
+									((RIOMapRef *)r_list_get_top (bank->maprefs))->id);
+							}
 							if (map) {
-								entry = r_io_map_begin (map);
-								r_pvector_push_front (&core->io->maps, map);
+								entry = r_io_map_from (map);
 							} else {
 								entry = r_config_get_i (core->config, "bin.baddr");
 							}
