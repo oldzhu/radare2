@@ -1091,7 +1091,7 @@ static const char *radare_argv[] = {
 	"tu?", "tu", "tuj", "tu*", "tuc", "tt?", "tt", "ttj", "ttc",
 	"T?", "T", "T*", "T-", "Tl", "Tj", "Tm", "Ts", "TT", "T=", "T=.", "T=&",
 	"u?", "u", "uw", "us", "uc",
-	"v", "V", "v!", "vv", "vV", "vVV", "VV",
+	"v", "v.", "V", "v!", "vv", "vV", "vVV", "VV",
 	"w?", "w", "w1+", "w1-", "w2+", "w2-", "w4+", "w4-", "w8+", "w8-",
 	"w0", "w", "w6", "w6d", "w6e", "wa", "wa*", "waf", "wao?", "wao",
 	"wA?", "wA", "wB", "wB-", "wc", "wcj", "wc-", "wc+", "wc*", "wcr", "wci", "wcp", "wcp*", "wcpi",
@@ -1832,7 +1832,7 @@ R_API void r_core_autocomplete(R_NULLABLE RCore *core, RLineCompletion *completi
 		if (buf->data[0] && buf->data[strlen (buf->data) - 1] != ' ' && !strchr (buf->data, ' ')) {
 			r_line_completion_clear (completion);
 			char *s = r_core_cmd_strf (core, "%s?", buf->data);
-			eprintf ("%s %s\n%s", core->cons->line->prompt, buf->data, s);
+			eprintf ("%s%s\n%s", core->cons->line->prompt, buf->data, s);
 			free (s);
 			return;
 		}
@@ -2574,10 +2574,10 @@ static void __init_autocomplete_default (RCore* core) {
 		"db-", "dbc", "dbC", "dbd", "dbe", "dbs", "dbi", "dbte", "dbtd", "dbts", NULL
 	};
 	const char *files[] = {
-		".", "..", ".*", ":. ", "/F", "/m", "!", "!!", "#!c", "#!v", "#!cpipe", "#!vala",
+		".", "..", ".*", ":. ", "/F", "/m", "!", "!!", "#!c", "#!v", "#!cpipe", "#!vala", "v.",
 		"#!rust", "#!zig", "#!pipe", "#!python", "aeli", "arp", "arpg", "dmd", "drp", "drpg", "o",
 		"idp", "idpi", "L", "obf", "o+", "oc", "r2", "rabin2", "rasm2", "rahash2", "rax2",
-		"rafind2", "cd", "ls", "on", "op", "wf", "rm", "wF", "wp", "Sd", "Sl", "to", "pm",
+		"rafind2", "cd", "ls", "on", "wf", "rm", "wF", "wp", "Sd", "Sl", "to", "pm",
 		"/m", "zos", "zfd", "zfs", "zfz", "cat", "wta", "wtf", "wxf", "dml",
 		"vi", "vim", "nvi", "neovim", "nvim", "nano",
 #if __WINDOWS__
