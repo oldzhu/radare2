@@ -504,21 +504,22 @@ R_API void r_core_anal_type_match(RCore *core, RAnalFunction *fcn) {
 	char prev_type[256] = {0};
 	const char *prev_dest = NULL;
 	char *ret_reg = NULL;
-	const char *pc = r_reg_get_name (core->dbg->reg, R_REG_NAME_PC);
-	if (!pc) {
-        free (buf);
-		return;
-	}
-	RRegItem *r = r_reg_get (core->dbg->reg, pc, -1);
-	if (!r) {
+	const char *_pc = r_reg_get_name (core->dbg->reg, R_REG_NAME_PC);
+	if (!_pc) {
 		free (buf);
 		return;
 	}
+	char *pc = strdup (_pc);
 	r_cons_break_push (NULL, NULL);
 	r_list_sort (fcn->bbs, bb_cmpaddr); // TODO: The algorithm can be more accurate if blocks are followed by their jmp/fail, not just by address
 	r_list_foreach (fcn->bbs, it, bb) {
 		ut64 addr = bb->addr;
 		int i = 0;
+		RRegItem *r = r_reg_get (core->dbg->reg, pc, -1);
+		if (!r) {
+			free (buf);
+			return;
+		}
 		r_reg_set_value (core->dbg->reg, r, addr);
 		while (1) {
 			if (r_cons_is_breaked ()) {
@@ -548,6 +549,11 @@ R_API void r_core_anal_type_match(RCore *core, RAnalFunction *fcn) {
 			}
 			sdb_num_set (anal->esil->trace->db, sdb_fmt ("0x%"PFMT64x".count", addr), loop_count + 1, 0);
 			if (r_anal_op_nonlinear (aop.type)) {   // skip the instr
+				RRegItem *r = r_reg_get (core->dbg->reg, pc, -1);
+				if (!r) {
+					free (buf);
+					return;
+				}
 				r_reg_set_value (core->dbg->reg, r, addr + ret);
 			} else {
 				r_core_esil_step (core, UT64_MAX, NULL, NULL, false);
@@ -778,4 +784,5 @@ out_function:
 	free (buf);
 	r_cons_break_pop();
 	anal_emul_restore (core, hc, dt, et);
+	free (pc);
 }
