@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2012-2018 - pancake, Fedor Sakharov */
+/* radare - LGPL - Copyright 2012-2021 - pancake, Fedor Sakharov */
 
 #define D0 if(1)
 #define D1 if(1)
@@ -383,7 +383,7 @@ static inline ut64 dwarf_read_offset(bool is_64bit, const ut8 **buf, const ut8 *
 	if (is_64bit) {
 		result = READ64 (*buf);
 	} else {
-		result = READ32 (*buf);
+		result = (ut64)READ32 (*buf);
 	}
 	return result;
 }
@@ -391,13 +391,10 @@ static inline ut64 dwarf_read_offset(bool is_64bit, const ut8 **buf, const ut8 *
 static inline ut64 dwarf_read_address(size_t size, const ut8 **buf, const ut8 *buf_end) {
 	ut64 result;
 	switch (size) {
-		case 2:
-		result = READ16 (*buf); break;
-		case 4:
-		result = READ32 (*buf); break;
-		case 8:
-		result = READ64 (*buf); break;
-		default:
+	case 2: result = READ16 (*buf); break;
+	case 4: result = READ32 (*buf); break;
+	case 8: result = READ64 (*buf); break;
+	default:
 		result = 0;
 		*buf += size;
 		eprintf ("Weird dwarf address size: %zu.", size);
@@ -1593,7 +1590,10 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 	const ut8 *buf_end = obuf + obuf_len;
 	size_t j;
 
-	r_return_val_if_fail(def && value && hdr && obuf && obuf_len >= 1, NULL);
+	r_return_val_if_fail (def && value && hdr && obuf, NULL);
+	if (obuf_len < 1) {
+		return NULL;
+	}
 
 	value->attr_form = def->attr_form;
 	value->attr_name = def->attr_name;
@@ -1654,8 +1654,8 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 		break;
 	case DW_FORM_string:
 		value->kind = DW_AT_KIND_STRING;
-		value->string.content = *buf ? strdup ((const char *)buf) : NULL;
-		buf += (strlen ((const char *)buf) + 1);
+		value->string.content = *buf ? r_str_ndup ((const char *)buf, buf_end - buf) : NULL;
+		buf += (strlen (value->string.content) + 1);
 		break;
 	case DW_FORM_block1:
 		value->kind = DW_AT_KIND_BLOCK;
@@ -1857,8 +1857,7 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
  * @param sdb
  * @return const ut8* Updated buffer
  */
-static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevDecl *abbrev,
-		RBinDwarfCompUnitHdr *hdr, RBinDwarfDie *die, const ut8 *debug_str, size_t debug_str_len, Sdb *sdb) {
+static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevDecl *abbrev, RBinDwarfCompUnitHdr *hdr, RBinDwarfDie *die, const ut8 *debug_str, size_t debug_str_len, Sdb *sdb) {
 	size_t i;
 	for (i = 0; i < abbrev->count - 1; i++) {
 		memset (&die->attr_values[i], 0, sizeof (die->attr_values[i]));
@@ -1868,9 +1867,8 @@ static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevD
 
 		RBinDwarfAttrValue *attribute = &die->attr_values[i];
 
-		bool is_valid_string_form = (attribute->attr_form == DW_FORM_strp ||
-			attribute->attr_form == DW_FORM_string) &&
-			attribute->string.content;
+		bool is_string = (attribute->attr_form == DW_FORM_strp || attribute->attr_form == DW_FORM_string);
+		bool is_valid_string_form = is_string && attribute->string.content;
 		// TODO  does this have a purpose anymore?
 		// Or atleast it needs to rework becase there will be
 		// more comp units -> more comp dirs and only the last one will be kept
@@ -1880,7 +1878,6 @@ static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevD
 		}
 		die->count++;
 	}
-
 	return buf;
 }
 
@@ -1897,12 +1894,15 @@ static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevD
  *
  * @return const ut8* Update buffer
  */
-static const ut8 *parse_comp_unit(RBinDwarfDebugInfo *info, Sdb *sdb, const ut8 *buf_start,
+static const ut8 *parse_comp_unit(RBinDwarfDebugInfo *info, Sdb *sdb, const ut8 *buf_start, const ut8 *buf_end,
 		RBinDwarfCompUnit *unit, const RBinDwarfDebugAbbrev *abbrevs,
 		size_t first_abbr_idx, const ut8 *debug_str, size_t debug_str_len) {
 
 	const ut8 *buf = buf_start;
-	const ut8 *buf_end = buf_start + unit->hdr.length - unit->hdr.header_size;
+	const ut8 *theoric_buf_end = buf_start + unit->hdr.length - unit->hdr.header_size;
+	if (theoric_buf_end < buf_end) {
+		buf_end = theoric_buf_end;
+	}
 
 	while (buf && buf < buf_end && buf >= buf_start) {
 		if (unit->count && unit->capacity == unit->count) {
@@ -1914,7 +1914,7 @@ static const ut8 *parse_comp_unit(RBinDwarfDebugInfo *info, Sdb *sdb, const ut8 
 		die->offset += unit->hdr.is_64bit ? 12 : 4;
 
 		// DIE starts with ULEB128 with the abbreviation code
-		ut64 abbr_code;
+		ut64 abbr_code = 0;
 		buf = r_uleb128 (buf, buf_end - buf, &abbr_code, NULL);
 
 		if (abbr_code > abbrevs->count || !buf) { // something invalid
@@ -2077,8 +2077,7 @@ static RBinDwarfDebugInfo *parse_info_raw(Sdb *sdb, RBinDwarfDebugAbbrev *da,
 		// They point to the same array object, so should be def. behaviour
 		size_t first_abbr_idx = abbrev_start - da->decls;
 
-		buf = parse_comp_unit (info, sdb, buf, unit, da, first_abbr_idx, debug_str, debug_str_len);
-
+		buf = parse_comp_unit (info, sdb, buf, buf_end, unit, da, first_abbr_idx, debug_str, debug_str_len);
 		if (!buf) {
 			goto cleanup;
 		}
