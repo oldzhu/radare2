@@ -1064,7 +1064,7 @@ static void file_lines_free_kv(HtPPKv *kv) {
 	file_lines_free (kv->value);
 }
 
-static int bin_dwarf(RCore *core, PJ *pj, int mode) {
+static bool bin_dwarf(RCore *core, PJ *pj, int mode) {
 	RBinDwarfRow *row;
 	RListIter *iter;
 	if (!r_config_get_i (core->config, "bin.dbginfo")) {
@@ -1082,8 +1082,10 @@ static int bin_dwarf(RCore *core, PJ *pj, int mode) {
 		list = plugin->lines (binfile);
 	} else if (core->bin) {
 		// TODO: complete and speed-up support for dwarf
-		RBinDwarfDebugAbbrev *da = NULL;
-		da = r_bin_dwarf_parse_abbrev (core->bin, mode);
+		RBinDwarfDebugAbbrev *da = r_bin_dwarf_parse_abbrev (core->bin, mode);
+		if (!da) {
+			return false;
+		}
 		RBinDwarfDebugInfo *info = r_bin_dwarf_parse_info (da, core->bin, mode);
 		HtUP /*<offset, List *<LocListEntry>*/ *loc_table = r_bin_dwarf_parse_loc (core->bin, core->anal->bits / 8);
 		// I suppose there is no reason the parse it for a printing purposes

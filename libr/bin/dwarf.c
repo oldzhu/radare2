@@ -1,17 +1,6 @@
 /* radare - LGPL - Copyright 2012-2021 - pancake, Fedor Sakharov */
 
-#define D0 if(1)
-#define D1 if(1)
-
 #include <errno.h>
-
-#define DWARF_DUMP 0
-
-#if DWARF_DUMP
-#define DBGFD stdout
-#else
-#define DBGFD NULL
-#endif
 
 #include <r_bin.h>
 #include <r_bin_dwarf.h>
@@ -380,9 +369,18 @@ static inline bool is_printable_unit_type(ut64 unit_type) {
  */
 static inline ut64 dwarf_read_offset(bool is_64bit, const ut8 **buf, const ut8 *buf_end) {
 	ut64 result;
+	if (!buf || !*buf || !buf_end) {
+		return 0;
+	}
 	if (is_64bit) {
+		if (*buf + 8 >= buf_end) {
+			return 0;
+		}
 		result = READ64 (*buf);
 	} else {
+		if (*buf + 4 >= buf_end) {
+			return 0;
+		}
 		result = (ut64)READ32 (*buf);
 	}
 	return result;
@@ -1203,17 +1201,17 @@ static int init_die(RBinDwarfDie *die, ut64 abbr_code, ut64 attr_count) {
 	return 0;
 }
 
-static int init_comp_unit(RBinDwarfCompUnit *cu) {
+static bool init_comp_unit(RBinDwarfCompUnit *cu) {
 	if (!cu) {
-		return -EINVAL;
+		return false;
 	}
 	cu->dies = calloc (sizeof (RBinDwarfDie), COMP_UNIT_CAPACITY);
 	if (!cu->dies) {
-		return -ENOMEM;
+		return false;
 	}
 	cu->capacity = COMP_UNIT_CAPACITY;
 	cu->count = 0;
-	return 0;
+	return true;
 }
 
 static int expand_cu(RBinDwarfCompUnit *cu) {
@@ -1585,12 +1583,12 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 		RBinDwarfAttrDef *def, RBinDwarfAttrValue *value,
 		const RBinDwarfCompUnitHdr *hdr,
 		const ut8 *debug_str, size_t debug_str_len) {
+	r_return_val_if_fail (def && value && hdr && obuf, NULL);
 
 	const ut8 *buf = obuf;
 	const ut8 *buf_end = obuf + obuf_len;
 	size_t j;
 
-	r_return_val_if_fail (def && value && hdr && obuf, NULL);
 	if (obuf_len < 1) {
 		return NULL;
 	}
@@ -1655,7 +1653,9 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 	case DW_FORM_string:
 		value->kind = DW_AT_KIND_STRING;
 		value->string.content = *buf ? r_str_ndup ((const char *)buf, buf_end - buf) : NULL;
-		buf += (strlen (value->string.content) + 1);
+		if (value->string.content) {
+			buf += strlen (value->string.content) + 1;
+		}
 		break;
 	case DW_FORM_block1:
 		value->kind = DW_AT_KIND_BLOCK;
@@ -1695,10 +1695,10 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 	// offset in .debug_str
 	case DW_FORM_strp:
 		value->kind = DW_AT_KIND_STRING;
-		value->string.offset = dwarf_read_offset(hdr->is_64bit, &buf, buf_end);
+		value->string.offset = dwarf_read_offset (hdr->is_64bit, &buf, buf_end);
 		if (debug_str && value->string.offset < debug_str_len) {
-			value->string.content =
-				strdup ((const char *)(debug_str + value->string.offset));
+			const char *ds = (const char *)(debug_str + value->string.offset);
+			value->string.content = strdup (ds); // r_str_ndup (ds, debug_str_len - value->string.offset);
 		} else {
 			value->string.content = NULL; // Means malformed DWARF, should we print error message?
 		}
@@ -1706,7 +1706,7 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 	// offset in .debug_info
 	case DW_FORM_ref_addr:
 		value->kind = DW_AT_KIND_REFERENCE;
-		value->reference = dwarf_read_offset(hdr->is_64bit, &buf, buf_end);
+		value->reference = dwarf_read_offset (hdr->is_64bit, &buf, buf_end);
 		break;
 	// This type of reference is an offset from the first byte of the compilation
 	// header for the compilation unit containing the reference
@@ -1836,6 +1836,9 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
 		value->kind = DW_AT_KIND_ADDRESS;
 		buf = r_uleb128 (buf, buf_end - buf, &value->address, NULL);
 		break;
+	case 0:
+		value->uconstant = 0;
+		return NULL;
 	default:
 		eprintf ("Unknown DW_FORM 0x%02" PFMT64x "\n", def->attr_form);
 		value->uconstant = 0;
@@ -1859,11 +1862,24 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len,
  */
 static const ut8 *parse_die(const ut8 *buf, const ut8 *buf_end, RBinDwarfAbbrevDecl *abbrev, RBinDwarfCompUnitHdr *hdr, RBinDwarfDie *die, const ut8 *debug_str, size_t debug_str_len, Sdb *sdb) {
 	size_t i;
-	for (i = 0; i < abbrev->count - 1; i++) {
+	if (!buf || !buf_end || buf > buf_end) {
+		return NULL;
+	}
+	for (i = 0; i < die->count; i++) {
+		memset (&die->attr_values[i], 0, sizeof (RBinDwarfDie));
+	}
+	for (i = 0; i < abbrev->count && i < die->capacity; i++) {
 		memset (&die->attr_values[i], 0, sizeof (die->attr_values[i]));
-
-		buf = parse_attr_value (buf, buf_end - buf, &abbrev->defs[i],
-			&die->attr_values[i], hdr, debug_str, debug_str_len);
+		// debug_str_len = r_str_nlen (debug_str, buf_end - buf);
+		const ut8 *nbuf = parse_attr_value (buf, buf_end - buf,
+			&abbrev->defs[i],
+			&die->attr_values[i],
+			hdr, debug_str, debug_str_len);
+		if (nbuf) {
+			buf = nbuf;
+		} else {
+			break;
+		}
 
 		RBinDwarfAttrValue *attribute = &die->attr_values[i];
 
@@ -2045,7 +2061,7 @@ static RBinDwarfDebugInfo *parse_info_raw(Sdb *sdb, RBinDwarfDebugAbbrev *da,
 		}
 
 		RBinDwarfCompUnit *unit = &info->comp_units[unit_idx];
-		if (init_comp_unit (unit) < 0) {
+		if (!init_comp_unit (unit)) {
 			unit_idx--;
 			goto cleanup;
 		}
@@ -2382,12 +2398,9 @@ R_API RBinDwarfDebugAbbrev *r_bin_dwarf_parse_abbrev(RBin *bin, int mode) {
 
 static inline ut64 get_max_offset(size_t addr_size) {
 	switch (addr_size) {
-		case 2:
-		return UT16_MAX;
-		case 4:
-		return UT32_MAX;
-		case 8:
-		return UT64_MAX;
+	case 2: return UT16_MAX;
+	case 4: return UT32_MAX;
+	case 8: return UT64_MAX;
 	}
 	return 0;
 }
