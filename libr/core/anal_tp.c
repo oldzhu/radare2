@@ -560,6 +560,7 @@ R_API void r_core_anal_type_match(RCore *core, RAnalFunction *fcn) {
 	r_cons_break_push (NULL, NULL);
 repeat:
 	if (retries < 0) {
+		free (pc);
 		return;
 	}
 	r_list_sort (fcn->bbs, bb_cmpaddr); // TODO: The algorithm can be more accurate if blocks are followed by their jmp/fail, not just by address
@@ -578,6 +579,7 @@ repeat:
 			free (bblist);
 			goto repeat;
 		}
+		ut64 bb_addr = bb->addr;
 		ut64 addr = bb->addr;
 		ut8 *buf = calloc (bb->size + 32, 1);
 		if (!buf) {
@@ -618,6 +620,18 @@ repeat:
 			} else {
 				fast_step (core, &aop);
 			}
+
+			// maybe the basic block is gone after the step...
+			if (i < bblist_size) {
+				bb = r_anal_get_block_at (core->anal, bb_addr);
+				if (!bb) {
+					eprintf ("Warning: basic block at 0x%08"PFMT64x" was removed during analysis.\n", bblist[i]);
+					retries--;
+					free (bblist);
+					goto repeat;
+				}
+			}
+
 			bool userfnc = false;
 			Sdb *trace = anal->esil->trace->db;
 			cur_idx = sdb_num_get (trace, "idx", 0);
@@ -820,7 +834,7 @@ repeat:
 		}
 		free (buf);
 	}
-	free (bblist);
+	R_FREE (bblist);
 	// Type propgation for register based args
 	RList *list = r_anal_var_list (anal, fcn, R_ANAL_VAR_KIND_REG);
 	RAnalVar *rvar;
@@ -843,6 +857,7 @@ out_function:
 	R_FREE (ret_reg);
 	R_FREE (ret_type);
 	r_cons_break_pop();
+	free (bblist);
 	anal_emul_restore (core, hc, dt, et);
 	free (pc);
 }
