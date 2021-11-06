@@ -442,9 +442,9 @@ static char *serialize_value(RSignItem *it) {
 			r_hex_bin2str (bytes->mask, bytes->size, hexmask);
 			success = r_strbuf_appendf (sb, "|%c:%s:%s", R_SIGN_BYTES,
 				hexbytes, hexmask);
-			free (hexbytes);
-			free (hexmask);
 		}
+		free (hexbytes);
+		free (hexmask);
 		FreeRet_on_fail (success, sb);
 	}
 
@@ -489,7 +489,7 @@ static char *serialize_value(RSignItem *it) {
 		FreeRet_on_fail (r_strbuf_appendf (sb, "|%c:%s", R_SIGN_TYPES, it->types), sb);
 	}
 
-	if (it->next && !strchr (it->types, '|')) {
+	if (it->next && !strchr (it->next, '|')) {
 		FreeRet_on_fail (r_strbuf_appendf (sb, "|%c:%s", R_SIGN_NEXT, it->next), sb);
 	}
 
