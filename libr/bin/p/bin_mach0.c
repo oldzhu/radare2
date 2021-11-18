@@ -397,8 +397,8 @@ static RList *imports(RBinFile *bf) {
 		if (!strcmp (name, "__stack_chk_fail") ) {
 			bin->has_canary = true;
 		}
-		if (!strcmp (name, "__asan_init") ||
-                   !strcmp (name, "__tsan_init")) {
+		if (!strcmp (name, "__asan_init")
+				|| !strcmp (name, "__tsan_init")) {
 			bin->has_sanitizers = true;
 		}
 		if (!strcmp (name, "_NSConcreteGlobalBlock")) {
@@ -717,19 +717,21 @@ static int rebasing_and_stripping_io_read(RIO *io, RIODesc *fd, ut8 *buf, int co
 	RListIter *iter;
 	RBinFile *bf;
 	r_list_foreach (core->bin->binfiles, iter, bf) {
-		if (bf->fd == fd->fd ) {
+		if (bf->fd == fd->fd) {
 			/* The first field of MACH0_(obj_t) is
 			 * the mach_header, whose first field is
 			 * the MH magic.
 			 * This code assumes that bin objects are
 			 * at least 4 bytes long.
 			 */
-			ut32 *magic = bf->o->bin_obj;
-			if (magic && (*magic == MH_MAGIC ||
-					*magic == MH_CIGAM ||
-					*magic == MH_MAGIC_64 ||
-					*magic == MH_CIGAM_64)) {
-				obj = bf->o->bin_obj;
+			if (bf->o) {
+				ut32 *magic = bf->o->bin_obj;
+				if (magic && (*magic == MH_MAGIC ||
+							*magic == MH_CIGAM ||
+							*magic == MH_MAGIC_64 ||
+							*magic == MH_CIGAM_64)) {
+					obj = bf->o->bin_obj;
+				}
 			}
 			break;
 		}
