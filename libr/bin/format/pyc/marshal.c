@@ -272,9 +272,8 @@ static pyc_object *get_float_object(RBuffer *buffer) {
 	pyc_object *ret = NULL;
 	bool error = false;
 	ut32 size = 0;
-	ut8 n = 0;
 
-	n = get_ut8 (buffer, &error);
+	ut8 n = get_ut8 (buffer, &error);
 	if (error) {
 		return NULL;
 	}
@@ -694,7 +693,7 @@ static pyc_object *get_ref_object(RBuffer *buffer) {
 	if (index >= r_list_length (refs)) {
 		return NULL;
 	}
-	pyc_object *obj = NULL; // r_list_get_n (refs, index);
+	pyc_object *obj = r_list_get_n (refs, index);
 	return obj? copy_object (obj): NULL;
 }
 
@@ -994,23 +993,18 @@ static pyc_object *get_object(RBuffer *buffer) {
 	bool error = false;
 	pyc_object *ret = NULL;
 	ut8 code = get_ut8 (buffer, &error);
-	ut8 flag = code & FLAG_REF;
+	bool flag = (code & FLAG_REF);
 	RListIter *ref_idx = NULL;
-	ut8 type = code & ~FLAG_REF;
+	ut8 type = (code & ~FLAG_REF);
 
 	if (error) {
 		return NULL;
 	}
 
 	if (flag) {
-		ret = get_none_object ();
-		if (!ret) {
-			return NULL;
-		}
-		ref_idx = r_list_append (refs, ret);
-		if (!ref_idx) {
-			free_object (ret);
-			return NULL;
+		pyc_object *noneret = get_none_object ();
+		if (noneret) {
+			ref_idx = r_list_append (refs, noneret);
 		}
 	}
 
@@ -1019,7 +1013,6 @@ static pyc_object *get_object(RBuffer *buffer) {
 		free_object (ret);
 		return NULL;
 	case TYPE_TRUE:
-		free_object (ret);
 		return get_true_object ();
 	case TYPE_FALSE:
 		free_object (ret);
@@ -1109,6 +1102,7 @@ static pyc_object *get_object(RBuffer *buffer) {
 		break;
 	case TYPE_UNKNOWN:
 		eprintf ("Get not implemented for type 0x%x\n", type);
+		r_list_pop (refs);
 		free_object (ret);
 		return NULL;
 	case 0:
@@ -1116,16 +1110,24 @@ static pyc_object *get_object(RBuffer *buffer) {
 		break;
 	default:
 		eprintf ("Undefined type in get_object (0x%x)\n", type);
-		free_object (ret);
+		// r_list_pop (refs);
 		return NULL;
 	}
 
-	if (flag && ref_idx) {
+	if (ret && flag && ref_idx) {
 		if (ref_idx->data != ret) {
 			free_object (ref_idx->data);
 		}
 		ref_idx->data = copy_object (ret);
 	}
+	if (ret) {
+		return ret;
+	}
+	ret = get_none_object ();
+	if (!ret) {
+		return NULL;
+	}
+	r_list_append (refs, ret);
 	return ret;
 }
 
