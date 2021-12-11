@@ -16,7 +16,7 @@
 #define ds_bufat(ds)  ((ds)->buf + ds_offset (ds))
 #define ds_left(ds)   ((ds)->len - ds_offset (ds))
 
-#define TEMP_DEBUG 0
+#define DEBUG_DISASM 0
 
 // ugly globals but meh
 static ut64 emustack_min = 0LL;
@@ -2721,8 +2721,8 @@ static int ds_disassemble(RDisasmState *ds, ut8 *buf, int len) {
 		if (!ds->count_bytes && ds->tries > 0) {
 			ds->at = core->rasm->pc;
 			ds->index = ds->at - ds->addr;
-#if TEMP_DEBUG
-			r_cons_printf ("ds_disassemble set ds->at to %#"PFMT64x"\n", ds->at);
+#if DEBUG_DISASM
+			eprintf ("ds_disassemble set ds->at to %#"PFMT64x"\n", ds->at);
 #endif
 			ds->tries--;
 			return ret;
@@ -5383,12 +5383,8 @@ static void ds_end_line_highlight(RDisasmState *ds) {
 
 /**
  * \brief Disassemble `count` instructions, or bytes if `count_bytes` is enabled
- * \param read_buffer_only Do not enable in new code! Workaround for code that
- *        relied on this function incorrectly stopping at basic block
- *        boundaries. This options prevents the function from reading past the
- *        buffer with r_io like it does now.
  */
-R_API int r_core_print_disasm(RCore *core, ut64 addr, ut8 *buf, int len, int count, bool count_bytes, bool read_buffer_only, bool json, PJ *pj, RAnalFunction *pdf) {
+R_API int r_core_print_disasm(RCore *core, ut64 addr, ut8 *buf, int len, int count, bool count_bytes, bool json, PJ *pj, RAnalFunction *pdf) {
 	RPrint *p = core->print;
 	RAnalFunction *of = NULL;
 	RAnalFunction *f = NULL;
@@ -5602,23 +5598,23 @@ toro:
 			}
 		} else {
 			int left = ds_left (ds);
-#if TEMP_DEBUG
-			r_cons_printf ("BEFORE ds_disassemble:\n");
-			r_cons_printf ("ds->index=%#x len=%#x left=%#x\n", ds->index, len, left);
-			r_cons_printf ("ds->addr=%#" PFMT64x " ds->at=%#" PFMT64x " ds->count=%#x ds->lines=%#x\n", ds->addr, ds->at, ds->count, ds->lines);
+#if DEBUG_DISASM
+			eprintf ("BEFORE ds_disassemble:\n");
+			eprintf ("ds->index=%#x len=%#x left=%#x\n", ds->index, len, left);
+			eprintf ("ds->addr=%#" PFMT64x " ds->at=%#" PFMT64x " ds->count=%#x ds->lines=%#x\n", ds->addr, ds->at, ds->count, ds->lines);
 #endif
-			if (left < max_op_size && !read_buffer_only) {
-#if TEMP_DEBUG
-				r_cons_printf ("Not enough bytes to disassemble, going to retry.\n");
+			if (left < max_op_size && !count_bytes) {
+#if DEBUG_DISASM
+				eprintf ("Not enough bytes to disassemble, going to retry.\n");
 #endif
 				goto retry;
 			}
 
 			ret = ds_disassemble (ds, (ut8 *)ds_bufat (ds), left);
-#if TEMP_DEBUG
-			r_cons_printf ("AFTER ds_disassemble:\n");
-			r_cons_printf ("ret=%d len=%#x left=%#x ", ret, len, left);
-			r_cons_printf ("ds->addr=%#" PFMT64x " ds->at=%#" PFMT64x " ds->count=%#x ds->lines=%#x\n", ds->addr, ds->at, ds->count, ds->lines);
+#if DEBUG_DISASM
+			eprintf ("AFTER ds_disassemble:\n");
+			eprintf ("ret=%d len=%#x left=%#x ", ret, len, left);
+			eprintf ("ds->addr=%#" PFMT64x " ds->at=%#" PFMT64x " ds->count=%#x ds->lines=%#x\n", ds->addr, ds->at, ds->count, ds->lines);
 #endif
 			if (ret == -31337) {
 				inc = ds->oplen; // minopsz maybe? or we should add invopsz
@@ -5868,8 +5864,8 @@ toro:
 		ds->at = ds->addr = ds->at + inc;
 		ds->index = 0;
 	retry:
-#if TEMP_DEBUG
-		r_cons_printf ("Retrying. ds->at,ds->addr=%#" PFMT64x ", ds->index=%d\n", ds->at, ds->index);
+#if DEBUG_DISASM
+		eprintf ("Retrying. ds->at,ds->addr=%#" PFMT64x ", ds->index=%d\n", ds->at, ds->index);
 #endif
 		if (len < max_op_size) {
 			ds->len = len = max_op_size + 32;
@@ -5881,8 +5877,11 @@ toro:
 		}
 
 		// enough bytes?
-		if (ds->lines < ds->count && !read_buffer_only) {
+		if (ds->lines < ds->count && !count_bytes) {
 			ds->addr += ds->index;
+#if DEBUG_DISASM
+			eprintf ("len=%d\n", len);
+#endif
 			r_io_read_at (core->io, ds->addr, buf, len);
 			if (count_bytes) {
 				goto toro;
@@ -7006,7 +7005,7 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 					break;
 				default:
 					// ok
-					r_core_print_disasm (core, block_start, buf, block_sz, block_instr, false, false, false, NULL, NULL);
+					r_core_print_disasm (core, block_start, buf, block_sz, block_instr, false, false, NULL, NULL);
 					break;
 				}
 			}
