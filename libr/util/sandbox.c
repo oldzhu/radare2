@@ -231,14 +231,17 @@ R_API int r_sandbox_system(const char *x, int n) {
 			int s = waitpid (pid, &status, 0);
 			return WEXITSTATUS (s);
 		}
+		int child = fork ();
+		if (child == -1) {
+			return -1;
+		}
+		if (child) {
+			return waitpid (child, NULL, 0);
+		}
 #else
 		return system (x);
 #endif
 	}
-	char *bin_sh = r_file_binsh ();
-	int rc = execl (bin_sh, "sh", "-c", x, (const char*)NULL);
-	free (bin_sh);
-	return rc;
 #else
 	#include <spawn.h>
 	if (n && !strchr (x, '|')) {
@@ -271,20 +274,13 @@ R_API int r_sandbox_system(const char *x, int n) {
 		eprintf ("Error parsing command arguments\n");
 		return -1;
 	}
-	int child = fork ();
-	if (child == -1) {
-		return -1;
-	}
-	if (child) {
-		return waitpid (child, NULL, 0);
-	}
+#endif
 	char *bin_sh = r_file_binsh ();
 	if (execl (bin_sh, "sh", "-c", x, (const char*)NULL) == -1) {
 		perror ("execl");
 	}
 	free (bin_sh);
 	exit (1);
-#endif
 #endif
 	return -1;
 }
