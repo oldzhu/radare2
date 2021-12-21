@@ -401,8 +401,21 @@ static inline void *r_new_copy(int size, void *data) {
 #endif
 
 #ifndef HAVE_EPRINTF
-#define eprintf(...) fprintf(stderr,__VA_ARGS__)
+#define eprintf(...) fprintf (stderr, __VA_ARGS__)
 #define HAVE_EPRINTF 1
+
+#define EPRINT_STR(x) eprintf (#x ": %s", x)
+#define EPRINT_CHAR(x) eprintf (#x ": %c", x)
+#define EPRINT_INT(x) eprintf (#x ": %d (%x)", x, x)
+#define EPRINT_BOOL(x) eprintf (#x ": %s", x? "true": "false")
+#define EPRINT_UT64(x) eprintf (#x ": %" PFMT64u " (%" PFMT64x ")", x, x)
+#define EPRINT_ST64(x) eprintf (#x ": %" PFMT64d " (%" PFMT64x ")", x, x)
+#define EPRINT_UT32(x) eprintf (#x ": %" PFMT32u " (%" PFMT32x ")", x, x)
+#define EPRINT_ST32(x) eprintf (#x ": %" PFMT32d " (%" PFMT32x ")", x, x)
+#define EPRINT_UT16(x) eprintf (#x ": %hu (%hx)", x, x)
+#define EPRINT_ST16(x) eprintf (#x ": %hd (%hx)", x, x)
+#define EPRINT_UT8(x) eprintf (#x ": %hhu (%hhx)", x, x)
+#define EPRINT_ST8(x) eprintf (#x ": %hhd (%hhx)", x, x)
 #endif
 
 #ifndef typeof
@@ -428,7 +441,7 @@ static inline void *r_new_copy(int size, void *data) {
 #define HAVE_REGEXP 1
 #endif
 
-#if __WINDOWS__ && !__MINGW32__
+#if __WINDOWS__
 #define PFMT64x "I64x"
 #define PFMT64d "I64d"
 #define PFMT64u "I64u"
@@ -724,6 +737,6 @@ typedef int RRef;
 #define R_REF_TYPE RRef R_REF_NAME
 #define R_REF_FUNCTIONS(s, n) \
 static inline void n##_ref(s *x) { x->R_REF_NAME++; } \
-static inline void n##_unref(s *x) { r_unref (x, n##_free); }
+static inline void n##_unref(s *x) { r_unref(x, n##_free); }
 
 #endif // R2_TYPES_H

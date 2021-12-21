@@ -74,7 +74,7 @@ static void http_logf(RCore *core, const char *fmt, ...) {
 	va_end (ap);
 }
 
-static char *rtrcmd (TextLog T, const char *str) {
+static char *rtrcmd(TextLog T, const char *str) {
 	char *res, *ptr2;
 	char *ptr = r_str_uri_encode (str);
 	char *uri = r_str_newf ("http://%s:%s/%s%s", T.host, T.port, T.file, ptr? ptr: str);
@@ -105,7 +105,7 @@ static void showcursor(RCore *core, int x) {
 
 // TODO: rename /name to /nick or /so?
 // clone of textlog_chat () using rtrcmd()
-static void rtr_textlog_chat (RCore *core, TextLog T) {
+static void rtr_textlog_chat(RCore *core, TextLog T) {
 	char prompt[64];
 	char buf[1024];
 	int lastmsg = 0;
@@ -1097,7 +1097,7 @@ R_API void r_core_rtr_cmd(RCore *core, const char *input) {
 }
 
 // TODO: support len for binary data?
-R_API char *r_core_rtr_cmds_query (RCore *core, const char *host, const char *port, const char *cmd) {
+R_API char *r_core_rtr_cmds_query(RCore *core, const char *host, const char *port, const char *cmd) {
 	RSocket *s = r_socket_new (0);
 	const int timeout = 0;
 	char *rbuf = NULL;
@@ -1329,7 +1329,7 @@ beach:
 
 #else
 
-R_API int r_core_rtr_cmds (RCore *core, const char *port) {
+R_API int r_core_rtr_cmds(RCore *core, const char *port) {
 	unsigned char buf[4097];
 	RSocket *ch = NULL;
 	int i, ret;

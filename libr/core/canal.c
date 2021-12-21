@@ -2776,7 +2776,7 @@ static int fcn_list_default(RCore *core, RList *fcns, bool quiet) {
 }
 
 // for a given function returns an RList of all functions that were called in it
-R_API RList *r_core_anal_fcn_get_calls (RCore *core, RAnalFunction *fcn) {
+R_API RList *r_core_anal_fcn_get_calls(RCore *core, RAnalFunction *fcn) {
 	RAnalRef *refi;
 	RListIter *iter, *iter2;
 
@@ -5556,7 +5556,7 @@ repeat:
 	r_reg_arena_pop (core->anal->reg);
 }
 
-static bool isValidAddress (RCore *core, ut64 addr) {
+static bool isValidAddress(RCore *core, ut64 addr) {
 	// check if address is mapped
 	RIOMap* map = r_io_map_get_at (core->io, addr);
 	if (!map) {
@@ -5890,7 +5890,7 @@ R_API void r_core_anal_inflags(RCore *core, const char *glob) {
 			continue;
 		}
 		if (a0 > a1) {
-			eprintf ("Warning: unsorted flag list 0x%llx 0x%llx\n", a0, a1);
+			eprintf ("Warning: unsorted flag list 0x%"PFMT64x" 0x%"PFMT64x"\n", a0, a1);
 			continue;
 		}
 		st64 sz = a1 - a0;

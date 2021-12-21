@@ -8,9 +8,13 @@
 #include <r_util.h>
 #include <r_endian.h>
 
-#include "../anal/arch/v850np/v850dis.h"
+#include "../arch/v850np/v850dis.h"
 
+#define DEFAULT_CPU_MODEL V850_CPU_E2
 static int cpumodel_from_string(const char *s) {
+	if (R_STR_ISEMPTY (s)) {
+		return DEFAULT_CPU_MODEL;
+	}
 	if (strstr (s, "all")) {
 		return V850_CPU_ALL;
 	}
@@ -33,7 +37,7 @@ static int cpumodel_from_string(const char *s) {
 		return V850_CPU_0;
 	}
 	int num = r_num_get (NULL, s);
-	return num? num: V850_CPU_E2; // Default is V850E2
+	return num? num: DEFAULT_CPU_MODEL;
 }
 
 static int v850_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAnalOpMask mask) {
@@ -49,6 +53,9 @@ static int v850_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 	}
 	if (inst.op) {
 		op->type = inst.op->type;
+		if (!memcmp (buf, "\x7f\x00", 2)) {
+			op->type = R_ANAL_OP_TYPE_RET;
+		}
 	}
 	switch (op->type) {
 	case R_ANAL_OP_TYPE_JMP:
@@ -76,6 +83,7 @@ static char *get_reg_profile(RAnal *anal) {
 	const char *p =
 		"=PC	pc\n"
 		"=SP	r3\n"
+		"=SN	r1\n"
 		"=ZF	z\n"
 		"=A0	r1\n"
 		"=A1	r5\n"

@@ -809,7 +809,7 @@ pd 1 @ 0x0001145f
 EOF
 EXPECT=<<EOF
             [32m0x0001145f[0m      [37mlea[36m rdi[0m,[36m[36m str.A_NULL_argv_0__was_passed_through_an_exec_system_call._n[0m[0m
-            [32m0x0001145f[0m      [37mlea[36m rdi[0m,[36m[36m [0m[[36m[36m0x0001b5d8[0m][36m[0m[0m
+            [32m0x0001145f[0m      [37mlea[36m rdi[0m,[36m[36m [0m[[36m0x0001b5d8[0m][36m[0m[0m
 EOF
 RUN
 
@@ -1182,7 +1182,7 @@ EXPECT=<<EOF
 [0m[36m|[0m           [32m0x004010e8[0m      [35mpush[36m esi[0m[0m
 [36m|[0m           [31m; 0x402004
 [0m[36m|[0m           [31m; DWORD GetCurrentProcessorNumber(void)
-[0m[36m|[0m           [32m0x004010e9[0m      [32mcall dword [sym.imp.KERNEL32.dll_GetCurrentProcessorNumber][0m
+[0m[36m|[0m           [32m0x004010e9[0m      [32mcall dword[36m [0m[[36msym.imp.KERNEL32.dll_GetCurrentProcessorNumber[0m][36m[0m[0m
 EOF
 RUN
 

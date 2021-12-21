@@ -48,12 +48,10 @@ static long get_operand_value(const struct v850_operand *operand, unsigned long 
 		ut32 value = r_read_le16 (buffer);
 		return (operand->extract) (value, invalid);
 	}
-
 	if (operand->flags & V850E_IMMEDIATE32) {
 		// len += 4;
 		return r_read_le32 (buffer);
 	}
-
 	if (operand->extract) {
 		return (operand->extract) (insn, invalid);
 	}
@@ -64,11 +62,10 @@ static long get_operand_value(const struct v850_operand *operand, unsigned long 
 		unsigned long sign = 1ul << (operand->bits - 1);
 		value = (value ^ sign) - sign;
 	}
-
 	return value;
 }
 
-static const char * get_v850_sreg_name(size_t reg) {
+static const char *get_v850_sreg_name(size_t reg) {
 	static const char *const v850_sreg_names[] = {
 		"eipc/vip/mpm", "eipsw/mpc", "fepc/tid", "fepsw/ppa", "ecr/vmecr", "psw/vmtid",
 		"sr6/fpsr/vmadr/dcc", "sr7/fpepc/dc0",
@@ -85,7 +82,7 @@ static const char * get_v850_sreg_name(size_t reg) {
 	return "<invalid s-reg number>";
 }
 
-static const char * get_v850_reg_name(size_t reg) {
+static const char *get_v850_reg_name(size_t reg) {
 	static const char *const v850_reg_names[] = {
 		"r0", "r1", "r2", "sp", "gp", "r5", "r6", "r7",
 		"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
@@ -96,7 +93,7 @@ static const char * get_v850_reg_name(size_t reg) {
 	return v850_reg_names[reg];
 }
 
-static const char * get_v850_vreg_name (unsigned int reg) {
+static const char *get_v850_vreg_name(unsigned int reg) {
 	static const char *const v850_vreg_names[] = {
 		"vr0", "vr1", "vr2", "vr3", "vr4", "vr5", "vr6", "vr7", "vr8", "vr9",
 		"vr10", "vr11", "vr12", "vr13", "vr14", "vr15", "vr16", "vr17", "vr18",
@@ -107,7 +104,7 @@ static const char * get_v850_vreg_name (unsigned int reg) {
 	return v850_vreg_names[reg];
 }
 
-static const char * get_v850_cc_name (unsigned int reg) {
+static const char *get_v850_cc_name(unsigned int reg) {
 	static const char *const v850_cc_names[] = {
 		"v", "c/l", "z", "nh", "s/n", "t", "lt", "le",
 		"nv", "nc/nl", "nz", "h", "ns/p", "sa", "ge", "gt"
@@ -116,7 +113,7 @@ static const char * get_v850_cc_name (unsigned int reg) {
 	return v850_cc_names[reg];
 }
 
-static const char * get_v850_float_cc_name (unsigned int reg) {
+static const char *get_v850_float_cc_name(unsigned int reg) {
 	static const char *const v850_float_cc_names[] = {
 		"f/t", "un/or", "eq/neq", "ueq/ogl", "olt/uge", "ult/oge", "ole/ugt", "ule/ogt",
 		"sf/st", "ngle/gle", "seq/sne", "ngl/gl", "lt/nlt", "nge/ge", "le/nle", "ngt/gt"
@@ -125,7 +122,7 @@ static const char * get_v850_float_cc_name (unsigned int reg) {
 	return v850_float_cc_names[reg];
 }
 
-static const char * get_v850_cacheop_name(size_t reg) {
+static const char *get_v850_cacheop_name(size_t reg) {
 	static const char *const v850_cacheop_names[] = {
 		"chbii", "cibii", "cfali", "cisti", "cildi", "chbid", "chbiwbd",
 		"chbwbd", "cibid", "cibiwbd", "cibwbd", "cfald", "cistd", "cildd"
@@ -178,8 +175,7 @@ static bool print_reglist(RStrBuf *sb, v850np_inst *inst, const struct v850_oper
 		regs = list12_regs;
 		break;
 	default:
-		eprintf ("unknown operand shift: 0x%x", operand->shift);
-		inst->text = r_strbuf_drain (sb);
+		// eprintf ("unknown operand shift: 0x%x\n", operand->shift);
 		return false;
 	}
 
@@ -189,8 +185,8 @@ static bool print_reglist(RStrBuf *sb, v850np_inst *inst, const struct v850_oper
 			switch (regs[i]) {
 			case 0:
 				/* xgettext:c-format */
-				eprintf ("unknown reg: %d", i);
-				inst->text = r_strbuf_drain (sb);
+				// eprintf ("unknown reg: %d at 0x%x\n", i);
+				// inst->text = r_strbuf_drain (sb);
 				return false;
 			case -1:
 				pc = 1;
@@ -265,7 +261,9 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 			operand = &v850_operands[*opindex_ptr];
 
 			long value = get_operand_value (operand, insn, buffer, buffer_size, &invalid);
-			inst->value = value;
+			if (value) {
+				inst->value = value;
+			}
 
 			operand_fail = true;
 			if (invalid) {
@@ -302,6 +300,7 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 		   output stream.  */
 
 		int atype = 0;
+		inst->value = 0;
 		opindex_ptr = op->operands;
 		opnum = 1;
 		for (; *opindex_ptr; opindex_ptr++, opnum++) {
@@ -312,10 +311,9 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 			bool invalid = false;
 			long value = get_operand_value (operand, insn, buffer + 2, buffer_size - 2, &invalid);
 			if (invalid) {
-				eprintf ("Warning: Cannot get operand value.\n");
+				// eprintf ("Warning: Cannot get operand value.\n");
 				break;
 			}
-			inst->value = value;
 
 			// first argument have no special processing
 			const char *prefix = (operand->flags & V850_OPERAND_BANG)? "|" :(operand->flags & V850_OPERAND_PERCENT)? "%":""; 
@@ -393,6 +391,7 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 				break;
 			default:
 				print_value (sb, operand->flags, memaddr, value);
+				inst->value = value;
 				break;
 			}
 			inst->args[opnum - 1].atype = atype;
@@ -421,8 +420,8 @@ int v850np_disasm(v850np_inst *inst, int cpumodel, ut64 addr, const ut8* buffer,
 	if (len < 2) {
 		return -1;
 	}
-	ut16 insn = r_read_le16 (buffer);
-	ut16 insn2 = (len < 4)? 0: r_read_le16 (buffer + 2);
+	ut32 insn = r_read_le16 (buffer);
+	ut32 insn2 = (len < 4)? 0: r_read_le16 (buffer + 2);
 
 	/* Special case.  */
 	if (length == 0 && ((cpumodel & V850_CPU_E2_UP) != 0)) {

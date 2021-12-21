@@ -20,7 +20,7 @@ static RTableColumnType r_table_type_string = { "string", sortString };
 static RTableColumnType r_table_type_number = { "number", sortNumber };
 static RTableColumnType r_table_type_bool = { "bool", sortNumber };
 
-R_API RTableColumnType *r_table_type (const char *name) {
+R_API RTableColumnType *r_table_type(const char *name) {
 	if (!strcmp (name, "bool")) {
 		return &r_table_type_bool;
 	}
@@ -644,7 +644,7 @@ R_API void r_table_filter(RTable *t, int nth, int op, const char *un) {
 	RListIter *iter, *iter2;
 	ut64 uv = r_num_math (NULL, un);
 	ut64 sum = 0;
-	size_t page = 0, page_items = 0;
+	int page = 0, page_items = 0;
 	size_t lrow = 0;
 	if (op == 't') {
 		size_t ll = r_list_length (t->rows);
@@ -653,7 +653,7 @@ R_API void r_table_filter(RTable *t, int nth, int op, const char *un) {
 		}
 	}
 	if (op == 'p') {
-		sscanf (un, "%zd/%zd", &page, &page_items);
+		sscanf (un, "%d/%d", &page, &page_items);
 		if (page < 1) {
 			page = 1;
 		}
@@ -1192,7 +1192,7 @@ R_API bool r_table_align(RTable *t, int nth, int align) {
 	return false;
 }
 
-R_API void r_table_hide_header (RTable *t) {
+R_API void r_table_hide_header(RTable *t) {
 	t->showHeader = false;
 }
 

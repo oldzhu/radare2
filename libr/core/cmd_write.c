@@ -635,7 +635,7 @@ static bool cmd_wff(RCore *core, const char *input) {
 	return true;
 }
 
-static bool ioMemcpy (RCore *core, ut64 dst, ut64 src, int len) {
+static bool ioMemcpy(RCore *core, ut64 dst, ut64 src, int len) {
 	bool ret = false;
 	if (len > 0) {
 		ut8 * buf = calloc (1, len);
@@ -1936,7 +1936,7 @@ static int wb_handler_old(void *data, const char *input) {
 		}
 		free (buf);
 	} else {
-		eprintf ("Cannot malloc %zd\n", buf_size);
+		eprintf ("Cannot malloc %d\n", (int)buf_size);
 	}
 	return 0;
 }
