@@ -113,6 +113,7 @@ static const char *help_msg_slash[] = {
 	"/g", "[g] [from]", "find all graph paths A to B (/gg follow jumps, see search.count and anal.depth)",
 	"/h", "[t] [hash] [len]", "find block matching this hash. See ph",
 	"/i", " foo", "search for string 'foo' ignoring case",
+	"/k", " foo", "search for string 'foo' using Rabin Karp alg",
 	"/m", "[?][ebm] magicfile", "search for magic, filesystems or binary headers",
 	"/o", " [n]", "show offset of n instructions backward",
 	"/O", " [n]", "same as /o, but with a different fallback if anal cannot be used",
@@ -2453,29 +2454,6 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 	r_cons_break_pop ();
 }
 
-static void do_read_search(RSearch *s, struct search_parameters *param) {
-	RListIter *iter;
-	RIOMap *map;
-
-	// TODO: update pattern search to work with this
-	if (s->mode != R_SEARCH_PATTERN) {
-		r_search_set_read_cb (s, &_cb_hit_sz, param);
-	}
-	r_cons_break_push (NULL, NULL);
-	r_list_foreach (param->boundaries, iter, map) {
-		// TODO: pair adjacent maps
-		if (r_cons_is_breaked ()) {
-			break;
-		}
-		ut64 from = r_io_map_begin (map);
-		ut64 to = r_io_map_end (map);
-
-		eprintf ("Searching in [0x%" PFMT64x "-0x%" PFMT64x "]\n", from, to);
-		r_search_update_read (s, from, to);
-	}
-	r_cons_break_pop ();
-}
-
 static void do_string_search(RCore *core, RInterval search_itv, struct search_parameters *param) {
 	ut64 at;
 	ut8 *buf;
@@ -4074,6 +4052,27 @@ reread:
 		r_search_begin (core->search);
 		dosearch = true;
 		break;
+	case 'k': // "/k" Rabin Karp String search
+		inp = r_str_trim_dup (input + 1);
+		len = r_str_unescape (inp);
+		r_search_reset (core->search, R_SEARCH_RABIN_KARP);
+		r_search_set_distance (core->search, (int)r_config_get_i (core->config, "search.distance"));
+		{
+			RSearchKeyword *skw;
+			skw = r_search_keyword_new ((const ut8 *)inp, len, NULL, 0, NULL);
+			free (inp);
+			if (skw) {
+				skw->icase = ignorecase;
+				skw->type = R_SEARCH_KEYWORD_TYPE_STRING;
+				r_search_kw_add (core->search, skw);
+			} else {
+				eprintf ("Invalid keyword\n");
+				break;
+			}
+		}
+		r_search_begin (core->search);
+		dosearch_read = true;
+		break;
 	case 'e': // "/e" match regexp
 		if (input[1] == '?') {
 			eprintf ("Usage: /e /foo/i or /e/foo/i\n");
@@ -4350,7 +4349,11 @@ again:
 	if (dosearch) {
 		do_string_search (core, search_itv, &param);
 	} else if (dosearch_read) {
-		do_read_search (search, &param);
+		// TODO: update pattern search to work with this
+		if (search->mode != R_SEARCH_PATTERN) {
+			r_search_set_read_cb (search, &_cb_hit_sz, &param);
+		}
+		r_search_maps (search, param.boundaries);
 	}
 beach:
 	core->num->value = search->nhits;

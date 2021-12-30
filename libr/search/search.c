@@ -81,6 +81,7 @@ static int search_magic_update(RSearch *s, ut64 from, const ut8 *buf, int len) {
 
 R_API int r_search_set_mode(RSearch *s, int mode) {
 	s->update = NULL;
+	bool ok = true;
 	switch (mode) {
 	case R_SEARCH_KEYWORD: s->update = search_kw_update; break;
 	case R_SEARCH_REGEXP: s->update = search_regexp_update; break;
@@ -89,9 +90,16 @@ R_API int r_search_set_mode(RSearch *s, int mode) {
 	case R_SEARCH_STRING: s->update = search_strings_update; break;
 	case R_SEARCH_DELTAKEY: s->update = search_deltakey_update; break;
 	case R_SEARCH_MAGIC: s->update = search_magic_update; break;
-	case R_SEARCH_PATTERN: s->update = NULL; break;
+
+	// no r_search_update for these
+	case R_SEARCH_RABIN_KARP:
+	case R_SEARCH_PATTERN:
+		break;
+	default:
+		ok = false;
+		break;
 	}
-	if (s->update || mode == R_SEARCH_PATTERN) {
+	if (ok) {
 		s->mode = mode;
 		return true;
 	}
@@ -523,10 +531,53 @@ R_API int r_search_update_read(RSearch *s, ut64 from, ut64 to) {
 		return search_pattern (s, from, to);
 	case R_SEARCH_REGEXP:
 		return search_regex_read (s, from, to);
+	case R_SEARCH_RABIN_KARP:
+		return search_rk (s, from, to);
 	default:
 		eprintf ("Unsupported mode\n");
 		return -1;
 	}
+}
+
+// TODO: show progress
+R_API int r_search_maps(RSearch *s, RList *maps) {
+	r_return_val_if_fail (s && s->consb.is_breaked && maps, -1);
+	RListIter *iter;
+	RIOMap *m;
+	ut64 prevto = UT64_MAX;
+	ut64 prevfrom = UT64_MAX;
+	int ret = 0;
+
+	r_list_foreach_prev (maps, iter, m) {
+		if (s->consb.is_breaked ()) {
+			break;
+		}
+		ut64 from = r_io_map_begin (m);
+		ut64 to = r_io_map_end (m);
+
+		if (prevto == from) { // absorb new search area into previous
+			prevto = to;
+			continue;
+		}
+		if (prevto != UT64_MAX && prevfrom != UT64_MAX) {
+			// do last search
+			int tmp = r_search_update_read (s, prevfrom, prevto);
+			if (tmp < 0) {
+				return tmp;
+			}
+			ret += tmp;
+		}
+		prevto = to;
+		prevfrom = from;
+	}
+	if (prevto != UT64_MAX && prevfrom != UT64_MAX) {
+		int tmp = r_search_update_read (s, prevfrom, prevto);
+		if (tmp < 0) {
+			return tmp;
+		}
+		ret += tmp;
+	}
+	return ret;
 }
 
 static int listcb(RSearchKeyword *k, void *user, ut64 addr) {
