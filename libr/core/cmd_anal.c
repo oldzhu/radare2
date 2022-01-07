@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2021 - pancake, maijin */
+/* radare - LGPL - Copyright 2009-2022 - pancake, maijin */
 
 #include <r_core.h>
 #include <r_util/r_graph_drawable.h>
@@ -4197,9 +4197,11 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			break;
 		case 's': // "afls"
 			switch (input[3]) {
+			default:
 			case '?':
 				r_core_cmd_help (core, help_msg_afls);
-				break;
+				return true;
+			case 0: // default for "afls"
 			case 'a': // "aflsa"
 				core->anal->fcns->sorted = false;
 				r_list_sort (core->anal->fcns, cmpaddr);
@@ -4215,10 +4217,6 @@ static int cmd_anal_fcn(RCore *core, const char *input) {
 			case 'n': // "aflsn"
 				core->anal->fcns->sorted = false;
 				r_list_sort (core->anal->fcns, cmpname);
-				break;
-			default:
-				core->anal->fcns->sorted = false;
-				r_list_sort (core->anal->fcns, cmpaddr);
 				break;
 			}
 			break;
