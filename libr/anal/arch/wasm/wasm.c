@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2017-2020 - pancake, cgvwzq */
+/* radare - LGPL - Copyright 2017-2022 - pancake, cgvwzq */
 
 // http://webassembly.org/docs/binary-encoding/#module-structure
 
@@ -429,9 +429,8 @@ static WasmOpDef opcodes_simd[256] = {
 	[WASM_OP_I16X8ABS] = { "i16x8.abs", 2, 6 },
 };
 
-#ifndef WASM_NO_ASM
 // assembles the given line of wasm assembly.
-R_IPI int wasm_asm(const char *str, unsigned char *buf, int buf_len) {
+R_IPI int wasm_asm(const char *str, ut8 *buf, int buf_len) {
 	int i = 0, len = 0;
 	char tmp[256];
 	WasmOpDef *opdef = NULL;
@@ -446,6 +445,12 @@ R_IPI int wasm_asm(const char *str, unsigned char *buf, int buf_len) {
 		if (opdef->txt) {
 			if (!strcmp (opdef->txt, tmp)) {
 				buf[len++] = i;
+				if (opdef->min > 1) {
+					for (i = 1; i < opdef->min; i++) {
+						const char *arg = str + strlen (tmp);
+						buf[len++] = r_num_get (NULL, arg);
+					}
+				}
 				break;
 			}
 		}
@@ -470,7 +475,6 @@ R_IPI int wasm_asm(const char *str, unsigned char *buf, int buf_len) {
   err:
 	return -1;
 }
-#endif
 
 // disassemble an instruction from the given buffer.
 R_IPI int wasm_dis(WasmOp *op, const unsigned char *buf, int buf_len) {
@@ -1120,9 +1124,9 @@ R_IPI int wasm_dis(WasmOp *op, const unsigned char *buf, int buf_len) {
 					goto err;
 				}
 				op->len += 16;
-				unsigned char bytes[16] = { 0 };
+				ut8 bytes[16] = { 0 };
 				int i;
-				for (i = 0; i < 16; ++i) {
+				for (i = 0; i < 16; i++) {
 					bytes[i] = buf[i + 1 + simdop_size];
 				}
 				r_strbuf_setf (sb, "%s %02x %02x %02x %02x %02x %02x %02x " \
