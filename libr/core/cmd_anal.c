@@ -1152,6 +1152,10 @@ static void find_refs(RCore *core, const char *glob) {
 	free (cmd);
 }
 
+static ut64 sort64val(const void *a) {
+	ut64 *na = (ut64*)a;
+	return *na;
+}
 static int sort64(const void *a, const void *b) {
 	ut64 *na = (ut64*)a;
 	ut64 *nb = (ut64*)b;
@@ -1168,26 +1172,16 @@ static RList *collect_addresses(RCore *core) {
 	result is then sorted and uniqified
 #endif
 	RList *list = r_list_newf (free);
-	RListIter *iter, *iter2;
-	ut64 *n;
+	RListIter *iter;
 	RBinSymbol *sym;
 	RList *syms = r_bin_get_symbols (core->bin);
 	r_list_foreach (syms, iter, sym) {
-		bool found = false;
-		r_list_foreach (list, iter2, n) {
-			if (*n == sym->vaddr) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			r_list_append (list, ut64_new (sym->vaddr));
-		}
+		r_list_append (list, ut64_new (sym->vaddr));
 	}
 	// find all calls and mark the destinations as function entrypoints
 	// r_core_search_preludes (core, true); // __prelude_cb_hit uses globals and calls 'af', should be changed to just return a list for later processing
 	r_list_sort (list, sort64);
-	r_list_uniq (list, sort64);
+	r_list_uniq_inplace (list, sort64val);
 	return list;
 }
 
@@ -1210,8 +1204,10 @@ static void single_block_analysis(RCore *core) {
 			if (fcn) {
 				r_anal_function_add_bb (core->anal, fcn, at, len, UT64_MAX, UT64_MAX, 0);
 			}
+			free (name);
 		}
 	}
+	r_list_free (list);
 }
 
 /* set flags for every function */
@@ -2419,10 +2415,9 @@ static int bb_cmp(const void *a, const void *b) {
 	return ba->addr - bb->addr;
 }
 
-static int casecmp(const void* _a, const void *_b) {
+static ut64 caseval(const void* _a) {
 	const RAnalCaseOp* a = _a;
-	const RAnalCaseOp* b = _b;
-	return a->addr != b->addr;
+	return a->addr;
 }
 
 static ut64 __opaddr(const RAnalBlock *b, ut64 addr) {
@@ -2714,9 +2709,8 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 		pj_end (pj);
 	} else {
 		if (b->switch_op) {
-			RList *unique_cases = r_list_uniq (b->switch_op->cases, casecmp);
-			outputs += r_list_length (unique_cases);
-			r_list_free (unique_cases);
+			r_list_uniq_inplace (b->switch_op->cases, caseval);
+			outputs += r_list_length (b->switch_op->cases);
 		}
 		if (b->jump != UT64_MAX) {
 			r_cons_printf ("jump: 0x%08"PFMT64x"\n", b->jump);
@@ -2880,11 +2874,10 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 			if (b->switch_op) {
 				RAnalCaseOp *cop;
 				RListIter *iter;
-				RList *unique_cases = r_list_uniq (b->switch_op->cases, casecmp);
-				r_list_foreach (unique_cases, iter, cop) {
+				r_list_uniq_inplace (b->switch_op->cases, caseval);
+				r_list_foreach (b->switch_op->cases, iter, cop) {
 					r_cons_printf (" s 0x%08" PFMT64x, cop->addr);
 				}
-				r_list_free (unique_cases);
 			}
 			r_cons_newline ();
 			break;
@@ -2995,7 +2988,7 @@ static int cmd_afbplus(RCore *core, const char *input) {
 		if (!r_anal_function_add_bb (core->anal, fcn, addr, size, jump, fail, diff))
 		//if (!r_anal_function_add_bb_raw (core->anal, fcn, addr, size, jump, fail, type, diff))
 		{
-			eprintf ("afb+: Cannot add basic block at 0x%08"PFMT64x"\n", addr);
+			eprintf ("afb+: Cannot add basic block at 0x%08"PFMT64x" with size %d\n", addr, (int)size);
 		}
 	} else {
 		eprintf ("afb+ No function at 0x%" PFMT64x " from 0x%08"PFMT64x" -> 0x%08"PFMT64x"\n",
