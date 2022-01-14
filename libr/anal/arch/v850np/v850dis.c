@@ -236,6 +236,8 @@ char *distillate(v850np_inst *inst, const char *esilfmt) {
 	char *arg = strchr (inst->text, ' ');
 	if (arg) {
 		arg = strdup (arg + 1);
+		arg = r_str_replace (arg, "[", ",", true);
+		arg = r_str_replace (arg, "]", "", true);
 		args = r_str_split_list (arg, ",", 0);
 	}
 	while (*esilfmt) {
@@ -437,6 +439,8 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 			// eprintf ("ESIL (%s)\n", op->esil);
 			inst->esil = distillate (inst, op->esil);
 		}
+	} else {
+		r_strbuf_free (sb);
 	}
 	return true;
 fail:
