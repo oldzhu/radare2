@@ -377,6 +377,7 @@ static void recursive_help(RCore *core, int detail, const char *cmd_prefix) {
 	RList *pending = r_list_newf (free);
 	r_cons_print (s);
 	RList *rows = r_str_split_list (s, "\n", 0);
+	free (s);
 	RListIter *iter;
 	char *row;
 	r_list_foreach (rows, iter, row) {
@@ -4657,12 +4658,13 @@ static RList *foreach3list(RCore *core, char type, const char *glob) {
 	case 'R': // relocs
 		{
 			RBinReloc *rel;
-			const RList *rels = r_bin_get_relocs_list (core->bin);
+			RList *rels = r_bin_get_relocs_list (core->bin);
 			// const RList *rels = r_bin_patch_relocs_list (core->bin);
 			r_list_foreach (rels, iter, rel) {
 				ut64 addr = va? rel->vaddr: rel->paddr;
 				append_item (list, NULL, addr, UT64_MAX);
 			}
+			r_list_free (rels);
 		}
 		break;
 	case 'r': // registers

@@ -5789,6 +5789,7 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 			// Close the fd associated with the aeim stack
 			ut64 fd = sdb_atoi (fi);
 			(void)r_io_fd_close (core->io, fd);
+			free (fi);
 		}
 	}
 	size = r_config_get_i (core->config, "esil.stack.size");
@@ -6335,7 +6336,6 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 	buf = malloc (bsize);
 	if (!buf) {
 		eprintf ("Cannot allocate %d byte(s)\n", bsize);
-		free (buf);
 		return;
 	}
 	if (addr == -1) {
@@ -6384,6 +6384,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 		addr += ret; // aop.size;
 		r_anal_op_fini (&aop);
 	}
+	free (buf);
 	r_core_seek (core, oldoff, true);
 	r_reg_setv (core->dbg->reg, "SP", cursp);
 }
@@ -8760,6 +8761,7 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 			if (hint && hint->opcode) {
 				r_cons_printf ("aho %s @ 0x%08"PFMT64x"\n", hint->opcode, hint->addr);
 			}
+			r_anal_hint_free (hint);
 		} else if (input[1] == 0) {
 			// show if any
 			RAnalHint *hint = r_anal_hint_get (core->anal, core->offset);
