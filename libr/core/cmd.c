@@ -373,11 +373,12 @@ static void recursive_help(RCore *core, int detail, const char *cmd_prefix) {
 		recursive_help (core, detail, "??");
 		recursive_help (core, detail, "~");
 	}
+
 	char *s = r_core_cmd_strf (core, "%s?", cmd_prefix);
 	RList *pending = r_list_newf (free);
 	r_cons_print (s);
 	RList *rows = r_str_split_list (s, "\n", 0);
-	free (s);
+
 	RListIter *iter;
 	char *row;
 	r_list_foreach (rows, iter, row) {
@@ -400,6 +401,7 @@ static void recursive_help(RCore *core, int detail, const char *cmd_prefix) {
 		}
 	}
 	r_list_free (rows);
+	free (s);
 	r_list_foreach (pending, iter, row) {
 		recursive_help (core, detail, row);
 	}
@@ -3035,7 +3037,7 @@ err_r_w32_cmd_pipe:
 #endif
 
 R_API int r_core_cmd_pipe(RCore *core, char *radare_cmd, char *shell_cmd) {
-#if __UNIX__ && !__wasi__
+#if __UNIX__ && !__wasi__ && HAVE_FORK
 	int stdout_fd, fds[2];
 	int child;
 #endif

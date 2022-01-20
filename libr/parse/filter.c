@@ -148,6 +148,8 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 	RAnalFunction *fcn;
 	RFlagItem *flag;
 	ut64 off;
+	const int bits = p->analb.anal->bits;
+	const int seggrn = p->analb.anal->seggrn;
 	bool x86 = false;
 	bool arm = false;
 	if (p && p->cur && p->cur->name) {
@@ -189,7 +191,16 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 				;
 			}
 		}
-		off = r_num_math (NULL, ptr);
+		char* colon = strstr (ptr, ":");
+		if (x86 && bits == 16 && colon) {
+			*colon = '\0';
+			ut64 s = r_num_get (NULL, ptr);
+			ut64 o = r_num_get (NULL, colon + 1);
+			off = (s << seggrn) + o;
+			*colon = ':';
+		} else {
+			off = r_num_get (NULL, ptr);
+		}
 		if (off >= p->minval) {
 			fcn = p->analb.get_fcn_in (p->analb.anal, off, 0);
 			if (fcn && fcn->addr == off) {
@@ -400,6 +411,20 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 					continue;
 				}
 				break;
+			}
+			if (bits == 16 && x86 && *pnum == ':') {
+				pnum++;
+				is_hex = false;
+				if (!strncmp (pnum, "0x", 2)) {
+					is_hex = true;
+					pnum += 2;
+				}
+				for (; *pnum; pnum++) {
+					if ((is_hex && IS_HEXCHAR (*pnum)) || IS_DIGIT (*pnum)) {
+						continue;
+					}
+					break;
+				}
 			}
 			*pnum = 0;
 			switch (immbase) {
