@@ -19,8 +19,8 @@
 #define DEBUG_DISASM 0
 
 // ugly globals but meh
-static ut64 emustack_min = 0LL;
-static ut64 emustack_max = 0LL;
+static R_TH_LOCAL ut64 emustack_min = 0LL;
+static R_TH_LOCAL ut64 emustack_max = 0LL;
 
 static const char* r_vline_a[] = {
 	"|",  // LINE_VERT
@@ -881,7 +881,7 @@ static RDisasmState *ds_init(RCore *core) {
 	return ds;
 }
 
-static ut64 lastaddr = UT64_MAX;
+static R_TH_LOCAL ut64 lastaddr = UT64_MAX;
 
 static void ds_reflines_fini(RDisasmState *ds) {
 	RAnal *anal = ds->core->anal;
@@ -3061,7 +3061,7 @@ static bool ds_print_data_type(RDisasmState *ds, const ut8 *obuf, int ib, int si
 	if (ds->asm_hint_imm) { // thats not really an imm.. but well dont add more hints for now
 		(void) ds_print_shortcut (ds, n, ds->asm_hint_pos);
 	}
-	if (r_config_get_i (core->config, "asm.marks")) {
+	if (r_config_get_b (core->config, "asm.marks")) {
 		r_cons_printf ("  ");
 		int q = core->print->cur_enabled &&
 			ds->cursor >= ds->index &&
@@ -3243,6 +3243,11 @@ static bool ds_print_meta_infos(RDisasmState *ds, ut8* buf, int len, int idx, in
 			int size = mi_size;
 			ut8 *b = malloc (mi_size);
 			if (b) {
+				int delta = ds->at - node->start;
+				if (delta > 0) {
+					ds->at -= delta;
+					r_cons_printf ("-%d ", delta);
+				}
 				r_io_read_at (core->io, ds->at, b, mi_size);
 				if (size > 0 && !ds_print_data_type (ds, b, ds->hint? ds->hint->immbase: 0, mi_size)) {
 					if (size > delta) {
@@ -5349,9 +5354,22 @@ static char *ds_sub_jumps(RDisasmState *ds, char *str) {
 		ptr = str;
 		while ((nptr = _find_next_number (ptr))) {
 			ptr = nptr;
-			numval = r_num_get (NULL, ptr);
+			const char* arch = r_config_get (ds->core->config, "asm.arch");
+			const bool x86 = !strncmp (arch, "x86", 3);
+			const int bits = r_config_get_i (ds->core->config, "asm.bits");
+			const int seggrn = r_config_get_i (ds->core->config, "asm.seggrn");
+			char* colon = strchr (ptr, ':');
+			if (x86 && bits == 16 && colon) {
+				*colon = '\0';
+				ut64 seg = r_num_get (NULL, ptr);
+				ut64 off = r_num_get (NULL, colon + 1);
+				*colon = ':';
+				numval = (seg << seggrn) + off;
+			} else {
+				numval = r_num_get (NULL, ptr);
+			}
 			if (numval == addr) {
-				while (*nptr && !IS_SEPARATOR (*nptr) && *nptr != 0x1b) {
+				while ((*nptr && !IS_SEPARATOR (*nptr) && *nptr != 0x1b) || (x86 && bits == 16 && colon && *nptr == ':')) {
 					nptr++;
 				}
 				char *kwname = r_str_newf ("%s%s", kw, name);
