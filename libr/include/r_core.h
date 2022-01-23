@@ -595,7 +595,7 @@ R_API RAnalOp* r_core_anal_op(RCore *core, ut64 addr, int mask);
 R_IPI int core_type_by_addr(RCore *core, ut64 addr);
 R_API void r_core_anal_esil(RCore *core, const char *str, const char *addr);
 R_API void r_core_anal_fcn_merge(RCore *core, ut64 addr, ut64 addr2);
-R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr, bool verbose);
+R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr, ut8 ch, bool verbose);
 R_API ut64 r_core_anal_address(RCore *core, ut64 addr);
 R_API void r_core_anal_undefine(RCore *core, ut64 off);
 R_API void r_core_anal_hint_print(RAnal* a, ut64 addr, int mode);
@@ -842,6 +842,8 @@ R_API char *r_str_widget_list(void *user, RList *list, int rows, int cur, PrintI
 R_API PJ *r_core_pj_new(RCore *core);
 /* help */
 R_API void r_core_cmd_help(const RCore *core, const char *help[]);
+R_API void r_core_cmd_help_match(const RCore *core, const char *help[], R_BORROW R_NONNULL char *cmd, bool exact);
+R_API void r_core_cmd_help_match_spec(const RCore *core, const char *help[], R_BORROW R_NONNULL char *cmd, char spec, bool exact);
 
 /* anal stats */
 

@@ -2325,7 +2325,7 @@ R_API char *r_core_anal_hasrefs_to_depth(RCore *core, ut64 value, PJ *pj, int de
 		}
 	}
 	if (type) {
-		const char *c = r_core_anal_optype_colorfor (core, value, true);
+		const char *c = r_core_anal_optype_colorfor (core, fcn? fcn->addr: value, value, true);
 		const char *cend = (c && *c) ? Color_RESET: "";
 		if (!c) {
 			c = "";
@@ -2505,15 +2505,58 @@ R_API char *r_core_anal_get_comments(RCore *core, ut64 addr) {
 	return NULL;
 }
 
-R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr, bool verbose) {
-	ut64 type;
+static R_TH_LOCAL char *const_color = NULL;
+
+R_API const char *colorforop(RCore *core, ut64 addr) {
+	RList *fcns = r_anal_get_functions_in (core->anal, addr);
+	if (r_list_empty (fcns)) {
+		r_list_free (fcns);
+		return NULL;
+	}
+	RAnalFunction *fcn = r_list_pop (fcns);
+	r_list_free (fcns);
+	if (!fcn) {
+		return NULL;
+	}
+	RListIter *iter;
+	RAnalBlock *bb;
+	r_list_foreach (fcn->bbs, iter, bb) {
+		if (addr >= bb->addr && addr < (bb->addr + bb->size)) {
+			ut64 opat = r_anal_bb_opaddr_at (bb, addr);
+			RAnalOp *op = r_core_anal_op (core, opat, 0);
+			if (op) {
+				const char* res = r_print_color_op_type (core->print, op->type);
+				r_anal_op_free (op);
+				return res;
+			}
+			break;
+		}
+	}
+	return NULL;
+}
+
+R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr, ut8 ch, bool verbose) {
 	if (!(core->print->flags & R_PRINT_FLAGS_COLOR)) {
 		return NULL;
+	}
+	if (!verbose && (core->print->flags & R_PRINT_FLAGS_COLOROP)) {
+		// if function in place check optype for given offset
+		return colorforop (core, addr);
 	}
 	if (!r_config_get_i (core->config, "scr.color")) {
 		return NULL;
 	}
-	type = r_core_anal_address (core, addr);
+	if (!verbose) {
+		// check for flag colors
+		RFlagItem *fi = r_flag_get_at (core->flags, addr, true);
+		if (fi && fi->offset + fi->size >= addr && fi->color) {
+			free (const_color);
+			const_color = r_cons_pal_parse (fi->color, NULL);
+			return const_color;
+		}
+		return NULL;
+	}
+	ut64 type = r_core_anal_address (core, addr);
 	if (type & R_ANAL_ADDR_TYPE_EXEC) {
 		return core->cons->context->pal.ai_exec; //Color_RED;
 	}
@@ -2677,8 +2720,8 @@ static void __init_autocomplete(RCore* core) {
 	}
 }
 
-static const char *colorfor_cb(void *user, ut64 addr, bool verbose) {
-	return r_core_anal_optype_colorfor ((RCore *)user, addr, verbose);
+static const char *colorfor_cb(void *user, ut64 addr, ut8 ch, bool verbose) {
+	return r_core_anal_optype_colorfor ((RCore *)user, addr, ch, verbose);
 }
 
 static char *hasrefs_cb(void *user, ut64 addr, int mode) {

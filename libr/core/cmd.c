@@ -337,6 +337,14 @@ R_API void r_core_cmd_help(const RCore *core, const char *help[]) {
 	r_cons_cmd_help (help, core->print->flags & R_PRINT_FLAGS_COLOR);
 }
 
+R_API void r_core_cmd_help_match(const RCore *core, const char *help[], R_BORROW R_NONNULL char *cmd, bool exact) {
+	r_cons_cmd_help_match (help, core->print->flags & R_PRINT_FLAGS_COLOR, cmd, 0, exact);
+}
+
+R_API void r_core_cmd_help_match_spec(const RCore *core, const char *help[], R_BORROW R_NONNULL char *cmd, char spec, bool exact) {
+	r_cons_cmd_help_match (help, core->print->flags & R_PRINT_FLAGS_COLOR, cmd, spec, exact);
+}
+
 struct duplicate_flag_t {
 	RList *ret;
 	const char *word;
@@ -2390,13 +2398,21 @@ static int cmd_resize(void *data, const char *input) {
 		delta = (st64)r_num_math (core->num, input);
 		newsize = oldsize + delta;
 		break;
-	case ' ': // "r "
-		newsize = r_num_math (core->num, input + 1);
-		if (newsize == 0) {
-			if (input[1] == '0') {
-				eprintf ("Invalid size\n");
+	case ' ': // "r " "r +" "r -"
+		{
+			const char *arg = r_str_trim_head_ro (input + 1);
+			if (*arg == '-' || *arg == '+') {
+				delta = (st64)r_num_math (core->num, input);
+				newsize = oldsize + delta;
+			} else {
+				newsize = r_num_math (core->num, arg);
+				if (newsize == 0) {
+					if (arg[1] == '0') {
+						eprintf ("Invalid size\n");
+					}
+					return false;
+				}
 			}
-			return false;
 		}
 		break;
 	case 'e':

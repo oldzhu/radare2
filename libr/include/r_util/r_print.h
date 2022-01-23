@@ -33,6 +33,7 @@ extern "C" {
 #define R_PRINT_FLAGS_UNALLOC  0x00080000
 #define R_PRINT_FLAGS_BGFILL   0x00100000
 #define R_PRINT_FLAGS_SECTION  0x00200000
+#define R_PRINT_FLAGS_COLOROP  0x00400000
 
 /*
 
@@ -72,7 +73,7 @@ typedef const char *(*RPrintNameCallback)(void *user, ut64 addr);
 typedef int (*RPrintSizeCallback)(void *user, ut64 addr);
 typedef char *(*RPrintCommentCallback)(void *user, ut64 addr);
 typedef const char *(*RPrintSectionGet)(void *user, ut64 addr);
-typedef const char *(*RPrintColorFor)(void *user, ut64 addr, bool verbose);
+typedef const char *(*RPrintColorFor)(void *user, ut64 addr, ut8 ch, bool verbose);
 typedef char *(*RPrintHasRefs)(void *user, ut64 addr, int mode);
 
 typedef struct r_print_zoom_t {
@@ -195,8 +196,8 @@ R_API void r_print_hexpairs(RPrint *p, ut64 addr, const ut8 *buf, int len);
 R_API void r_print_hexdiff(RPrint *p, ut64 aa, const ut8* a, ut64 ba, const ut8 *b, int len, int scndcol);
 R_API void r_print_bytes(RPrint *p, const ut8* buf, int len, const char *fmt);
 R_API void r_print_fill(RPrint *p, const ut8 *arr, int size, ut64 addr, int step);
-R_API void r_print_byte(RPrint *p, const char *fmt, int idx, ut8 ch);
-R_API const char *r_print_byte_color(RPrint *p, int ch);
+R_API void r_print_byte(RPrint *p, ut64 addr, const char *fmt, int idx, ut8 ch);
+R_API const char *r_print_byte_color(RPrint *p, ut64 addr, int ch);
 R_API void r_print_c(RPrint *p, const ut8 *str, int len);
 R_API void r_print_raw(RPrint *p, ut64 addr, const ut8* buf, int len, int offlines);
 R_API bool r_print_have_cursor(RPrint *p, int cur, int len);

@@ -1675,7 +1675,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 		colors[i] = r_cons_rainbow_get (i, 10, false);
 	}
 	const int col = core->print->col;
-	RFlagItem *flag, *current_flag = NULL;
+	RFlagItem *curflag = NULL;
 	char **note;
 	int html = r_config_get_i (core->config, "scr.html");
 	int nb_cons_cols;
@@ -1708,7 +1708,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 	if (!note) {
 		goto err_note;
 	}
-	bytes = calloc (nb_cons_cols * 40, sizeof (char));
+	bytes = calloc (64 + nb_cons_cols * 40, sizeof (char));
 	if (!bytes) {
 		goto err_bytes;
 	}
@@ -1731,7 +1731,9 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 		sprintf (bytes + j, format, (i & 0xf), (i + 1) & 0xf);
 		j += step;
 	}
-	j--;
+	if (!compact) {
+		j--;
+	}
 	strcpy (bytes + j, "     ");
 	j += 2;
 	for (i = 0; i < nb_cols; i++) {
@@ -1752,7 +1754,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 		chars[0] = '\0';
 		ebytes = bytes;
 		echars = chars;
-		hascolor = false;
+//		hascolor = false;
 		ut64 ea = addr;
 		if (core->print->pava) {
 			ut64 va = r_io_p2v (core->io, addr);
@@ -1802,26 +1804,85 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 				note[j] = r_str_newf (";%s", comment);
 				marks = true;
 			}
-
-			// collect flags
-			flag = r_flag_get_i (core->flags, addr + j);
-			if (flag) { // Beginning of a flag
-				if (flagsz) {
-					fend = addr + flagsz; // core->blocksize;
-				} else {
-					fend = addr + j + flag->size;
+			const RList *list = r_flag_get_list (core->flags, addr + j);
+			RListIter *iter;
+			RFlagItem *fi;
+			ut64 flagsize = 0;
+			ut64 flagaddr = 0;
+			bool found = false;
+			char *flagname = NULL;
+			ut64 at = addr + j;
+			if (r_list_empty (list)) {
+				// get flag fnear and check for size
+				RFlagItem *fnear = r_flag_get_at (core->flags, at, true);
+				if (fnear) {
+					if (fnear->offset <= at) {
+						if (fnear->offset + fnear->size >= at) {
+							found = true;
+						}
+					}
+					if (found) {
+						flagaddr = fnear->offset;
+						if (fnear->offset == at) {
+							free (flagname);
+							flagname = fnear->name;
+						}
+						if (fnear->color) {
+							curflag = fnear;
+						}
+						if (!curflag) {
+							curflag = fnear;
+						}
+						hascolor = false;
+					}
 				}
-				free (note[j]);
-				const char *name = r_name_filter_ro (flag->name);
-				note[j] = r_str_prepend (strdup (name), "/");
+			} else {
+				r_list_foreach (list, iter, fi) {
+					flagsize = R_MAX (flagsize, fi->size);
+					if (fi->color) {
+						curflag = fi;
+					}
+					if (!flagaddr || fi->color) {
+						flagaddr = fi->offset;
+						if (fi->offset == at) {
+							free (flagname);
+							flagname = strdup (fi->name);
+						}
+						if (!fi->color) {
+							curflag = fi;
+						}
+					}
+				}
+				if (curflag) {
+					hascolor = false;
+					found = true;
+				}
+			}
+			// collect flags
+			if (found) {
+				if (flagsz) {
+					flagsize = flagsz;
+				}
+				if (flagsize) {
+					fend = addr + flagsize;
+				} else {
+					fend = addr + j + flagsize;
+				}
+				const char *name = r_name_filter_ro (flagname);
+				if (name) {
+					free (note[j]);
+					note[j] = r_str_prepend (strdup (name), "/");
+				} else {
+					free (note[j]);
+					note[j] = NULL;
+				}
 				marks = true;
 				color_idx++;
 				color_idx %= 10;
-				current_flag = flag;
 				if (showSection) {
 					r_cons_printf ("%20s ", "");
 				}
-				if (flag->offset == addr + j) {
+				if (flagaddr == addr + j) {
 					if (usecolor) {
 						append (ebytes, Color_INVERT);
 						append (echars, Color_INVERT);
@@ -1830,18 +1891,20 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 				}
 			} else {
 				// Are we past the current flag?
-				if (current_flag && addr + j > (current_flag->offset + current_flag->size)) {
+				if (curflag && addr + j > (curflag->offset + curflag->size)) {
 					setcolor = false;
-					current_flag = NULL;
+					curflag = NULL;
 				}
 				// Turn colour off if we're at the end of the current flag
 				if (fend == UT64_MAX || fend <= addr + j) {
 					setcolor = false;
 				}
 			}
+			R_FREE (flagname);
+			hascolor = false;
 			if (usecolor) {
 				if (!setcolor) {
-					const char *bytecolor = r_print_byte_color (core->print, ch);
+					const char *bytecolor = r_print_byte_color (core->print, addr + j, ch);
 					if (bytecolor) {
 						append (ebytes, bytecolor);
 						append (echars, bytecolor);
@@ -1849,8 +1912,8 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 					}
 				} else if (!hascolor) {
 					hascolor = true;
-					if (current_flag && current_flag->color) {
-						char *ansicolor = r_cons_pal_parse (current_flag->color, NULL);
+					if (curflag && curflag->color) {
+						char *ansicolor = r_cons_pal_parse (curflag->color, NULL);
 						if (ansicolor) {
 							append (ebytes, ansicolor);
 							append (echars, ansicolor);
@@ -1948,7 +2011,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 					int notej_len = strlen (note[j]);
 					int sz = R_MIN (notej_len, nb_cons_cols - off);
 					if (compact) {
-						off -= (j/2);
+						off -= (j / 2);
 					} else {
 						if (j % 2) {
 							off--;
@@ -1995,7 +2058,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 	free (chars);
  err_chars:
 	for (i = 0; i < R_ARRAY_SIZE (colors); i++) {
-		free (colors[i]);
+		R_FREE (colors[i]);
 	}
 }
 
@@ -2483,8 +2546,9 @@ static int cmd_print_pxA(RCore *core, int len, const char *input) {
 
 static void cmd_print_op(RCore *core, const char *input) {
 	ut8 *buf;
-	if (!input[0])
+	if (!input[0]) {
 		return;
+	}
 	switch (input[1]) {
 	case 'a':
 	case 's':
@@ -2513,8 +2577,7 @@ static void cmd_print_op(RCore *core, const char *input) {
 		return;
 	}
 	if (buf) {
-		r_print_hexdump(core->print, core->offset, buf,
-			core->blocksize, 16, 1, 1);
+		r_print_hexdump (core->print, core->offset, buf, core->blocksize, 16, 1, 1);
 		free (buf);
 	}
 }
@@ -6545,7 +6608,7 @@ static int cmd_print(void *data, const char *input) {
 					RFlagItem *f;
 					ut32 v = r_read_ble32 (core->block + i, core->print->big_endian);
 					if (p && p->colorfor) {
-						a = p->colorfor (p->user, v, true);
+						a = p->colorfor (p->user, core->offset + i, v, true);
 						if (a && *a) {
 							b = Color_RESET;
 						} else {
@@ -6625,7 +6688,7 @@ static int cmd_print(void *data, const char *input) {
 					RFlagItem *f;
 					ut64 v = (ut64) r_read_ble16 (core->block + i, p->big_endian);
 					if (p && p->colorfor) {
-						a = p->colorfor (p->user, v, true);
+						a = p->colorfor (p->user, core->offset + i, v, true);
 						if (a && *a) {
 							b = Color_RESET;
 						} else {
@@ -6673,7 +6736,7 @@ static int cmd_print(void *data, const char *input) {
 					RFlagItem *f;
 					ut64 v = r_read_ble64 (core->block + i, p->big_endian);
 					if (p && p->colorfor) {
-						a = p->colorfor (p->user, v, true);
+						a = p->colorfor (p->user, core->offset + i, v, true);
 						if (a && *a) {
 							b = Color_RESET;
 						} else {
@@ -6798,7 +6861,7 @@ static int cmd_print(void *data, const char *input) {
 					r_cons_print (" ");
 					for (j = i; j < len && j < i + cols; j += 1) {
 						ut8 *p = (ut8 *) core->block + j;
-						r_print_byte (core->print, "%c", j, *p);
+						r_print_byte (core->print, core->offset + j, "%c", j, *p);
 					}
 					r_cons_newline ();
 				}
