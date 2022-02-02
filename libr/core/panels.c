@@ -50,7 +50,7 @@ static void __panels_refresh(RCore *core);
 #define PANEL_CMD_GRAPH              "agf"
 #define PANEL_CMD_TINYGRAPH          "agft"
 #define PANEL_CMD_HEXDUMP            "xc"
-#define PANEL_CMD_CONSOLE            "$console"
+#define PANEL_CMD_CONSOLE            "cat $console"
 
 #define PANEL_CONFIG_MENU_MAX    64
 #define PANEL_CONFIG_PAGE        10
@@ -453,6 +453,9 @@ static void __shrink_panels_backward(RCore *core, int target) {
 
 static void __cache_white_list(RCore *core, RPanel *panel) {
 	int i = 0;
+	if (!core || !panel) {
+		return;
+	}
 	for (; i < COUNT (cache_white_list_cmds); i++) {
 		if (!strcmp (panel->model->cmd, cache_white_list_cmds[i])) {
 			panel->model->cache = true;
@@ -879,9 +882,13 @@ static char *__handle_cmd_str_cache(RCore *core, RPanel *panel, bool force_cache
 		if (b) {
 			core->print->cur_enabled = false;
 		}
+
+		bool o_interactive = r_cons_is_interactive ();
+		r_cons_set_interactive (false);
 		out = (*cmd == '.')
 			? r_core_cmd_str_pipe (core, cmd)
 			: r_core_cmd_str (core, cmd);
+		r_cons_set_interactive (o_interactive);
 		if (force_cache) {
 			panel->model->cache = true;
 		}
@@ -1059,9 +1066,10 @@ static void __set_curnode(RCore *core, int idx) {
 		idx = panels->n_panels - 1;
 	}
 	panels->curnode = idx;
-
 	RPanel *cur = __get_cur_panel (panels);
-	cur->view->curpos = cur->view->sy;
+	if (cur) {
+		cur->view->curpos = cur->view->sy;
+	}
 }
 
 static bool __check_panel_num(RCore *core) {
@@ -1172,6 +1180,7 @@ static int __add_cmd_panel(void *user) {
 	__set_curnode (core, 0);
 	__set_mode (core, PANEL_MODE_DEFAULT);
 	free (cmd);
+	menu->n_refresh = 0; // close the menu bar
 	return 0;
 }
 
@@ -1309,7 +1318,7 @@ static void __fix_layout(RCore *core) {
 }
 
 static void show_cursor(RCore *core) {
-	const bool keyCursor = r_config_get_i (core->config, "scr.cursor");
+	const bool keyCursor = r_config_get_b (core->config, "scr.cursor");
 	if (keyCursor) {
 		r_cons_gotoxy (core->cons->cpos.x, core->cons->cpos.y);
 		r_cons_show_cursor (1);
@@ -1835,7 +1844,7 @@ static void __init_sdb(RCore *core) {
 	sdb_set (db, "Tiny Graph", "agft", 0);
 	sdb_set (db, "Info", "i", 0);
 	sdb_set (db, "Database", "k ***", 0);
-	sdb_set (db, "Console", "$console", 0);
+	sdb_set (db, "Console", "cat $console", 0);
 	sdb_set (db, "Hexdump", "xc $r*16", 0);
 	sdb_set (db, "Xrefs", "ax", 0);
 	sdb_set (db, "Xrefs Here", "ax.", 0);
@@ -1929,6 +1938,8 @@ static void __create_panel_db(void *user, RPanel *panel, const RPanelLayout dir,
 		return;
 	}
 	__create_panel (core, panel, dir, title, cmd);
+	RPanel *p = __get_cur_panel (core->panels);
+	__cache_white_list (core, p);
 }
 
 static void __create_panel_input(void *user, RPanel *panel, const RPanelLayout dir, R_NULLABLE const char *title) {
@@ -3336,7 +3347,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 	}
 		break;
 	case 'h':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x--;
 		} else {
 			(void)__move_to_direction (core, LEFT);
@@ -3346,7 +3357,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'j':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y++;
 		} else {
 			(void)__move_to_direction (core, DOWN);
@@ -3356,7 +3367,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'k':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y--;
 		} else {
 			(void)__move_to_direction (core, UP);
@@ -3366,7 +3377,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'l':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x++;
 		} else {
 			(void)__move_to_direction (core, RIGHT);
@@ -3376,7 +3387,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'H':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x += 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -3384,7 +3395,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'L':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x += 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -3392,7 +3403,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'J':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y += 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -3400,7 +3411,7 @@ static bool __handle_window_mode(RCore *core, const int key) {
 		}
 		break;
 	case 'K':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y -= 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -3541,6 +3552,7 @@ static bool __handle_cursor_mode(RCore *core, const int key) {
 	RPanel *cur = __get_cur_panel (core->panels);
 	RPrint *print = core->print;
 	char *db_val;
+			core->print->cur++;
 	switch (key) {
 	case ':':
 	case ';':
@@ -3919,7 +3931,9 @@ static void __exec_modal(RCore *core, RPanel *panel, RModal *modal, Sdb *menu_db
 	ls_foreach (l, iter, kv) {
 		if (i++ == modal->idx) {
 			RPanelAlmightyCallback cb = sdb_ptr_get (menu_db, sdbkv_key (kv), 0);
-			cb (core, panel, dir, sdbkv_key (kv));
+			if (cb) {
+				cb (core, panel, dir, sdbkv_key (kv));
+			}
 			break;
 		}
 	}
@@ -3974,9 +3988,9 @@ static void __create_modal(RCore *core, RPanel *panel, Sdb *menu_db) {
 				} else {
 					word = __get_word_from_canvas_for_menu (core, core->panels, cx, cy);
 					if (word) {
-						void *cb = sdb_ptr_get (menu_db, word, 0);
+						RPanelAlmightyCallback cb = sdb_ptr_get (menu_db, word, 0);
 						if (cb) {
-							((RPanelAlmightyCallback)cb) (core, panel, PANEL_LAYOUT_NONE, word);
+							cb (core, panel, PANEL_LAYOUT_NONE, word);
 							__free_modal (&modal);
 							free (word);
 							break;
@@ -5490,8 +5504,7 @@ static bool __init_panels_menu(RCore *core) {
 		__add_menu (core, NULL, menus[i], __open_menu_cb);
 	}
 	const char *parent = "File";
-	i = 0;
-	while (menus_File[i]) {
+	for (i = 0; menus_File[i]; i++) {
 		if (!strcmp (menus_File[i], "Open")) {
 			__add_menu (core, parent, menus_File[i], __open_file_cb);
 		} else if (!strcmp (menus_File[i], "ReOpen")) {
@@ -5509,18 +5522,15 @@ static bool __init_panels_menu(RCore *core) {
 		} else {
 			__add_menu (core, parent, menus_File[i], __add_cmd_panel);
 		}
-		i++;
 	}
 
 	parent = "Settings";
-	i = 0;
-	while (menus_Settings[i]) {
-		__add_menu (core, parent, menus_Settings[i++], __open_menu_cb);
+	for (i = 0; menus_Settings[i]; i++) {
+		__add_menu (core, parent, menus_Settings[i], __open_menu_cb);
 	}
 
 	parent = "Edit";
-	i = 0;
-	while (menus_Edit[i]) {
+	for (i = 0; menus_Edit[i]; i++) {
 		if (!strcmp (menus_Edit[i], "Copy")) {
 			__add_menu (core, parent, menus_Edit[i], __copy_cb);
 		} else if (!strcmp (menus_Edit[i], "Paste")) {
@@ -5540,7 +5550,6 @@ static bool __init_panels_menu(RCore *core) {
 		} else {
 			__add_menu (core, parent, menus_Edit[i], __add_cmd_panel);
 		}
-		i++;
 	}
 
 	{
@@ -5558,8 +5567,7 @@ static bool __init_panels_menu(RCore *core) {
 	}
 
 	parent = "Tools";
-	i = 0;
-	while (menus_Tools[i]) {
+	for (i = 0; menus_Tools[i]; i++) {
 		if (!strcmp (menus_Tools[i], "Calculator")) {
 			__add_menu (core, parent, menus_Tools[i], __calculator_cb);
 		} else if (!strcmp (menus_Tools[i], "R2 Shell")) {
@@ -5567,12 +5575,10 @@ static bool __init_panels_menu(RCore *core) {
 		} else if (!strcmp (menus_Tools[i], "System Shell")) {
 			__add_menu (core, parent, menus_Tools[i], __system_shell_cb);
 		}
-		i++;
 	}
 
 	parent = "Search";
-	i = 0;
-	while (menus_Search[i]) {
+	for (i = 0; menus_Search[i]; i++) {
 		if (!strcmp (menus_Search[i], "String (Whole Bin)")) {
 			__add_menu (core, parent, menus_Search[i], __string_whole_bin_cb);
 		} else if (!strcmp (menus_Search[i], "String (Data Sections)")) {
@@ -5584,12 +5590,10 @@ static bool __init_panels_menu(RCore *core) {
 		} else if (!strcmp (menus_Search[i], "Hexpairs")) {
 			__add_menu (core, parent, menus_Search[i], __hexpairs_cb);
 		}
-		i++;
 	}
 
 	parent = "Emulate";
-	i = 0;
-	while (menus_Emulate[i]) {
+	for (i = 0; menus_Emulate[i]; i++) {
 		if (!strcmp (menus_Emulate[i], "Step From")) {
 			__add_menu (core, parent, menus_Emulate[i], __esil_init_cb);
 		} else if (!strcmp (menus_Emulate[i], "Step To")) {
@@ -5597,9 +5601,7 @@ static bool __init_panels_menu(RCore *core) {
 		} else if (!strcmp (menus_Emulate[i], "Step Range")) {
 			__add_menu (core, parent, menus_Emulate[i], __esil_step_range_cb);
 		}
-		i++;
 	}
-
 	{
 		parent = "Debug";
 		RList *list = __sorted_list (core, menus_Debug, COUNT (menus_Debug));
@@ -5625,8 +5627,7 @@ static bool __init_panels_menu(RCore *core) {
 	}
 
 	parent = "Analyze";
-	i = 0;
-	while (menus_Analyze[i]) {
+	for (i = 0; menus_Analyze[i]; i++) {
 		if (!strcmp (menus_Analyze[i], "Function")) {
 			__add_menu (core, parent, menus_Analyze[i], __function_cb);
 		} else if (!strcmp (menus_Analyze[i], "Symbols")) {
@@ -5640,7 +5641,6 @@ static bool __init_panels_menu(RCore *core) {
 		} else if (!strcmp (menus_Analyze[i], "References")) {
 			__add_menu (core, parent, menus_Analyze[i], __references_cb);
 		}
-		i++;
 	}
 	parent = "Help";
 	for (i = 0; menus_Help[i]; i++) {
@@ -5997,7 +5997,7 @@ static void __handle_menu(RCore *core, const int key) {
 		}
 		break;
 	case 'j':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y++;
 		} else {
 			if (menu->depth == 1) {
@@ -6009,7 +6009,7 @@ static void __handle_menu(RCore *core, const int key) {
 		}
 		break;
 	case 'k':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y--;
 		} else {
 			if (menu->depth < 2) {
@@ -6023,21 +6023,17 @@ static void __handle_menu(RCore *core, const int key) {
 		}
 		break;
 	case 'l':
-		{
-			if (menu->depth == 1) {
-				menu->root->selectedIndex++;
-				menu->root->selectedIndex %= menu->root->n_sub;
-				break;
-			}
-			if (parent->sub[parent->selectedIndex]->sub) {
-				(void)(parent->sub[parent->selectedIndex]->cb (core));
-			} else {
-				menu->n_refresh = 0;
-				menu->root->selectedIndex++;
-				menu->root->selectedIndex %= menu->root->n_sub;
-				menu->depth = 1;
-				(void)(menu->root->sub[menu->root->selectedIndex]->cb (core));
-			}
+		if (menu->depth == 1) {
+			menu->root->selectedIndex++;
+			menu->root->selectedIndex %= menu->root->n_sub;
+		} else if (parent->sub[parent->selectedIndex]->sub) {
+			(void)(parent->sub[parent->selectedIndex]->cb (core));
+		} else {
+			menu->n_refresh = 0;
+			menu->root->selectedIndex++;
+			menu->root->selectedIndex %= menu->root->n_sub;
+			menu->depth = 1;
+			(void)(menu->root->sub[menu->root->selectedIndex]->cb (core));
 		}
 		break;
 	case 'm':
@@ -6383,7 +6379,11 @@ static void prevOpcode(RCore *core) {
 	ut64 addr, oaddr = core->offset + core->print->cur;
 	if (r_core_prevop_addr (core, oaddr, 1, &addr)) {
 		const int delta = oaddr - addr;
-		p->cur -= delta;
+		if (delta < 1) {
+			p->cur -= 4;
+		} else {
+			p->cur -= delta;
+		}
 	} else {
 		p->cur -= 4;
 	}
@@ -6630,73 +6630,85 @@ virtualmouse:
 		__replace_cmd (core, PANEL_TITLE_DISASSEMBLY, PANEL_CMD_DISASSEMBLY);
 		break;
 	case 'j':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y++;
+			core->print->cur++;
+		} else if (core->print->cur_enabled) {
+			RPanel *cp = __get_cur_panel (core->panels);
+			if (cp) {
+				__direction_panels_cursor_cb (core, DOWN);
+			}
+			nextOpcode (core);
 		} else {
-			if (core->print->cur_enabled) {
-				nextOpcode (core);
-			} else {
+			if (cur->model->directionCb) {
 				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					cur->model->directionCb (core, (int)DOWN);
-				}
+				cur->model->directionCb (core, (int)DOWN);
 			}
 		}
 		break;
 	case 'k':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y--;
-		} else {
-			if (core->print->cur_enabled) {
-				prevOpcode (core);
-			} else {
-				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					cur->model->directionCb (core, (int)UP);
+		} else if (core->print->cur_enabled) {
+			RPanel *cp = __get_cur_panel (core->panels);
+			if (cp) {
+				if (strstr (cp->model->cmd, "pd")) {
+					int op = cp->view->curpos;
+					prevOpcode (core);
+					if (op == cp->view->curpos) {
+						cp->view->curpos--;
+						prevOpcode (core);
+					}
+				} else {
+					__direction_panels_cursor_cb (core, UP);
 				}
 			}
+		} else if (cur->model->directionCb) {
+			prevOpcode (core);
+			r_cons_switchbuf (false);
+			cur->model->directionCb (core, (int)UP);
 		}
 		break;
 	case 'K':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y -= 5;
 		} else {
-			if (core->print->cur_enabled) {
-				size_t i;
-				for (i = 0; i < 4; i++) {
-					prevOpcode (core);
+			r_cons_switchbuf (false);
+			if (cur->model->directionCb) {
+				for (i = 0; i < __get_cur_panel (panels)->view->pos.h / 2 - 6; i++) {
+					cur->model->directionCb (core, (int)UP);
 				}
 			} else {
-				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					for (i = 0; i < __get_cur_panel (panels)->view->pos.h / 2 - 6; i++) {
-						cur->model->directionCb (core, (int)UP);
+				if (core->print->cur_enabled) {
+					size_t i;
+					for (i = 0; i < 4; i++) {
+						prevOpcode (core);
 					}
 				}
 			}
 		}
 		break;
 	case 'J':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.y += 5;
 		} else {
-			if (core->print->cur_enabled) {
-				size_t i;
-				for (i = 0; i < 4; i++) {
-					nextOpcode (core);
+			r_cons_switchbuf (false);
+			if (cur->model->directionCb) {
+				for (i = 0; i < __get_cur_panel (panels)->view->pos.h / 2 - 6; i++) {
+					cur->model->directionCb (core, (int)DOWN);
 				}
 			} else {
-				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					for (i = 0; i < __get_cur_panel (panels)->view->pos.h / 2 - 6; i++) {
-						cur->model->directionCb (core, (int)DOWN);
+				if (core->print->cur_enabled) {
+					size_t i;
+					for (i = 0; i < 4; i++) {
+						nextOpcode (core);
 					}
 				}
 			}
 		}
 		break;
 	case 'H':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x -= 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -6708,7 +6720,7 @@ virtualmouse:
 		}
 		break;
 	case 'L':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x += 5;
 		} else {
 			r_cons_switchbuf (false);
@@ -6738,7 +6750,11 @@ virtualmouse:
 			goto exit;
 		}
 		// all panels containing decompiler data should be cached
-		cur->model->cache = strstr (cur->model->title, "Decomp") != NULL;
+		RPanel *p = __get_cur_panel (core->panels);
+		__cache_white_list (core, p);
+		if (strstr (cur->model->title, "Decomp")) {
+			cur->model->cache = true;
+		}
 		break;
 	case 'O':
 		__handle_print_rotate (core);
@@ -6807,31 +6823,31 @@ virtualmouse:
 		}
 		break;
 	case 'h':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x--;
-		} else {
-			if (core->print->cur_enabled) {
+			core->print->cur--;
+		} else if (core->print->cur_enabled) {
+			core->print->cur--;
+			RPanel *cp = __get_cur_panel (core->panels);
+			if (cp) {
+				core->cons->cpos.x--;
 				core->print->cur--;
-			} else {
-				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					cur->model->directionCb (core, (int)LEFT);
-				}
+				cp->view->curpos--;
 			}
+		} else if (cur->model->directionCb) {
+			r_cons_switchbuf (false);
+			cur->model->directionCb (core, (int)LEFT);
 		}
 		break;
 	case 'l':
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			core->cons->cpos.x++;
-		} else {
-			if (core->print->cur_enabled) {
-				core->print->cur++;
-			} else {
-				r_cons_switchbuf (false);
-				if (cur->model->directionCb) {
-					cur->model->directionCb (core, (int)RIGHT);
-				}
-			}
+		} else if (cur->model->directionCb) {
+			cur->model->directionCb (core, (int)RIGHT);
+			r_cons_switchbuf (false);
+			core->print->cur++;
+		} else if (core->print->cur_enabled) {
+			core->print->cur++;
 		}
 		break;
 	case 'V':
@@ -6938,7 +6954,7 @@ virtualmouse:
 		__move_panel_to_dir (core, cur, panels->curnode);
 		break;
 	case 0x0d: // "\\n"
-		if (r_config_get_i (core->config, "scr.cursor")) {
+		if (r_config_get_b (core->config, "scr.cursor")) {
 			key = 0;
 			r_cons_set_click (core->cons->cpos.x, core->cons->cpos.y);
 			goto virtualmouse;
