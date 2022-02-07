@@ -3733,6 +3733,10 @@ R_API RBinJavaAttrInfo *r_bin_java_inner_classes_attr_new(RBinJavaObj *bin, ut8 
 	ut64 offset = 0, curpos;
 	attr = r_bin_java_default_attr_new (bin, buffer, sz, buf_offset);
 	offset += 6;
+	if (buf_offset + offset + 8 > sz) {
+		eprintf ("Invalid amount of inner classes\n");
+		return NULL;
+	}
 	if (attr == NULL) {
 		// TODO eprintf
 		return attr;
@@ -3743,7 +3747,7 @@ R_API RBinJavaAttrInfo *r_bin_java_inner_classes_attr_new(RBinJavaObj *bin, ut8 
 	attr->info.inner_classes_attr.classes = r_list_newf (r_bin_java_inner_classes_attr_entry_free);
 	for (i = 0; i < attr->info.inner_classes_attr.number_of_classes; i++) {
 		curpos = buf_offset + offset;
-		if (offset + 8 > sz) {
+		if (buf_offset + offset + 8 > sz) {
 			eprintf ("Invalid amount of inner classes\n");
 			break;
 		}
@@ -7148,9 +7152,11 @@ R_API RBinJavaAnnotationsArray *r_bin_java_annotation_array_new(ut8 *buffer, ut6
 
 R_API RBinJavaAttrInfo *r_bin_java_rtv_annotations_attr_new(RBinJavaObj *bin, ut8 *buffer, ut64 sz, ut64 buf_offset) {
 	ut32 i = 0;
-	RBinJavaAttrInfo *attr = NULL;
 	ut64 offset = 0;
-	attr = r_bin_java_default_attr_new (bin, buffer, sz, buf_offset);
+	if (buf_offset + 8 > sz) {
+		return NULL;
+	}
+	RBinJavaAttrInfo *attr = r_bin_java_default_attr_new (bin, buffer, sz, buf_offset);
 	offset += 6;
 	if (attr) {
 		attr->type = R_BIN_JAVA_ATTR_TYPE_RUNTIME_VISIBLE_ANNOTATION_ATTR;
