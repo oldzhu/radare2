@@ -103,8 +103,9 @@ static const char* help_msg_pr[] = {
 };
 
 static const char *help_msg_prg[] = {
-	"Usage: prg[io]", "", "print raw GUNZIPped block",
+	"Usage: prg[?ilo]", " [len]", "print raw inflated/decompressed block",
 	"prg", "", "print gunzipped data of current block",
+	"prgl", "", "decompress current block using LZ4 (adjust blocksize)",
 	"prgi", "", "show consumed bytes when inflating",
 	"prgo", "", "show output bytes after inflating",
 	NULL
@@ -6422,8 +6423,30 @@ static int cmd_print(void *data, const char *input) {
 			break;
 		case 'g': // "prg" // gunzip
 			switch (input[2]) {
+			default:
 			case '?':
 				r_core_cmd_help (core, help_msg_prg);
+				break;
+			case 'l': // "prgl" // lz4
+				{
+					ut8 *dst = calloc (len, 4);
+					if (dst) {
+						// TODO. hack into lz4 to make it work without knowing the input
+						int consumed = 0;
+						int olen = 0;
+						ut8 *obuf = r_inflate_lz4 (core->block, len, &consumed, &olen);
+						if (obuf) {
+							for (i = 0; i < olen; i += 32) {
+								int left = R_MIN (olen - i, 32);
+								r_cons_printf ("wx+");
+								r_print_bytes (core->print, obuf + i, left, "%02x");
+							}
+						} else {
+							eprintf ("Invalid input size %d\n", olen);
+						}
+						free (dst);
+					}
+				}
 				break;
 			case 'i': // "prgi"
 			{
@@ -6444,7 +6467,8 @@ static int cmd_print(void *data, const char *input) {
 				free (out);
 			}
 			break;
-			default:
+			case 0:
+			case ' ':
 			{
 				int outlen = 0;
 				ut8 *out;
@@ -6541,7 +6565,7 @@ static int cmd_print(void *data, const char *input) {
 		r_cons_break_push (NULL, NULL);
 		switch (input[1]) {
 		case 'j': // "pxj"
-			r_print_jsondump (core->print, core->block, core->blocksize, 8);
+			r_print_jsondump (core->print, block, len, 8);
 			break;
 		case '/': // "px/"
 			r_core_print_examine (core, input + 2);
