@@ -1793,8 +1793,11 @@ static void cmd_print_format(RCore *core, const char *_input, const ut8* block, 
 /* In this function, most of the buffers have 4 times
  * the required length. This is because we supports colours,
  * that are 4 chars long. */
-#define append(x, y) { strcat (x, y); x += strlen (y); }
+#define append(x, y) if (x && y) { strcat (x, y); x += strlen (y); }
 static void annotated_hexdump(RCore *core, const char *str, int len) {
+	if (!core || !str || len < 1) {
+		return;
+	}
 	const int usecolor = r_config_get_i (core->config, "scr.color");
 	int nb_cols = r_config_get_i (core->config, "hex.cols");
 	core->print->use_comments = r_config_get_i (core->config, "hex.comments");
@@ -5171,7 +5174,8 @@ static int cmd_print(void *data, const char *input) {
 	RCore *core = (RCore *) data;
 	st64 l;
 	int i, len, ret;
-	ut8* block;
+	ut8* block = NULL;
+	bool myblock = false;
 	ut32 tbs = core->blocksize;
 	ut64 n, off, from, to, at, ate, piece;
 	ut64 tmpseek = UT64_MAX;
@@ -5183,7 +5187,7 @@ static int cmd_print(void *data, const char *input) {
 	/* !strncmp (input, "du", 2) */
 	if (input[0] == 'd' && input[1] == 'u') { // "pdu"
 		/* hijack here for now, idk how to more cleanly integrate it */
-		return cmd_pdu (core, input+2);
+		return cmd_pdu (core, input + 2);
 	}
 
 	r_print_init_rowoffsets (core->print);
@@ -5192,6 +5196,12 @@ static int cmd_print(void *data, const char *input) {
 	if (input[0] && input[1]) {
 		int idx = (input[0] == 'h')? 2: 1;
 		const char *p = off? strchr (input + idx, ' '): NULL;
+		if (!p) {
+			p = strchr (input, '-');
+			if (p) {
+				p--;
+			}
+		}
 		if (p) {
 			l = (int) r_num_math (core->num, p + 1);
 			/* except disasm and memoryfmt (pd, pm) and overlay (po) */
@@ -5217,7 +5227,16 @@ static int cmd_print(void *data, const char *input) {
 	}
 
 	if (len > core->blocksize) {
-		len = core->blocksize;
+		block = calloc (1, len);
+		if (block) {
+			r_io_read_at (core->io, core->offset - len, block, len);
+			myblock = true;
+		} else {
+			len = core->blocksize;
+			block = core->block;
+		}
+	} else {
+		block = core->block;
 	}
 
 	if (input[0] != 'd' && input[0] != 'm' && input[0] != 'a' && input[0] != 'f' && input[0] != 'i') {
@@ -5263,7 +5282,6 @@ static int cmd_print(void *data, const char *input) {
 		r_core_seek (core, off, SEEK_SET);
 		r_core_block_read (core);
 	}
-	block = core->block;
 	switch (*input) {
 	case 'w': // "pw"
 		if (input[1] == 'n') {
@@ -7351,6 +7369,9 @@ static int cmd_print(void *data, const char *input) {
 		break;
 	}
 beach:
+	if (myblock) {
+		free (block);
+	}
 	if (tmpseek != UT64_MAX) {
 		r_core_seek (core, tmpseek, SEEK_SET);
 		r_core_block_read (core);
