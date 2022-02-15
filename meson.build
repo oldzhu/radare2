@@ -1,4 +1,4 @@
-project('radare2', 'c', license : 'LGPL3', meson_version : '>=0.49', version : '5.6.1')
+project('radare2', 'c', license : 'LGPL3', meson_version : '>=0.49', version : '5.6.2')
 
 py3_exe = import('python').find_installation('python3')
 git_exe = find_program('git', required: false)
@@ -567,6 +567,7 @@ if get_option('local') and get_option('default_library') == 'shared'
   rpath_lib = '$ORIGIN'
 endif
 
+subdir('shlr/lz4')
 subdir('libr/util')
 subdir('libr/socket')
 subdir('libr/hash')
