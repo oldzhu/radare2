@@ -17,7 +17,7 @@ jobs:
       uses: vmactions/freebsd-vm@v0.1.6
       with:
         usesh: true
-        prepare: pkg install -y curl gmake patch git
+        prepare: pkg install -y curl gmake patch git python gawk
         run: |
           cd work || true
           pwd
@@ -35,4 +35,6 @@ jobs:
           echo DATE: ; date
     - uses: actions/upload-artifact@v2
       with:
+        name: freebsd
         path: radare2-freebsd.tgz
+        retention-days: 30

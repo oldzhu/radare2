@@ -140,3 +140,5 @@ libr/include/sdb
 **/d/*.out
 **/d/*.inc
 radare2_dist
+# Artifacts
+/dist/artifacts
