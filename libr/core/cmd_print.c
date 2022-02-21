@@ -3251,7 +3251,9 @@ static void cmd_print_pv(RCore *core, const char *input, bool useBytes) {
 		for (i = 0; i < repeat; i++) {
 			const bool be = core->print->big_endian;
 			ut64 at = core->offset + (i * n);
-			ut8 *b = block + (i * n);
+			ut8 buf[8];
+			r_io_read_at (core->io, at, buf, sizeof (buf));
+			ut8 *b = buf;
 			switch (n) {
 			case 1:
 				r_cons_printf ("f pval.0x%08"PFMT64x"=%d\n", at, r_read_ble8 (b));
@@ -3277,10 +3279,10 @@ static void cmd_print_pv(RCore *core, const char *input, bool useBytes) {
 		}
 		pj_a (pj);
 		ut64 at = core->offset;
-		ut64 oldAt = at;
 		for (i = 0; i < repeat; i++) {
-			r_core_seek (core, at, false);
-			char *str = r_core_cmd_str (core, "ps");
+			ut8 buf[8];
+			r_io_read_at (core->io, at, buf, sizeof (buf));
+			char *str = r_core_cmd_strf (core, "ps@0x%"PFMT64x, at);
 			r_str_trim (str);
 			char *p = str;
 			if (p) {
@@ -3298,20 +3300,21 @@ static void cmd_print_pv(RCore *core, const char *input, bool useBytes) {
 			pj_k (pj, "value");
 			switch (n) {
 			case 1:
-				pj_i (pj, r_read_ble8 (block));
+				pj_i (pj, r_read_ble8 (buf));
 				break;
 			case 2:
-				pj_i (pj, r_read_ble16 (block, core->print->big_endian));
+				pj_i (pj, r_read_ble16 (buf, core->print->big_endian));
 				break;
 			case 4:
-				pj_n (pj, (ut64)r_read_ble32 (block, core->print->big_endian));
+				pj_n (pj, (ut64)r_read_ble32 (buf, core->print->big_endian));
 				break;
 			case 8:
 			default:
-				pj_n (pj, r_read_ble64 (block, core->print->big_endian));
+				pj_n (pj, r_read_ble64 (buf, core->print->big_endian));
 				break;
 			}
 			pj_ks (pj, "string", str);
+			pj_kn (pj, "address", at);
 			pj_end (pj);
 			free (str);
 			at += n;
@@ -3319,7 +3322,6 @@ static void cmd_print_pv(RCore *core, const char *input, bool useBytes) {
 		pj_end (pj);
 		r_cons_println (pj_string (pj));
 		pj_free (pj);
-		r_core_seek (core, oldAt, false);
 		break;
 	}
 	case 'e': // "pve"
@@ -4699,6 +4701,23 @@ static void print_json_string(RCore *core, const char* block, int len, const cha
 		default: type = "unknown"; break;
 		}
 	}
+	bool is_wide = !strcmp (type, "wide");
+	size_t slen = r_str_nlen (block, len);
+	char *tblock = (char *)block;
+	if (is_wide) {
+		int i;
+		// dewide
+		tblock = r_mem_dup (block, len);
+		for (i = 0; i < len; i++) {
+			if (tblock[i] && !tblock[i + 1]) {
+				memmove (tblock + i + 1, tblock + i + 2, len - i - 1);
+			} else {
+				tblock[i] = 0;
+				break;
+			}
+		}
+		slen = strlen (tblock);
+	}
 	PJ *pj = r_core_pj_new (core);
 	if (!pj) {
 		return;
@@ -4706,18 +4725,21 @@ static void print_json_string(RCore *core, const char* block, int len, const cha
 	pj_o (pj);
 	pj_k (pj, "string");
 	// TODO: add pj_kd for data to pass key(string) and value(data,len) instead of pj_ks which null terminates
-	char *str = r_str_utf16_encode (block, len); // XXX just block + len should be fine, pj takes care of this
+	char *str = r_str_utf16_encode (tblock, slen); // XXX just block + len should be fine, pj takes care of this
 	pj_raw (pj, "\"");
 	pj_raw (pj, str);
 	free (str);
 	pj_raw (pj, "\"");
 	pj_kn (pj, "offset", core->offset);
 	pj_ks (pj, "section", section_name);
-	pj_ki (pj, "length", len);
+	pj_ki (pj, "length", slen);
 	pj_ks (pj, "type", type);
 	pj_end (pj);
 	r_cons_println (pj_string (pj));
 	pj_free (pj);
+	if (tblock != block) {
+		free (tblock);
+	}
 }
 
 static char *__op_refs(RCore *core, RAnalOp *op, int n) {
