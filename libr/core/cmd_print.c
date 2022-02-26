@@ -4719,24 +4719,23 @@ static void print_json_string(RCore *core, const char* block, int len, const cha
 		slen = strlen (tblock);
 	}
 	PJ *pj = r_core_pj_new (core);
-	if (!pj) {
-		return;
+	if (pj) {
+		pj_o (pj);
+		pj_k (pj, "string");
+		// TODO: add pj_kd for data to pass key(string) and value(data,len) instead of pj_ks which null terminates
+		char *str = r_str_utf16_encode (tblock, slen); // XXX just block + len should be fine, pj takes care of this
+		pj_raw (pj, "\"");
+		pj_raw (pj, str);
+		free (str);
+		pj_raw (pj, "\"");
+		pj_kn (pj, "offset", core->offset);
+		pj_ks (pj, "section", section_name);
+		pj_ki (pj, "length", slen);
+		pj_ks (pj, "type", type);
+		pj_end (pj);
+		r_cons_println (pj_string (pj));
+		pj_free (pj);
 	}
-	pj_o (pj);
-	pj_k (pj, "string");
-	// TODO: add pj_kd for data to pass key(string) and value(data,len) instead of pj_ks which null terminates
-	char *str = r_str_utf16_encode (tblock, slen); // XXX just block + len should be fine, pj takes care of this
-	pj_raw (pj, "\"");
-	pj_raw (pj, str);
-	free (str);
-	pj_raw (pj, "\"");
-	pj_kn (pj, "offset", core->offset);
-	pj_ks (pj, "section", section_name);
-	pj_ki (pj, "length", slen);
-	pj_ks (pj, "type", type);
-	pj_end (pj);
-	r_cons_println (pj_string (pj));
-	pj_free (pj);
 	if (tblock != block) {
 		free (tblock);
 	}
@@ -4993,8 +4992,7 @@ static bool cmd_pi(RCore *core, const char *input, int len, int l, ut8 *block) {
 		break;
 	case 'a': // "pia" is like "pda", but with "pi" output
 		if (l != 0) {
-			r_core_print_disasm_all (core, core->offset,
-					l, len, 'i');
+			r_core_print_disasm_all (core, core->offset, l, len, 'i');
 		}
 		break;
 	case 'j': // pij is the same as pdj
