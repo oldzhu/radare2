@@ -692,7 +692,7 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len) {
 	RStrBuf *buf_asm;
 	RAsmCode *acode;
 	ut64 pc = a->pc;
-	RAsmOp op;
+	RAsmOp op = {0};
 	ut64 idx;
 	size_t ret;
 	const size_t addrbytes = a->user? ((RCore *)a->user)->io->addrbytes: 1;
@@ -719,6 +719,7 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len) {
 		r_strbuf_append (buf_asm, r_strbuf_get (&op.buf_asm));
 		r_strbuf_append (buf_asm, "\n");
 	}
+	r_asm_op_fini (&op);
 	acode->assembly = r_strbuf_drain (buf_asm);
 	acode->len = idx;
 	return acode;
@@ -1084,6 +1085,9 @@ R_API RAsmCode *r_asm_massemble(RAsm *a, const char *assembly) {
 						continue;
 					}
 					ret = r_asm_assemble (a, &op, ptr_start);
+					// XXX This fixes a leak, unsure
+					// why op_fini below doesn't catch it
+					r_strbuf_fini (&op.buf_asm);
 				}
 			}
 			if (stage == STAGES - 1) {
@@ -1113,10 +1117,12 @@ R_API RAsmCode *r_asm_massemble(RAsm *a, const char *assembly) {
 	}
 	free (lbuf);
 	free (tokens);
+	r_asm_op_fini (&op);
 	return acode;
 fail:
 	free (lbuf);
 	free (tokens);
+	r_asm_op_fini (&op);
 	return r_asm_code_free (acode);
 }
 
