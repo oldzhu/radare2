@@ -1295,6 +1295,7 @@ R_API char *r_file_tmpdir(void) {
 R_API bool r_file_copy(const char *src, const char *dst) {
 	r_return_val_if_fail (R_STR_ISNOTEMPTY (src) && R_STR_ISNOTEMPTY (dst), false);
 	if (!strcmp (src, dst)) {
+		eprintf ("Cannot copy file '%s' to itself.\n", src);
 		return false;
 	}
 	/* TODO: implement in C */
@@ -1327,7 +1328,7 @@ R_API bool r_file_copy(const char *src, const char *dst) {
 }
 
 static bool dir_recursive(RList *dst, const char *dir) {
-	char *name;
+	char *name, *path = NULL;
 	RListIter *iter;
 	bool ret = true;
 	RList *files = r_sys_dir (dir);
@@ -1335,7 +1336,6 @@ static bool dir_recursive(RList *dst, const char *dir) {
 		return false;
 	}
 	r_list_foreach (files, iter, name) {
-		char *path;
 		if (!strcmp (name, "..") || !strcmp (name, ".")) {
 			continue;
 		}
@@ -1344,9 +1344,8 @@ static bool dir_recursive(RList *dst, const char *dir) {
 			ret = false;
 			break;
 		}
-		if (!r_list_append (dst, path)) {
+		if (!r_list_append (dst, strdup (path))) {
 			ret = false;
-			free (path);
 			break;
 		}
 		if (r_file_is_directory (path)) {
@@ -1355,13 +1354,15 @@ static bool dir_recursive(RList *dst, const char *dir) {
 				break;
 			}
 		}
+		R_FREE (path);
 	}
+	free (path);
 	r_list_free (files);
 	return ret;
 }
 
 R_API RList *r_file_lsrf(const char *dir) {
-	RList *ret = r_list_new ();
+	RList *ret = r_list_newf (free);
 	if (!ret) {
 		return NULL;
 	}
