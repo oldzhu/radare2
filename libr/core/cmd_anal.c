@@ -1625,8 +1625,15 @@ static int var_cmd(RCore *core, const char *str) {
 		}
 	case 'a': // "afva"
 		if (fcn) {
-			r_anal_function_delete_all_vars (fcn);
-			r_core_recover_vars (core, fcn, false);
+			char *type = r_str_newf ("func.%s.ret", fcn->name);
+			if (sdb_exists (core->anal->sdb_types, type)) {
+				// if function type exists
+				// do not analize vars if function has a signature
+			} else {
+				r_anal_function_delete_all_vars (fcn);
+				r_core_recover_vars (core, fcn, false);
+			}
+			free (type);
 			free (p);
 			return true;
 		} else {
@@ -10928,6 +10935,14 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			r_core_anal_all (core);
 			r_print_rowlog_done (core->print, oldstr);
 			r_core_task_yield (&core->tasks);
+
+			// Run afvn in all fcns
+			if (r_config_get_b (core->config, "anal.vars")) {
+				oldstr = r_print_rowlog (core->print, "Analyze all functions arguments/locals");
+				r_core_cmd0 (core, "afva@@f");
+				r_print_rowlog_done (core->print, oldstr);
+			}
+
 			// Run pending analysis immediately after analysis
 			// Usefull when running commands with ";" or via r2 -c,-i
 			dh_orig = core->dbg->h

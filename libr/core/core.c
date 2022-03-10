@@ -3196,14 +3196,16 @@ R_API bool r_core_prompt_loop(RCore *r) {
 
 static int prompt_flag(RCore *r, char *s, size_t maxlen) {
 	const char DOTS[] = "...";
-	const RFlagItem *f = r_flag_get_at (r->flags, r->offset, false);
+	const RFlagItem *f = r_flag_get_at (r->flags, r->offset, true);
 	if (!f) {
 		return false;
 	}
 	if (f->offset < r->offset) {
-		snprintf (s, maxlen, "%s + %" PFMT64u, f->name, r->offset - f->offset);
+		snprintf (s, maxlen, "0x%08" PFMT64x " | %s+0x%" PFMT64x,
+				r->offset, f->name, r->offset - f->offset);
 	} else {
-		snprintf (s, maxlen, "%s", f->name);
+		snprintf (s, maxlen, "0x%08" PFMT64x " | %s",
+				r->offset, f->name);
 	}
 	if (strlen (s) > maxlen - sizeof (DOTS)) {
 		s[maxlen - sizeof (DOTS) - 1] = '\0';
@@ -3938,10 +3940,10 @@ R_API RBuffer *r_core_syscall(RCore *core, const char *name, const char *args) {
 	}
 
 	snprintf (code, sizeof (code),
-		"sc@syscall(%d);\n"
-		"main@global(0) { sc(%s);\n"
-		":int3\n" /// XXX USE trap
-		"}\n", num, args);
+			"sc@syscall(%d);\n"
+			"main@global(0,1024) { sc(%s);\n"
+			":int3\n"
+			"}\n", num, args);
 	r_egg_reset (core->egg);
 	// TODO: setup arch/bits/os?
 	r_egg_load (core->egg, code, 0);
