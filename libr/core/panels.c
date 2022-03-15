@@ -1,4 +1,4 @@
-/* Copyright radare2 2014-2021 - Author: pancake, vane11ope */
+/* Copyright radare2 2014-2022 - Author: pancake, vane11ope */
 
 #include <r_core.h>
 
@@ -4111,13 +4111,13 @@ static bool __handle_mouse_on_panel(RCore *core, RPanel *panel, int x, int y, in
 	(void)r_cons_get_size (&h);
 	const int idx = __get_panel_idx_in_pos (core, x, y);
 	char *word = __get_word_from_canvas (core, panels, x, y);
-	if (idx == -1) {
+	if (idx == -1 || R_STR_ISEMPTY (word)) {
 		return false;
 	}
 	__set_curnode (core, idx);
 	__set_refresh_all (core, true, true);
-	RPanel *ppos = __get_panel(panels, idx);
-	if (word) {
+	RPanel *ppos = __get_panel (panels, idx);
+	if (R_STR_ISNOTEMPTY (word)) {
 		const ut64 addr = r_num_math (core->num, word);
 		if (__check_panel_type (panel, PANEL_CMD_FUNCTION) &&
 				__check_if_addr (word, strlen (word))) {
@@ -4126,16 +4126,14 @@ static bool __handle_mouse_on_panel(RCore *core, RPanel *panel, int x, int y, in
 		}
 		r_flag_set (core->flags, "panel.addr", addr, 1);
 		r_config_set (core->config, "scr.highlight", word);
-		{
-			ut64 addr = r_num_math (core->num, word);
-			if (addr > 0) {
-				// TODO implement proper panel offset sync
-				// __set_panel_addr (core, cur, addr);
-				__seek_all (core, addr);
-			}
+		if (addr > 0) {
+			// TODO implement proper panel offset sync
+			// __set_panel_addr (core, cur, addr);
+			r_io_sundo_push (core->io, core->offset, 0);
+			__seek_all (core, addr);
 		}
-		free (word);
 	}
+	free (word);
 	if (x >= ppos->view->pos.x && x < ppos->view->pos.x + 4) {
 		*key = 'c';
 		return false;
@@ -4437,17 +4435,21 @@ static void __print_decompiler_cb(void *user, void *p) {
 	//TODO: Refactoring
 	//TODO: Also, __check_func_diff should use addr not name
 	RCore *core = (RCore *)user;
+	RAnalFunction *func = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+	if (!func) {
+		return;
+	}
 	RPanel *panel = (RPanel *)p;
-	bool update = core->panels->autoUpdate && __check_func_diff (core, panel);
 	char *cmdstr = NULL;
+	bool update = core->panels->autoUpdate && __check_func_diff (core, panel);
 	if (!update) {
 		cmdstr = __find_cmd_str_cache (core, panel);
-		if (cmdstr) {
+		if (R_STR_ISNOTEMPTY (cmdstr)) {
 			__update_pdc_contents (core, panel, cmdstr);
 		}
 		return;
 	}
-	RAnalFunction *func = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+	// RAnalFunction *func = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
 	if (func && core->panels_root->cur_pdc_cache) {
 		cmdstr = r_str_new ((char *)sdb_ptr_get (core->panels_root->cur_pdc_cache,
 					r_num_as_string (NULL, func->addr, false), 0));
@@ -4844,16 +4846,21 @@ static int __settings_decompiler_cb(void *user) {
 		}
 	}
 	r_config_set (core->config, "cmd.pdc", pdc_next);
+#if 1
+	// seems unnecessary to me
 	int j = 0;
 	for (j = 0; j < core->panels->n_panels; j++) {
 		RPanel *panel = __get_panel (core->panels, j);
-		if (!strncmp (panel->model->cmd, "pdc", 3)) {
+		if (r_str_startswith (panel->model->cmd, "pdc")) {
 			char *cmdstr = r_core_cmd_strf (core, "pdc@0x%08"PFMT64x, panel->model->addr);
-			__update_panel_contents (core, panel, cmdstr);
-			__reset_scroll_pos (panel);
+			if (R_STR_ISNOTEMPTY (cmdstr)) {
+				__update_panel_contents (core, panel, cmdstr);
+				__reset_scroll_pos (panel);
+			}
 			free (cmdstr);
 		}
 	}
+#endif
 	__set_refresh_all (core, true, false);
 	__set_mode (core, PANEL_MODE_DEFAULT);
 	return 0;
