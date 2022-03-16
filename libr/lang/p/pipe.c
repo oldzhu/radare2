@@ -156,7 +156,7 @@ static bool lang_pipe_run(RLang *lang, const char *code, int len) {
 	child = r_sys_fork ();
 	if (child == -1) {
 		/* error */
-		perror ("pipe run");
+		r_sys_perror ("pipe run");
 	} else if (!child) {
 		/* children */
 		r_sandbox_system (code, 1);
@@ -289,7 +289,7 @@ beach:
 	free (r2pipe_var);
 	free (r2pipe_paz);
 	free (r2pipe_paz_);
-	return hproc != NULL;
+	return hproc;
 #endif
 #endif
 }

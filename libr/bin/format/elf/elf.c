@@ -1,8 +1,5 @@
-/* radare - LGPL - Copyright 2008-2021 - nibble, pancake, alvaro_fe */
+/* radare - LGPL - Copyright 2008-2022 - nibble, pancake, alvaro_fe */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <r_types.h>
 #include <r_util.h>
 #include "elf.h"
@@ -303,7 +300,7 @@ static bool read_phdr(ELFOBJ *bin, bool linux_kernel_hack) {
 static int init_phdr(ELFOBJ *bin) {
 	ut32 phdr_size;
 
-	r_return_val_if_fail (!bin->phdr, false);
+	r_return_val_if_fail (bin && !bin->phdr, false);
 
 	if (!bin->ehdr.e_phnum) {
 		return false;
@@ -328,7 +325,7 @@ static int init_phdr(ELFOBJ *bin) {
 	}
 	ut64 phnum = Elf_(r_bin_elf_get_phnum) (bin);
 	if (!(bin->phdr = R_NEWS0 (Elf_(Phdr), phnum))) {
-		perror ("malloc (phdr)");
+		r_sys_perror ("malloc (phdr)");
 		return false;
 	}
 
@@ -387,7 +384,7 @@ static int init_shdr(ELFOBJ *bin) {
 		return false;
 	}
 	if (!(bin->shdr = R_NEWS0 (Elf_(Shdr), bin->ehdr.e_shnum))) {
-		perror ("malloc (shdr)");
+		r_sys_perror ("malloc (shdr)");
 		return false;
 	}
 	sdb_num_set (bin->kv, "elf_shdr.offset", bin->ehdr.e_shoff, 0);
@@ -472,7 +469,7 @@ static int init_strtab(ELFOBJ *bin) {
 	}
 
 	if (!(bin->shstrtab = calloc (1, bin->shstrtab_size + 1))) {
-		perror ("malloc");
+		r_sys_perror ("malloc");
 		bin->shstrtab = NULL;
 		return false;
 	}
@@ -2500,24 +2497,25 @@ int Elf_(r_bin_elf_get_bits)(ELFOBJ *bin) {
 }
 
 static inline int noodle(ELFOBJ *bin, const char *s) {
-	if (r_buf_size (bin->b) <= 64)  {
-		return 0;
+	if (r_buf_size (bin->b) >= 64)  {
+		ut8 tmp[64] = {0};
+		if (r_buf_read_at (bin->b, r_buf_size (bin->b) - 64, tmp, 64) == 64) {
+			return (bool)r_mem_mem (tmp, 64, (const ut8 *)s, strlen (s));
+		}
 	}
-	ut8 tmp[64];
-	r_buf_read_at (bin->b, r_buf_size (bin->b) - 64, tmp, 64);
-	return r_mem_mem (tmp, 64, (const ut8 *)s, strlen (s)) != NULL;
+	return false;
 }
 
-static inline int needle(ELFOBJ *bin, const char *s) {
+static inline bool needle(ELFOBJ *bin, const char *s) {
 	if (bin->shstrtab) {
 		ut32 len = bin->shstrtab_size;
 		if (len > 4096) {
 			len = 4096; // avoid slow loading .. can be buggy?
 		}
-		return r_mem_mem ((const ut8*)bin->shstrtab, len,
-				(const ut8*)s, strlen (s)) != NULL;
+		return (bool)r_mem_mem ((const ut8*)bin->shstrtab, len,
+				(const ut8*)s, strlen (s));
 	}
-	return 0;
+	return false;
 }
 
 // TODO: must return const char * all those strings must be const char os[LINUX] or so
@@ -2927,7 +2925,7 @@ RBinElfLib* Elf_(r_bin_elf_get_libs)(ELFOBJ *bin) {
 
 		RBinElfLib *r = realloc (ret, (k + 1) * sizeof (RBinElfLib));
 		if (!r) {
-			perror ("realloc (libs)");
+			r_sys_perror ("realloc (libs)");
 			free (ret);
 			return NULL;
 		}
@@ -2946,7 +2944,7 @@ RBinElfLib* Elf_(r_bin_elf_get_libs)(ELFOBJ *bin) {
 
 	RBinElfLib *r = realloc (ret, (k + 1) * sizeof (RBinElfLib));
 	if (!r) {
-		perror ("realloc (libs)");
+		r_sys_perror ("realloc (libs)");
 		free (ret);
 		return NULL;
 	}

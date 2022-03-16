@@ -3371,7 +3371,9 @@ static void ds_print_show_bytes(RDisasmState *ds) {
 		return;
 	}
 	RCore* core = ds->core;
-	char *nstr, *str = NULL, pad[64];
+	char pad[128];
+	size_t maxpad = sizeof (pad);
+	char *nstr, *str = NULL;
 	char *flagstr = NULL;
 	int oldFlags = core->print->flags;
 	char extra[128];
@@ -3384,15 +3386,19 @@ static void ds_print_show_bytes(RDisasmState *ds) {
 	if (ds->show_flag_in_bytes) {
 		flagstr = r_flag_get_liststr (core->flags, ds->at);
 	}
+	int nb = R_MIN (100, ds->nb);
 	if (flagstr) {
+		if (nb > 3 && strlen (flagstr) >= nb) {
+			flagstr[nb - 3] = '.';
+			flagstr[nb - 2] = 0;
+		}
 		str = r_str_newf ("%s:", flagstr);
-		if (ds->nb > 0) {
-			k = ds->nb - strlen (str) - 1;
+		if (nb > 0) {
+			k = nb - r_str_ansi_len (str) - 1;
 			if (k < 0) {
-				str[ds->nb - 1] = '\0';
-			}
-			if (k > sizeof (pad)) {
 				k = 0;
+			} else if (k >= maxpad) {
+				k = maxpad - 1;
 			}
 			for (j = 0; j < k; j++) {
 				pad[j] = ' ';
@@ -3404,9 +3410,9 @@ static void ds_print_show_bytes(RDisasmState *ds) {
 		R_FREE (flagstr);
 	} else {
 		if (ds->show_flag_in_bytes) {
-			k = ds->nb - 1;
-			if (k < 0 || k > sizeof (pad)) {
-				k = 0;
+			k = nb - 1;
+			if (k < 0 || k > maxpad) {
+				k = maxpad;
 			}
 			for (j = 0; j < k; j++) {
 				pad[j] = ' ';
@@ -3415,8 +3421,8 @@ static void ds_print_show_bytes(RDisasmState *ds) {
 			str = strdup ("");
 		} else {
 			str = r_asm_op_get_hex (&ds->asmop);
-			if (r_str_ansi_len (str) > ds->nb) {
-				char *p = (char *)r_str_ansi_chrn (str, ds->nb);
+			if (r_str_ansi_len (str) > nb) {
+				char *p = (char *)r_str_ansi_chrn (str, nb);
 				if (p)  {
 					p[0] = '.';
 					p[1] = '\0';
@@ -3431,14 +3437,14 @@ static void ds_print_show_bytes(RDisasmState *ds) {
 			nstr = r_print_hexpair (ds->print, str, ds->index);
 			ds->print->nbcolor = 0;
 			if (ds->print->bytespace) {
-				k = (ds->nb + (ds->nb / 2)) - r_str_ansi_len (nstr) + 2;
+				k = (nb + (nb / 2)) - r_str_ansi_len (nstr) + 2;
 			} else {
-				k = ds->nb - r_str_ansi_len (nstr) + 1;
+				k = nb - r_str_ansi_len (nstr) + 1;
 			}
   			if (k > 0) {
 				// setting to sizeof screw up the disasm
-				if (k > sizeof (pad)) {
-					k = 18;
+				if (k >= maxpad) {
+					k = maxpad - 1;
 				}
 				for (j = 0; j < k; j++) {
 					pad[j] = ' ';

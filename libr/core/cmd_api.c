@@ -934,7 +934,7 @@ R_API bool r_cmd_macro_add(RCmdMacro *mac, const char *oname) {
 	}
 	macro->args = strdup (args);
 	ptr = strchr (macro->name, ' ');
-	if (ptr != NULL) {
+	if (ptr) {
 		*ptr = '\0';
 		macro->nargs = r_str_word_set0 (ptr+1);
 	}
@@ -1167,7 +1167,7 @@ R_API int r_cmd_macro_call(RCmdMacro *mac, const char *name) {
 
 	str = strdup (name);
 	if (!str) {
-		perror ("strdup");
+		r_sys_perror ("strdup");
 		return false;
 	}
 	ptr = strchr (str, ')');

@@ -2048,6 +2048,8 @@ R_API int r_anal_function_count_edges(const RAnalFunction *fcn, R_NULLABLE int *
 	return edges;
 }
 
+#include "abi.inc"
+
 R_API bool r_anal_function_purity(RAnalFunction *fcn) {
 	if (fcn->has_changed) {
 		HtUP *ht = ht_up_new (NULL, NULL, NULL);

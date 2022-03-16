@@ -2,6 +2,7 @@
 
 #include <r_core.h>
 #include <r_util/r_graph_drawable.h>
+#include "../anal/abi.inc"
 
 #define SLOW_ANALYSIS 1
 #define MAX_SCAN_SIZE 0x7ffffff
@@ -517,6 +518,7 @@ static const char *help_msg_afi[] = {
 	"afij", "", "function info in json format",
 	"afil", "", "verbose function info",
 	"afip", "", "show whether the function is pure or not",
+	"afiq", "", "show quite few info about the function",
 	"afis", "", "show function stats (opcode, meta)",
 	NULL
 };
@@ -3564,7 +3566,7 @@ static void __core_cmd_anal_fcn_allstats(RCore *core, const char *input) {
 	RList *dbs = r_list_newf ((RListFree)sdb_free);
 	Sdb *d = sdb_new0 ();
 	ut64 oseek = core->offset;
-	bool isJson = strchr (input, 'j') != NULL;
+	bool isJson = strchr (input, 'j');
 
 	char *inp = r_str_newf ("*%s", input);
 	r_list_foreach (core->anal->fcns, iter, fcn) {
@@ -4250,6 +4252,46 @@ int cmd_anal_fcn(RCore *core, const char *input) {
 				}
 			}
 			break;
+		case '=':
+		case 'q':
+			{
+				RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
+				if (fcn) {
+					// TODO: add info about xrefs and call counts
+					int nargs = r_type_func_args_count (core->anal->sdb_types, 0);
+					int nvars = r_anal_var_count_locals (fcn);
+					int nins = r_anal_function_instrcount (fcn);
+					int ebbs = 0;
+					int edges = r_anal_function_count_edges (fcn, &ebbs);
+					r_anal_function_count_edges (fcn, NULL);
+					r_cons_printf ("0x%08" PFMT64x " : %s\n", fcn->addr, fcn->name);
+					char *sig = r_core_cmd_strf (core, "afcf @ 0x%"PFMT64x, fcn->addr);
+					if (sig) {
+						r_str_trim (sig);
+						r_cons_printf ("  sign:  %s\n", sig);
+						free (sig);
+					}
+					r_cons_printf ("  stack: 0x%08x (vars:%d args:%d)\n",
+						fcn->maxstack, nvars , nargs);
+					r_cons_printf ("  size:  %d (0x%08" PFMT64x " .. 0x%08" PFMT64x ")\n",
+						(int)r_anal_function_realsize (fcn),
+						r_anal_function_min_addr (fcn),
+						r_anal_function_max_addr (fcn));
+					r_cons_printf ("  nbbs:  %d edges:%d ebbs:%d ninstr:%d\n",
+						r_list_length (fcn->bbs), edges, ebbs, nins);
+					r_cons_printf ("  cost:  %d complexity:%d\n",
+						r_anal_function_cost (fcn), r_anal_function_complexity (fcn));
+					r_cons_printf ("  attr:  ");
+					if (r_anal_function_islineal (fcn)) {
+						r_cons_printf ("lineal");
+					}
+					if (fcn->is_noreturn) {
+						r_cons_printf ("noreturn");
+					}
+					r_cons_newline ();
+				}
+			}
+			break;
 		default:
 			i = 1;
 			r_core_anal_fcn_list (core, input + 2, &i);
@@ -4407,14 +4449,14 @@ int cmd_anal_fcn(RCore *core, const char *input) {
 	case 'C': // "afC"
 		if (input[2] == 'c') {
 			RAnalFunction *fcn;
-			if ((fcn = r_anal_get_fcn_in (core->anal, core->offset, 0)) != NULL) {
+			if ((fcn = r_anal_get_fcn_in (core->anal, core->offset, 0))) {
 				r_cons_printf ("%i\n", r_anal_function_complexity (fcn));
 			} else {
 				eprintf ("Error: Cannot find function at 0x08%" PFMT64x "\n", core->offset);
 			}
 		} else if (input[2] == 'l') {
 			RAnalFunction *fcn;
-			if ((fcn = r_anal_get_fcn_in (core->anal, core->offset, 0)) != NULL) {
+			if ((fcn = r_anal_get_fcn_in (core->anal, core->offset, 0))) {
 				r_cons_printf ("%d\n", r_anal_function_loops (fcn));
 			} else {
 				eprintf ("Error: Cannot find function at 0x08%" PFMT64x "\n", core->offset);
@@ -10537,7 +10579,7 @@ static bool archIsThumbable(RCore *core) {
 }
 
 static void _CbInRangeAav(RCore *core, ut64 from, ut64 to, int vsize, void *user) {
-	bool asterisk = user != NULL;
+	bool asterisk = user;
 	int arch_align = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
 	bool vinfun = r_config_get_i (core->config, "anal.vinfun");
 	int searchAlign = r_config_get_i (core->config, "search.align");

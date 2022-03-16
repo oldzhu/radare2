@@ -947,7 +947,7 @@ R_API bool r_core_visual_hudclasses(RCore *core) {
 		free (res);
 	}
 	r_list_free (list);
-	return res != NULL;
+	return res;
 }
 
 static bool hudstuff_append(RFlagItem *fi, void *user) {
@@ -989,7 +989,7 @@ R_API bool r_core_visual_hudstuff(RCore *core) {
 		free (res);
 	}
 	r_list_free (list);
-	return res != NULL;
+	return res;
 }
 
 static bool r_core_visual_config_hud(RCore *core) {
@@ -3787,7 +3787,8 @@ static void define_data_ntimes(RCore *core, ut64 off, int times, int type, int t
 	if (times < 1) {
 		times = 1;
 	}
-	r_meta_del (core->anal, R_META_TYPE_ANY, off, typesize * times);
+	ut64 amount = ((ut64)typesize) * times;
+	r_meta_del (core->anal, R_META_TYPE_ANY, off, amount);
 	for (i = 0; i < times; i++, off += typesize) {
 		r_meta_set (core->anal, R_META_TYPE_DATA, off, type, "");
 	}

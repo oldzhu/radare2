@@ -636,10 +636,12 @@ R_API void r_buf_fini(RBuffer *b) {
 }
 
 R_API void r_buf_free(RBuffer *b) {
-	bool unreferenced = b && b->refctr == 0;
-	r_buf_fini (b);
-	if (unreferenced) {
-		free (b);
+	if (b) {
+		bool unreferenced = b && b->refctr == 0;
+		r_buf_fini (b);
+		if (unreferenced) {
+			free (b);
+		}
 	}
 }
 
