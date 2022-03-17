@@ -8,13 +8,13 @@
 #endif
 
 R_ABI int r_anal_function_instrcount(RAnalFunction *fcn) {
-	int count = 0;
+	int amount = 0;
 	RListIter *iter;
 	RAnalBlock *bb;
 	r_list_foreach (fcn->bbs, iter, bb) {
-		count += bb->ninstr;
+		amount += bb->ninstr;
 	}
-	return count;
+	return amount;
 }
 
 R_ABI bool r_anal_function_islineal(RAnalFunction *fcn) {
@@ -40,6 +40,26 @@ R_ABI bool r_anal_function_islineal(RAnalFunction *fcn) {
 		at = bb->addr + bb->size - 1;
 	}
 	return true;
+}
+
+// pin.c
+
+R_ABI const char *r_anal_pin_get(RAnal *a, const char *name) {
+	r_strf_buffer (128);
+	char *ckey = r_strf ("cmd.%s", name);
+	return sdb_const_get (a->sdb_pins, ckey, NULL);
+}
+
+R_ABI const char *r_anal_pin_at(RAnal *a, ut64 addr) {
+	char buf[64];
+	const char *key = sdb_itoa (addr, buf, 16);
+	return sdb_const_get (a->sdb_pins, key, NULL);
+}
+
+R_ABI bool r_anal_pin_set(RAnal *a, const char *name, const char *cmd) {
+	r_strf_buffer (128);
+	char *ckey = r_strf ("cmd.%s", name);
+	return sdb_add (a->sdb_pins, ckey, cmd, 0);
 }
 
 #endif

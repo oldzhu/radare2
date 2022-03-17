@@ -21,6 +21,15 @@ static const char *help_msg_pa[] = {
 	NULL
 };
 
+static const char *help_msg_psz[] = {
+	"Usage: psz[jl]", "", "print zero-terminated string",
+	"psz", "", "print zero-terminated string",
+	"psz*", "", "r2 command to write the null-terminated string in here",
+	"pszj", "", "print zero-terminated string as json",
+	"pszl", "", "print strlen of zero-terminated string in current address",
+	NULL
+};
+
 static const char *help_msg_pdf[] = {
 	"Usage: pdf[bf]", "", "disassemble function",
 	"pdf", "", "disassemble function",
@@ -468,7 +477,7 @@ static const char *help_msg_ps[] = {
 	"psw", "[j]", "print 16bit wide string",
 	"psW", "[j]", "print 32bit wide string",
 	"psx", "", "show string with escaped chars",
-	"psz", "[j]", "print zero-terminated string",
+	"psz", "[?] [lj]", "print zero-terminated string",
 	NULL
 };
 
@@ -6220,6 +6229,16 @@ static int cmd_print(void *data, const char *input) {
 				if (input[2] == 'j') { // pszj
 					print_json_string (core, (const char *) s,
 						r_str_nlen ((const char*)s, l), NULL);
+				} else if (input[2] == '*') {
+					char *a = r_str_ndup ((const char*)s, l);
+					char *b = r_base64_encode_dyn (a, -1);
+					r_cons_printf ("w6e %s\n", b);
+					free (b);
+					free (a);
+				} else if (input[2] == '?') {
+					r_core_cmd_help (core, help_msg_psz);
+				} else if (input[2] == 'c' || input[2] == 'l') {
+					r_cons_printf ("%d\n", (int)r_str_nlen ((const char*)s, l));
 				} else {
 					r_print_string (core->print, core->offset, s, l, R_PRINT_STRING_ZEROEND);
 				}
