@@ -671,7 +671,23 @@ static int __get_panel_idx_in_pos(RCore *core, int x, int y) {
 	return i;
 }
 
+static void bottom_panel_line(RCore *core) {
+#define useUtf8 (r_cons_singleton ()->use_utf8)
+#define useUtf8Curvy (r_cons_singleton ()->use_utf8_curvy)
+	const char *hline = useUtf8? RUNE_LINE_HORIZ : "-";
+	const char *bl_corner = useUtf8 ? (useUtf8Curvy ? RUNE_CURVE_CORNER_BL : RUNE_CORNER_BL) : "`";
+	const char *br_corner = useUtf8 ? (useUtf8Curvy ? RUNE_CURVE_CORNER_BR : RUNE_CORNER_BR) : "'";
+	int i, h, w = r_cons_get_size (&h);
+	r_cons_gotoxy (0, h - 1);
+	r_cons_write (bl_corner, strlen (bl_corner));
+	for (i = 0; i < w - 2; i++) {
+		r_cons_printf ("%s", hline);
+	}
+	r_cons_write (br_corner, strlen (br_corner));
+}
+
 static void __handlePrompt(RCore *core, RPanels *panels) {
+	bottom_panel_line (core);
 	r_core_visual_prompt_input (core);
 	int i;
 	for (i = 0; i < panels->n_panels; i++) {
@@ -4464,9 +4480,6 @@ static void __print_decompiler_cb(void *user, void *p) {
 	if (core->offset != panel->model->addr) {
 		update = true;
 	}
-#else
-	bool update = true;
-#endif
 	if (!update) {
 		cmdstr = __find_cmd_str_cache (core, panel);
 		if (R_STR_ISNOTEMPTY (cmdstr)) {
@@ -4474,6 +4487,9 @@ static void __print_decompiler_cb(void *user, void *p) {
 		}
 		return;
 	}
+#else
+	bool update = true;
+#endif
 	// RAnalFunction *func = r_anal_get_fcn_in (core->anal, core->offset, R_ANAL_FCN_TYPE_NULL);
 	if (func && core->panels_root->cur_pdc_cache) {
 		cmdstr = r_str_new ((char *)sdb_ptr_get (core->panels_root->cur_pdc_cache,
@@ -6635,7 +6651,7 @@ virtualmouse:
 		}
 		break;
 	case ':':
-		r_core_visual_prompt_input (core);
+		__handlePrompt(core, panels);
 		__set_panel_addr (core, cur, core->offset);
 		break;
 	case 'c':
