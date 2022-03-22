@@ -300,6 +300,7 @@ static const char *help_msg_ae[] = {
 	"ae??", "", "show ESIL help",
 	"aea", "[f] [count]", "analyse n esil instructions accesses (regs, mem..)",
 	"aeA", "[f] [count]", "analyse n bytes for their esil accesses (regs, mem..)",
+	"aeb", " ([addr])", "emulate block in current or given address",
 	"aeC", "[arg0 arg1..] @ addr", "appcall in esil",
 	"aec", "[?]", "continue until ^C",
 	"aef", " [addr]", "emulate function",
@@ -827,18 +828,19 @@ static const char *help_msg_aom[] = {
 
 static const char *help_msg_ao[] = {
 	"Usage:", "ao[e?] [len]", "Analyze Opcodes",
-	"aoj", " N", "display opcode analysis information in JSON for N opcodes",
-	"aoe", " N", "display esil form for N opcodes",
-	"aoeq", " N", "display only the esil expression of N opcodes",
-	"aoef", " expr", "filter esil expression of opcode by given output",
-	"aos", " N", "display size of N opcodes",
-	"aom", "[?] [id]", "list current or all mnemonics for current arch",
-	"aod", " [mnemonic]", "describe opcode for asm.arch",
-	"aoda", "", "show all mnemonic descriptions",
-	"aoc", " [cycles]", "analyze which op could be executed in [cycles]",
-	"aot", "[?]", "list all opcode types",
 	"ao", " 5", "display opcode analysis of 5 opcodes",
 	"ao*", "", "display opcode in r commands",
+	"aoc", " [cycles]", "analyze which op could be executed in [cycles]",
+	"aod", " [mnemonic]", "describe opcode for asm.arch",
+	"aoda", "", "show all mnemonic descriptions",
+	"aoe", " N", "display esil form for N opcodes",
+	"aoef", " expr", "filter esil expression of opcode by given output",
+	"aoeq", " N", "display only the esil expression of N opcodes",
+	"aoj", " N", "display opcode analysis information in JSON for N opcodes",
+	"aom", "[?] [id]", "list current or all mnemonics for current arch",
+	"aor", " [N]", "run N esil instructions + esil.dumpstack",
+	"aos", " N", "display size of N opcodes",
+	"aot", "[?]", "list all opcode types",
 	NULL
 };
 
@@ -2080,12 +2082,20 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 	const char *esilstr;
 	const char *opexstr;
 	RAnalHint *hint;
-	RAnalEsil *esil = NULL;
 	RAsmOp asmop = {0};
 	RAnalOp op = {0};
 	ut64 addr;
 	PJ *pj = NULL;
 	int totalsize = 0;
+#if 0
+	RAnalEsil *esil = r_anal_esil_new (256, 0, 0);
+	r_anal_esil_setup (esil, core->anal, false, false, false);
+	esil->user = &ec;
+	esil->cb.mem_read = mr;
+	esil->cb.mem_write = mw;
+#else
+	RAnalEsil *esil = NULL;
+#endif
 
 	// Variables required for setting up ESIL to REIL conversion
 	if (use_color) {
@@ -2106,7 +2116,7 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 		r_asm_set_pc (core->rasm, addr);
 		hint = r_anal_hint_get (core->anal, addr);
 		ret = r_anal_op (core->anal, &op, addr, buf + idx, len - idx,
-			R_ANAL_OP_MASK_ESIL | R_ANAL_OP_MASK_OPEX | R_ANAL_OP_MASK_HINT);
+			R_ANAL_OP_MASK_ESIL | R_ANAL_OP_MASK_OPEX | R_ANAL_OP_MASK_HINT | R_ANAL_OP_MASK_DISASM);
 		(void)r_asm_disassemble (core->rasm, &asmop, buf + idx, len - idx);
 		esilstr = R_STRBUF_SAFEGET (&op.esil);
 		opexstr = R_STRBUF_SAFEGET (&op.opex);
@@ -2306,31 +2316,40 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 			pj_end (pj);
 		} else if (fmt == 'r') {
 			if (R_STR_ISNOTEMPTY (esilstr)) {
-				if (use_color) {
-					r_cons_printf ("%s0x%" PFMT64x Color_RESET "\n", color, core->offset + idx);
+				if (core->anal->esil) {
+					if (use_color) {
+						r_cons_printf ("%s0x%" PFMT64x Color_RESET " %s\n", color, core->offset + idx, esilstr);
+					} else {
+						r_cons_printf ("0x%" PFMT64x " %s\n", core->offset + idx, esilstr);
+					}
+					esil = core->anal->esil;
+					r_anal_esil_parse (esil, esilstr);
+					r_anal_esil_dumpstack (esil);
+					r_anal_esil_stack_free (esil);
+					esil = NULL;
 				} else {
-					r_cons_printf ("0x%" PFMT64x "\n", core->offset + idx);
+					eprintf ("Error: ESIL is not initialized. Run `aei`.\n");
+					break;
 				}
-				r_anal_esil_parse (esil, esilstr);
-				r_anal_esil_dumpstack (esil);
-				r_anal_esil_stack_free (esil);
+			} else {
+				// ignored/skipped eprintf ("No esil for '%s'\n", op.mnemonic);
 			}
 		} else {
-		char disasm[128] = {0};
-		r_parse_subvar (core->parser, NULL,
-			core->offset + idx,
-			asmop.size, r_asm_op_get_asm (&asmop),
-			disasm, sizeof (disasm));
-		ut64 killme = UT64_MAX;
-		if (r_io_read_i (core->io, op.ptr, &killme, op.refptr, be)) {
-			core->parser->subrel_addr = killme;
-		}
-		char *p = strdup (disasm);
-		if (p) {
-			r_parse_filter (core->parser, addr, core->flags, hint, p,
-				disasm, sizeof (disasm), be);
-			free (p);
-		}
+			char disasm[128] = {0};
+			r_parse_subvar (core->parser, NULL,
+				core->offset + idx,
+				asmop.size, r_asm_op_get_asm (&asmop),
+				disasm, sizeof (disasm));
+			ut64 killme = UT64_MAX;
+			if (r_io_read_i (core->io, op.ptr, &killme, op.refptr, be)) {
+				core->parser->subrel_addr = killme;
+			}
+			char *p = strdup (disasm);
+			if (p) {
+				r_parse_filter (core->parser, addr, core->flags, hint, p,
+					disasm, sizeof (disasm), be);
+				free (p);
+			}
 #define printline(k, fmt, arg)\
 	{ \
 		if (use_color)\
@@ -5611,7 +5630,12 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 			}
 			bool isNextFall = false;
 			if (op.type == R_ANAL_OP_TYPE_CJMP) {
-				ut64 pc = r_debug_reg_get (core->dbg, "PC");
+				int err = 0;
+				ut64 pc = r_debug_reg_get_err (core->dbg, "PC", &err, NULL);
+				if (err) {
+					eprintf ("Missing PC register in the current profile.\n");
+					break;
+				}
 				if (pc == addr + op.size) {
 					// do not opdelay here
 					isNextFall = true;
@@ -6461,7 +6485,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 
 	// eprintf ("   aesB %llx %llx %d\n", addr, until_addr, off); // 0x%08llx %d  %s\n", aop.addr, ret, aop.mnemonic);
 	if (!esil) {
-		eprintf ("Warning: cmd_espc: creating new esil instance\n");
+		// eprintf ("Warning: cmd_espc: creating new esil instance\n");
 		if (!(esil = r_anal_esil_new (stacksize, iotrap, addrsize))) {
 			return;
 		}
@@ -6485,7 +6509,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 		}
 		if (i >= (bsize - 32)) {
 			i = 0;
-			eprintf ("Warning: Chomp\n");
+			eprintf ("Warning: Chomp %d of %d\n", i, bsize);
 		}
 		if (!i) {
 			r_io_read_at (core->io, addr, buf, bsize);
@@ -7355,8 +7379,25 @@ static void cmd_anal_esil(RCore *core, const char *input, bool verbose) {
 		}
 		break;
 	case 'b': // "aeb"
+		{
+			ut64 addr = r_num_math (core->num, input + 1);
+			if (!addr || addr == UT64_MAX) {
+				addr = core->offset;
+			}
+			RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, addr, R_ANAL_FCN_TYPE_NULL);
+			if (fcn) {
+				RAnalBlock *bb = r_anal_function_bbget_in (core->anal, fcn, addr);
+				if (bb) {
+					cmd_aespc (core, bb->addr, bb->addr + bb->size, bb->ninstr);
+					// r_core_cmdf (core, "aesp `ab~addr[1]` `ab~ninstr[1]`");
+				} else {
+					eprintf ("No basic block in this address\n");
+				}
+			} else {
+				eprintf ("No function in this address\n");
+			}
 		// ab~ninstr[1]
-		r_core_cmdf (core, "aesp `ab~addr[1]` `ab~ninstr[1]`");
+		}
 		break;
 	case 'f': // "aef"
 		if (input[1] == 'a') { // "aefa"
@@ -7590,7 +7631,7 @@ static void cmd_anal_opcode(RCore *core, const char *input) {
 	case 's': // "aos"
 	case 'j': // "aoj"
 	case 'e': // "aoe"
-	case 'r': {
+	case 'r': { // "aor"
 		int count = 1;
 		int obs = core->blocksize;
 		int fmt = input[0];
