@@ -112,6 +112,13 @@ static const char *help_msg_dbt[] = {
 	NULL
 };
 
+static const char *help_msg_drr[] = {
+	"Usage: drr", ""," # Show references to registers (see pxr?)",
+	"drr", "", "Periscope register values",
+	"drrj", "", "Same, but output in JSON",
+	NULL
+};
+
 static const char *help_msg_dbw[] = {
 	"Usage: dbw", "<addr> <r/w/rw>"," # Add watchpoint",
 	NULL
@@ -1932,8 +1939,10 @@ R_API void r_core_debug_ri(RCore *core, RReg *reg, int mode) {
 				r_cons_printf (" %s", r);
 			}
 			r_cons_strcat (Color_RESET);
+			ut64 o_offset = core->offset;
 			char *rrstr = r_core_anal_hasrefs (core, *addr, true);
-			if (rrstr && *rrstr && strchr (rrstr, 'R')) {
+			core->offset = o_offset;
+			if (R_STR_ISNOTEMPTY (rrstr) && strchr (rrstr, 'R')) {
 				r_cons_printf ("    ;%s"Color_RESET, rrstr);
 			}
 			r_cons_newline ();
@@ -2000,12 +2009,14 @@ R_API void r_core_debug_rr(RCore *core, RReg *reg, int mode) {
 		if (delta && use_colors) {
 			namestr = r_str_newf ("%s%s%s", color, r->name, colorend);
 			valuestr = r_str_newf ("%s%"PFMT64x"%s", color, value, colorend);
+			r_cons_strcat (Color_RESET);
 		} else {
 			namestr = r_str_new (r->name);
 			valuestr = r_str_newf ("%"PFMT64x, value);
 		}
-
+		ut64 o_offset = core->offset;
 		char *rrstr = r_core_anal_hasrefs (core, value, true);
+		core->offset = o_offset;
 		if (!rrstr) {
 			rrstr = strdup ("");
 		}
@@ -2971,6 +2982,9 @@ static void cmd_debug_reg(RCore *core, const char *str) {
 		break;
 	case 'r': // "drr"
 		switch (str[1]) {
+		case '?': // "drr?"
+			r_core_cmd_help (core, help_msg_drr);
+			break;
 		case 'j': // "drrj"
 			r_core_debug_rr (core, core->dbg->reg, 'j');
 			break;
