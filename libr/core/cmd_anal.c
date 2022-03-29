@@ -758,7 +758,7 @@ static const char *help_msg_ah[] = {
 	"ahh", " 0x804840", "highlight this address offset in disasm",
 	"ahi", "[?] 10", "define numeric base for immediates (2, 8, 10, 10u, 16, i, p, S, s)",
 	"ahj", "", "list hints in JSON",
-	"aho", " call", "change opcode type (see aho?) (deprecated, moved to \"ahd\")",
+	"aho", " call", "change opcode type (see aho?)",
 	"ahp", " addr", "set pointer hint",
 	"ahr", " val", "set hint for return value of a function",
 	"ahs", " 4", "set opcode size=4",
@@ -5384,20 +5384,20 @@ void cmd_anal_reg(RCore *core, const char *str) {
 			ut64 n = r_num_math (core->num, arg + 1);
 			char *ostr = r_str_trim_dup (str + 1);
 			char *regname = r_str_trim_nc (ostr);
-			r = r_reg_get (core->dbg->reg, regname, -1);
+			r = r_reg_get (core->anal->reg, regname, -1);
 			if (!r) {
 				int role = r_reg_get_name_idx (regname);
 				if (role != -1) {
-					const char *alias = r_reg_get_name (core->dbg->reg, role);
+					const char *alias = r_reg_get_name (core->anal->reg, role);
 					if (alias) {
-						r = r_reg_get (core->dbg->reg, alias, -1);
+						r = r_reg_get (core->anal->reg, alias, -1);
 					}
 				}
 			}
 			if (r) {
 				//eprintf ("%s 0x%08"PFMT64x" -> ", str,
 				//	r_reg_get_value (core->dbg->reg, r));
-				r_reg_set_value (core->dbg->reg, r, n);
+				r_reg_set_value (core->anal->reg, r, n);
 				r_debug_reg_sync (core->dbg, R_REG_TYPE_ALL, true);
 				//eprintf ("0x%08"PFMT64x"\n",
 				//	r_reg_get_value (core->dbg->reg, r));
@@ -5899,7 +5899,6 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 	ut32 size = 0xf0000;
 	char name[128];
 	RFlagItem *fi;
-	const char *sp, *bp, *pc;
 	char uri[32];
 	char nomalloc[256];
 	char *p;
@@ -5953,7 +5952,7 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 	}
 
 	if (!*input) {
-		char *fi = sdb_get(core->sdb, "aeim.fd", 0);
+		char *fi = sdb_get (core->sdb, "aeim.fd", 0);
 		if (fi) {
 			// Close the fd associated with the aeim stack
 			ut64 fd = sdb_atoi (fi);
@@ -6020,7 +6019,7 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 	// r_flag_set (core->flags, name, addr, size);	//why is this here?
 	char val[128], *v;
 	v = sdb_itoa (esil->stack_fd, val, 10);
-	sdb_set(core->sdb, "aeim.fd", v, 0);
+	sdb_set (core->sdb, "aeim.fd", v, 0);
 
 	r_config_set_i (core->config, "io.va", true);
 	if (patt && *patt) {
@@ -6040,20 +6039,10 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 		}
 	}
 	// SP
-	sp = r_reg_get_name (core->dbg->reg, R_REG_NAME_SP);
-	if (sp) {
-		r_debug_reg_set (core->dbg, sp, addr + (size / 2));
-	}
-	// BP
-	bp = r_reg_get_name (core->dbg->reg, R_REG_NAME_BP);
-	if (bp) {
-		r_debug_reg_set (core->dbg, bp, addr + (size / 2));
-	}
-	// PC
-	pc = r_reg_get_name (core->dbg->reg, R_REG_NAME_PC);
-	if (pc) {
-		r_debug_reg_set (core->dbg, pc, curoff);
-	}
+	ut64 sp = addr + (size / 2);
+	r_reg_setv (core->anal->reg, "SP", sp);
+	r_reg_setv (core->anal->reg, "BP", sp);
+	r_reg_setv (core->anal->reg, "PC", curoff);
 	r_core_cmd0 (core, ".ar*");
 	if (esil) {
 		esil->stack_addr = addr;
@@ -6481,7 +6470,7 @@ static bool cmd_aea(RCore* core, int mode, ut64 addr, int length) {
 	return true;
 }
 
-static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
+static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int ninstr) {
 	RAnalEsil *esil = core->anal->esil;
 	int i, j = 0;
 	ut8 *buf;
@@ -6514,7 +6503,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 	ut64 cursp = r_reg_getv (core->dbg->reg, "SP");
 	ut64 oldoff = core->offset;
 	const ut64 flags = R_ANAL_OP_MASK_BASIC | R_ANAL_OP_MASK_HINT | R_ANAL_OP_MASK_ESIL | R_ANAL_OP_MASK_DISASM;
-	for (i = 0, j = 0; j < off ; i++, j++) {
+	for (i = 0, j = 0; j < ninstr; i++, j++) {
 		if (r_cons_is_breaked ()) {
 			break;
 		}
@@ -6550,7 +6539,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int off) {
 			inc = minopcode;
 		}
 		i += inc;
-		addr += ret; // aop.size;
+		addr += aop.size;
 		r_anal_op_fini (&aop);
 	}
 	free (buf);
@@ -9034,7 +9023,7 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 			r_anal_hint_unset_bits (core->anal, off);
 		} else if (input[1] == ' ') {
 			const char *arg = r_str_trim_head_ro (input + 1);
-			int type = r_anal_optype_from_string (arg);
+			const int type = r_anal_optype_from_string (arg);
 			if (type != -1) {
 				r_anal_hint_set_type (core->anal, core->offset, type);
 			} else {
@@ -10953,17 +10942,22 @@ static void cmd_anal_abt(RCore *core, const char *input) {
 	}
 	case ' ': {
 		ut64 addr = r_num_math (core->num, input + 1);
-		RAnalBlock *block = r_anal_get_block_at (core->anal, core->offset);
-		if (!block) {
-			break;
-		}
-		RList *path = r_anal_block_shortest_path (block, addr);
-		if (path) {
-			RListIter *it;
-			r_list_foreach (path, it, block) {
-				r_cons_printf ("0x%08" PFMT64x "\n", block->addr);
+		if (addr == UT64_MAX || addr == 0) {
+			eprintf ("Invalid or missing address passed as argument\n");
+		} else {
+			RAnalBlock *block = r_anal_get_block_at (core->anal, core->offset);
+			if (!block) {
+				eprintf ("No basic block at\n");
+				break;
 			}
-			r_list_free (path);
+			RList *path = r_anal_block_shortest_path (block, addr);
+			if (path) {
+				RListIter *it;
+				r_list_foreach (path, it, block) {
+					r_cons_printf ("0x%08" PFMT64x "\n", block->addr);
+				}
+				r_list_free (path);
+			}
 		}
 		break;
 	}
@@ -12198,7 +12192,7 @@ static int cmd_anal(void *data, const char *input) {
 			break;
 		case ',': // "ab,"
 		case 't': // "abt"
-			cmd_anal_abt (core, input+2);
+			cmd_anal_abt (core, input + 2);
 			break;
 		case 'l': // "abl"
 			if (input[2] == '?') {
