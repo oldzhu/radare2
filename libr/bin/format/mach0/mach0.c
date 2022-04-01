@@ -404,15 +404,15 @@ static bool parse_segments(struct MACH0_(obj_t) *bin, ut64 off) {
 			memcpy (&bin->sects[k].segname, &sec[i], 16);
 			i += 16;
 			snprintf (section_flagname, sizeof (section_flagname), "mach0_section_%.16s_%.16s.offset",
-						bin->sects[k].segname, bin->sects[k].sectname);			
+						bin->sects[k].segname, bin->sects[k].sectname);
 			sdb_num_set (bin->kv, section_flagname, offset, 0);
 #if R_BIN_MACH064
 			snprintf (section_flagname, sizeof (section_flagname), "mach0_section_%.16s_%.16s.format",
-						bin->sects[k].segname, bin->sects[k].sectname);		
+						bin->sects[k].segname, bin->sects[k].sectname);
 			sdb_set (bin->kv, section_flagname, "mach0_section64", 0);
 #else
 			snprintf (section_flagname, sizeof (section_flagname), "mach0_section_%.16s_%.16s.format",
-						bin->sects[k].segname, bin->sects[k].sectname);		
+						bin->sects[k].segname, bin->sects[k].sectname);
 			sdb_set (bin->kv, section_flagname, "mach0_section", 0);
 #endif
 
@@ -3789,7 +3789,7 @@ struct addr_t *MACH0_(get_entrypoint)(struct MACH0_(obj_t) *bin) {
 
 void MACH0_(kv_loadlibs)(struct MACH0_(obj_t) *bin) {
 	int i;
-	char lib_flagname[128];	
+	char lib_flagname[128];
 	for (i = 0; i < bin->nlibs; i++) {
 		snprintf (lib_flagname, sizeof (lib_flagname), "libs.%d.name", i);
 		sdb_set (bin->kv, lib_flagname, bin->libs[i], 0);
@@ -4602,7 +4602,9 @@ void MACH0_(iterate_chained_fixups)(struct MACH0_(obj_t) *bin, ut64 limit_start,
 					ut8 key = 0, addr_div = 0;
 					ut16 diversity = 0;
 					ut32 ordinal = UT32_MAX;
-					if (pointer_format == DYLD_CHAINED_PTR_ARM64E) {
+					switch (pointer_format) {
+					case DYLD_CHAINED_PTR_ARM64E:
+						{
 						stride = 8;
 						bool is_auth = IS_PTR_AUTH (raw_ptr);
 						bool is_bind = IS_PTR_BIND (raw_ptr);
@@ -4638,7 +4640,10 @@ void MACH0_(iterate_chained_fixups)(struct MACH0_(obj_t) *bin, ut64 limit_start,
 							delta = p->next;
 							ptr_value = ((ut64)p->high8 << 56) | p->target;
 						}
-					} else if (pointer_format == DYLD_CHAINED_PTR_ARM64E_USERLAND24) {
+						}
+						break;
+					case DYLD_CHAINED_PTR_ARM64E_USERLAND24:
+						{
 						stride = 8;
 						struct dyld_chained_ptr_arm64e_bind24 *bind =
 								(struct dyld_chained_ptr_arm64e_bind24 *) &raw_ptr;
@@ -4675,7 +4680,11 @@ void MACH0_(iterate_chained_fixups)(struct MACH0_(obj_t) *bin, ut64 limit_start,
 								ptr_value = bin->baddr + (((ut64)p->high8 << 56) | p->target);
 							}
 						}
-					} else if (pointer_format == DYLD_CHAINED_PTR_64_OFFSET) {
+						}
+						break;
+					case DYLD_CHAINED_PTR_64:
+					case DYLD_CHAINED_PTR_64_OFFSET:
+						{
 						stride = 4;
 						struct dyld_chained_ptr_64_bind *bind =
 								(struct dyld_chained_ptr_64_bind *) &raw_ptr;
@@ -4689,73 +4698,79 @@ void MACH0_(iterate_chained_fixups)(struct MACH0_(obj_t) *bin, ut64 limit_start,
 								(struct dyld_chained_ptr_64_rebase *) &raw_ptr;
 							event = R_FIXUP_EVENT_REBASE;
 							delta = p->next;
-							ptr_value = bin->baddr + (((ut64)p->high8 << 56) | p->target);
+							ptr_value = ((ut64)p->high8 << 56) | p->target;
+							if (pointer_format == DYLD_CHAINED_PTR_64_OFFSET) {
+								ptr_value += bin->baddr;
+							}
 						}
-					} else {
+						}
+						break;
+					default:
 						eprintf ("Unsupported chained pointer format %d\n", pointer_format);
 						return;
 					}
 					if (cursor >= limit_start && cursor <= limit_end - 8 && (event & event_mask) != 0) {
 						bool carry_on;
 						switch (event) {
-							case R_FIXUP_EVENT_BIND: {
-								RFixupBindEventDetails event_details;
+						case R_FIXUP_EVENT_BIND: {
+							RFixupBindEventDetails event_details;
 
-								event_details.type = event;
-								event_details.bin = bin;
-								event_details.offset = cursor;
-								event_details.raw_ptr = raw_ptr;
-								event_details.ordinal = ordinal;
-								event_details.addend = addend;
+							event_details.type = event;
+							event_details.bin = bin;
+							event_details.offset = cursor;
+							event_details.raw_ptr = raw_ptr;
+							event_details.ordinal = ordinal;
+							event_details.addend = addend;
 
-								carry_on = callback (context, (RFixupEventDetails *) &event_details);
-								break;
-							}
-							case R_FIXUP_EVENT_BIND_AUTH: {
-								RFixupBindAuthEventDetails event_details;
+							carry_on = callback (context, (RFixupEventDetails *) &event_details);
+							break;
+						}
+						case R_FIXUP_EVENT_BIND_AUTH: {
+							RFixupBindAuthEventDetails event_details;
 
-								event_details.type = event;
-								event_details.bin = bin;
-								event_details.offset = cursor;
-								event_details.raw_ptr = raw_ptr;
-								event_details.ordinal = ordinal;
-								event_details.key = key;
-								event_details.addr_div = addr_div;
-								event_details.diversity = diversity;
+							event_details.type = event;
+							event_details.bin = bin;
+							event_details.offset = cursor;
+							event_details.raw_ptr = raw_ptr;
+							event_details.ordinal = ordinal;
+							event_details.key = key;
+							event_details.addr_div = addr_div;
+							event_details.diversity = diversity;
 
-								carry_on = callback (context, (RFixupEventDetails *) &event_details);
-								break;
-							}
-							case R_FIXUP_EVENT_REBASE: {
-								RFixupRebaseEventDetails event_details;
+							carry_on = callback (context, (RFixupEventDetails *) &event_details);
+							break;
+						}
+						case R_FIXUP_EVENT_REBASE: {
+							RFixupRebaseEventDetails event_details;
 
-								event_details.type = event;
-								event_details.bin = bin;
-								event_details.offset = cursor;
-								event_details.raw_ptr = raw_ptr;
-								event_details.ptr_value = ptr_value;
+							event_details.type = event;
+							event_details.bin = bin;
+							event_details.offset = cursor;
+							event_details.raw_ptr = raw_ptr;
+							event_details.ptr_value = ptr_value;
 
-								carry_on = callback (context, (RFixupEventDetails *) &event_details);
-								break;
-							}
-							case R_FIXUP_EVENT_REBASE_AUTH: {
-								RFixupRebaseAuthEventDetails event_details;
+							carry_on = callback (context, (RFixupEventDetails *) &event_details);
+							break;
+						}
+						case R_FIXUP_EVENT_REBASE_AUTH: {
+							RFixupRebaseAuthEventDetails event_details;
 
-								event_details.type = event;
-								event_details.bin = bin;
-								event_details.offset = cursor;
-								event_details.raw_ptr = raw_ptr;
-								event_details.ptr_value = ptr_value;
-								event_details.key = key;
-								event_details.addr_div = addr_div;
-								event_details.diversity = diversity;
+							event_details.type = event;
+							event_details.bin = bin;
+							event_details.offset = cursor;
+							event_details.raw_ptr = raw_ptr;
+							event_details.ptr_value = ptr_value;
+							event_details.key = key;
+							event_details.addr_div = addr_div;
+							event_details.diversity = diversity;
 
-								carry_on = callback (context, (RFixupEventDetails *) &event_details);
-								break;
-							}
-							default:
-								eprintf ("Unexpected event while iterating chained fixups\n");
-								carry_on = false;
+							carry_on = callback (context, (RFixupEventDetails *) &event_details);
+							break;
+						}
+						default:
+							eprintf ("Unexpected event while iterating chained fixups\n");
+							carry_on = false;
+							break;
 						}
 						if (!carry_on) {
 							return;
