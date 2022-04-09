@@ -5249,7 +5249,7 @@ void cmd_anal_reg(RCore *core, const char *str) {
 					RRegFlags *rf = r_reg_cond_retrieve (core->dbg->reg, NULL);
 					if (rf) {
 						int o = r_reg_cond_bits (core->dbg->reg, id, rf);
-						core->num->value = o;
+						r_core_return_code (core, o);
 						// ORLY?
 						r_cons_printf ("%d\n", o);
 						free (rf);
@@ -6536,9 +6536,17 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int ninstr) {
 			break;
 		}
 		// skip calls and such
-		if (aop.type == R_ANAL_OP_TYPE_CALL) {
-			// nothing
-		} else {
+		switch (aop.type) {
+		case R_ANAL_OP_TYPE_CALL:
+		case R_ANAL_OP_TYPE_UCALL:
+		case R_ANAL_OP_TYPE_RCALL:
+		case R_ANAL_OP_TYPE_ICALL:
+		case R_ANAL_OP_TYPE_IRCALL:
+		case R_ANAL_OP_TYPE_CCALL:
+		case R_ANAL_OP_TYPE_UCCALL:
+			// skip
+			break;
+		default:
 			r_reg_setv (core->anal->reg, "PC", aop.addr + aop.size);
 			r_reg_setv (core->dbg->reg, "PC", aop.addr + aop.size);
 			const char *e = R_STRBUF_SAFEGET (&aop.esil);
@@ -6546,6 +6554,7 @@ static void cmd_aespc(RCore *core, ut64 addr, ut64 until_addr, int ninstr) {
 				 // eprintf ("   0x%08llx %d  %s\n", aop.addr, ret, aop.mnemonic);
 				(void)r_anal_esil_parse (esil, e);
 			}
+			break;
 		}
 		int inc = (core->search->align > 0)? core->search->align - 1: ret - 1;
 		if (inc < 0) {
@@ -7596,10 +7605,10 @@ static void cmd_anal_esil(RCore *core, const char *input, bool verbose) {
 				char *str2 = r_str_newf (" %s", str);
 				cmd_anal_esil (core, str2, false);
 				free (str2);
-				core->num->value = 1;
+				r_core_return_code (core, 1);
 			} else {
 				// fail to exevute, update code
-				core->num->value = 0;
+				r_core_return_code (core, 0);
 			}
 			r_anal_op_fini (&aop);
 		} else if (input[1] == 'a') { // "aexa"

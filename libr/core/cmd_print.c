@@ -465,9 +465,10 @@ static const char *help_msg_pq[] = {
 };
 
 static const char *help_msg_ps[] = {
-	"Usage:", "ps[bijqpsuwWxz+] [N]", "Print String",
+	"Usage:", "ps[abijqpsuwWxz+] [N]", "Print String",
 	"ps", "", "print string",
 	"ps+", "[j]", "print libc++ std::string (same-endian, ascii, zero-terminated)",
+	"psa", "", "print any type of string (psp/psw/psW/psz/..)",
 	"psb", "", "print strings in current block",
 	"psi", "", "print string inside curseek",
 	"psj", "", "print string in JSON format",
@@ -1125,15 +1126,12 @@ static int cmd_pdu(RCore *core, const char *input) {
 	switch (*input) {
 	case 'a': // "pdua"
 		{
-		ut64 to;
-		ut64 count;
-
 		if (input[1] == '?' || (input[1] && input[2] == '?') || !arg) {
 			r_core_cmd_help_match (core, help_msg_pdu, "pdua", true);
 			break;
 		}
 
-		to = r_num_get (core->num, arg);
+		ut64 to = r_num_get (core->num, arg);
 
 		if (!to) {
 			eprintf ("Couldn't parse address \"%s\"\n", arg);
@@ -1150,12 +1148,8 @@ static int cmd_pdu(RCore *core, const char *input) {
 		}
 
 		// pD <count>
-		count = to - core->offset;
-		if (input[1] == 'j') {
-			ret = r_core_cmdf (core, "pDJ %" PFMT64u, count);
-		} else {
-			ret = r_core_cmdf (core, "pD %" PFMT64u, count);
-		}
+		ut64 count = to - core->offset;
+		ret = r_core_cmdf (core, "%s %" PFMT64u, (input[1]== 'j')? "pDJ": "pD", count);
 		}
 		break;
 	case 'c': // "pduc"
@@ -4201,7 +4195,7 @@ static void cmd_print_bars(RCore *core, const char *input) {
 				if (core->print->cur_enabled) {
 					if (i == core->print->cur) {
 						r_cons_printf ("> ");
-						core->num->value = off;
+						r_core_return_code (core, off);
 					} else {
 						r_cons_printf ("  ");
 					}
@@ -5180,7 +5174,7 @@ static bool cmd_pi(RCore *core, const char *input, int len, int l, ut8 *block) {
 				func_walk_blocks (core, f, input[2], 'I', input[2] == '.');
 			} else {
 				eprintf ("Cannot find function at 0x%08"PFMT64x "\n", core->offset);
-				core->num->value = 0;
+				r_core_return_code (core, 0);
 			}
 		}
 		break;
@@ -5191,7 +5185,7 @@ static bool cmd_pi(RCore *core, const char *input, int len, int l, ut8 *block) {
 				r_core_print_disasm_instructions (core, b->size - (core->offset - b->addr), 0);
 			} else {
 				eprintf ("Cannot find function at 0x%08"PFMT64x "\n", core->offset);
-				core->num->value = 0;
+				r_core_return_code (core, 0);
 			}
 		}
 		break;
@@ -5228,18 +5222,200 @@ static void core_print_decompile(RCore *core, const char *input) {
 		r_anal_esil_set_pc (esil, addr);
 		r_cons_printf ("addr_0x%08"PFMT64x"_0: // %s\n", addr, es);
 		char *cstr = esil2c (core, esil, es);
-		r_cons_printf ("%s", cstr);
-		free (cstr);
-		if (op->size > 0) {
-			addr += op->size;
-		} else {
-			addr += minopsize;
+		if (cstr) {
+			r_cons_printf ("%s", cstr);
+			free (cstr);
 		}
+		addr += (op->size > 0)? op->size: minopsize;
 		r_anal_op_free (op);
 	}
 	esil2c_free (esil->user);
 	esil->user = NULL;
 	r_anal_esil_free (esil);
+}
+
+static bool strnullpad_check(const ut8 *buf, int len, int clen, int inc, bool be) {
+	int i;
+	for (i = 0; i < len; i += inc) {
+		if (inc == 2) {
+			if (be) {
+				if (!buf[i] && !buf[i + 1]) {
+					return false;
+				}
+				if (!IS_PRINTABLE (buf[i]) || buf[i + 1]) {
+					return false;
+				}
+			} else {
+				if (!buf[i] && !buf[i + 1]) {
+					return false;
+				}
+				if (buf[i] || !IS_PRINTABLE (buf[i+1])) {
+					return false;
+				}
+			}
+		// utf32 } else if (inc == 4) {
+		} else {
+			eprintf ("Invalid inc\n");
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool check_string_at(RCore *core, ut64 addr) {
+	if (!r_io_is_valid_offset (core->io, addr, 0)) {
+		return false;
+	}
+	const int len = core->blocksize; // max string length
+	int i;
+	// bool is_utf32le = false;
+	// bool is_utf32be = false;
+	bool is_pascal1 = false;
+	bool is_pascal2 = false;
+	bool is_utf8 = false;
+	bool is_ascii = false;
+	char *out = NULL; // utf8 string containing the printable result
+	ut8 *buf = malloc (len);
+	if (buf) {
+		if (r_io_read_at (core->io, addr, buf, len) < 1) {
+			free (buf);
+			return false;
+		}
+	} else {
+		eprintf ("Cannot allocate %d byte(s)\n", len);
+		return false;
+	}
+	int nullbyte = r_str_nlen ((const char *)buf, len);
+	if (nullbyte == len) {
+		// full block, not null terminated somehow. lets check how printable it is first..
+		buf[len - 1] = 0;
+		nullbyte--;
+	}
+	if (nullbyte < len && nullbyte > 3) {
+		is_ascii = true;
+		// it's a null terminated string!
+		for (i = 0; i < nullbyte; i++) {
+			if (!IS_PRINTABLE (buf[i])) {
+				is_ascii = false;
+			}
+		}
+		if (!is_ascii) {
+			is_utf8 = true;
+			if ((buf[0] & 0xf0) == 0xf0 && (buf[1] & 0xf0) == 0xf0) {
+				is_utf8 = false;
+			}
+			for (i = 0; i < nullbyte; i++) {
+				int us = r_utf8_size (buf + i);
+				if (us < 1) {
+					is_utf8 = false;
+					break;
+				}
+				i += us - 1;
+			}
+		}
+	}
+
+	// utf16le check
+	if (strnullpad_check (buf, R_MIN (len, 10), 10, 2, false)) {
+		out = malloc (len + 1);
+		if (r_str_utf16_to_utf8 ((ut8*)out, len, buf, len, true) < 1) {
+			R_FREE (out);
+		}
+	}
+	// utf16be check
+	if (strnullpad_check (buf, R_MIN (len, 10), 10, 2, true)) {
+		out = malloc (len + 1);
+		if (r_str_utf16_to_utf8 ((ut8*)out, len, buf, len, false) < 1) {
+			R_FREE (out);
+		}
+	}
+	// TODO: add support for utf32 strings and improve util apis
+	// check for pascal string
+	{
+		ut8 plen = buf[0];
+		if (plen > 1 && plen < len) {
+			is_pascal1 = true;
+			int i;
+			for (i = 1; i < plen; i++) {
+				if (!IS_PRINTABLE (buf[i])) {
+					is_pascal1 = false;
+					break;
+				}
+			}
+			if (is_pascal1) {
+				out = r_str_ndup ((const char *)buf + 1, i);
+			}
+		}
+	}
+	if (!is_pascal1) {
+		ut8 plen = r_read_le16 (buf);
+		if (plen > 2 && plen < len) {
+			is_pascal2 = true;
+			for (i = 2; i < plen; i++) {
+				if (!IS_PRINTABLE (buf[i])) {
+					is_pascal2 = false;
+					break;
+				}
+			}
+			if (is_pascal2) {
+				out = r_str_ndup ((const char *)buf + 2, i);
+			}
+		}
+	}
+#if 0
+eprintf ("pascal %d\n", is_pascal1 + is_pascal2);
+eprintf ("utf8 %d\n", is_utf8);
+eprintf ("utf16 %d\n", is_utf16le+ is_utf16be);
+eprintf ("ascii %d\n", is_ascii);
+eprintf ("render%c", 10);
+#endif
+	// render the stuff
+	if (out) {
+		r_cons_printf ("%s\n", out);
+		free (out);
+		free (buf);
+		return true;
+	}
+	if (is_ascii || is_utf8) {
+		r_cons_printf ("%s\n", buf);
+		free (buf);
+		return true;
+	}
+	free (buf);
+	return false;
+}
+
+static bool check_string_pointer(RCore *core, ut64 addr) {
+	ut8 buf[16];
+	r_io_read_at (core->io, addr, buf, sizeof (buf));
+	// check for 64bit pointer to string
+	ut64 p1 = r_read_le64 (buf);
+	if (check_string_at (core, p1)) {
+		return true;
+	}
+	// check for 32bit pointer to string
+	ut64 p2 = (ut64)r_read_le32 (buf);
+	if (check_string_at (core, p2)) {
+		return true;
+	}
+	// check for self reference pointer to string used by swift
+	st32 p3 = (st32)r_read_le32 (buf);
+	ut64 dst = core->offset + p3;
+	if (check_string_at (core, dst)) {
+		return true;
+	}
+	return false;
+}
+
+static void cmd_psa(RCore *core, const char *_) {
+	bool found = true;
+	if (!check_string_at (core, core->offset)) {
+		if (!check_string_pointer (core, core->offset)) {
+			found = false;
+		}
+	}
+	RCmdReturnCode rc = found? R_CMD_RC_SUCCESS: R_CMD_RC_FAILURE;
+	r_core_return_code (core, rc);
 }
 
 static int cmd_print(void *data, const char *input) {
@@ -5346,12 +5522,12 @@ static int cmd_print(void *data, const char *input) {
 			}
 		} else {
 			eprintf ("p: Cannot find function at 0x%08"PFMT64x "\n", core->offset);
-			core->num->value = 0;
+			r_core_return_code (core, 0);
 			goto beach;
 		}
 	}
 	// TODO figure out why `f eax=33; f test=eax; pa call test` misassembles if len is 0
-	core->num->value = len ? len : core->blocksize;
+	r_core_return_code (core, len ? len : core->blocksize);
 	if (off != UT64_MAX) {
 		r_core_seek (core, off, SEEK_SET);
 		r_core_block_read (core);
@@ -5854,17 +6030,18 @@ static int cmd_print(void *data, const char *input) {
 							r_cons_printf ("%s\n", pj_string (pj));
 							pj_free (pj);
 						} else {
-							core->num->value = r_core_print_disasm (
+							int dislen = r_core_print_disasm (
 								core, b->addr, block,
 								b->size, b->size, 0, NULL, true,
 								input[2] == 'J', NULL, NULL);
+							r_core_return_code (core, dislen);
 						}
 						free (block);
 						pd_result = 0;
 					}
 				} else {
 					eprintf ("Cannot find function at 0x%08"PFMT64x "\n", core->offset);
-					core->num->value = 0;
+					r_core_return_code (core, 0);
 				}
 			}
 			break;
@@ -5950,7 +6127,8 @@ static int cmd_print(void *data, const char *input) {
 						ut8 *buf = calloc (sz, 1);
 						if (buf) {
 							(void)r_io_read_at (core->io, at, buf, sz);
-							core->num->value = r_core_print_disasm (core, at, buf, sz, sz, 0, NULL, true, false, NULL, f);
+							int dislen = r_core_print_disasm (core, at, buf, sz, sz, 0, NULL, true, false, NULL, f);
+							r_core_return_code (core, dislen);
 							free (buf);
 							// r_core_cmdf (core, "pD %d @ 0x%08" PFMT64x, f->_size > 0 ? f->_size: r_anal_function_realsize (f), f->addr);
 						}
@@ -5959,7 +6137,7 @@ static int cmd_print(void *data, const char *input) {
 				} else {
 					eprintf ("pdf: Cannot find function at 0x%08"PFMT64x "\n", core->offset);
 					processed_cmd = true;
-					core->num->value = 0;
+					r_core_return_code (core, 0);
 				}
 				if (bsz != core->blocksize) {
 					r_core_block_size (core, bsz);
@@ -6065,7 +6243,8 @@ static int cmd_print(void *data, const char *input) {
 							break;
 						}
 						r_io_read_at (core->io, addr - l, block1, l); // core->blocksize);
-						core->num->value = r_core_print_disasm (core, addr - l, block1, l, l, 0, NULL, true, formatted_json, NULL, NULL);
+						int dislen = r_core_print_disasm (core, addr - l, block1, l, l, 0, NULL, true, formatted_json, NULL, NULL);
+						r_core_return_code (core, dislen);
 					} else { // pd
 						int instr_len;
 						if (!r_core_prevop_addr (core, core->offset, l, &start)) {
@@ -6091,11 +6270,12 @@ static int cmd_print(void *data, const char *input) {
 								block1 + (bs - bs % addrbytes),
 								bs1 - (bs - bs % addrbytes));
 						}
-						core->num->value = r_core_print_disasm (core,
+						int dislen = r_core_print_disasm (core,
 								core->offset, block1,
 								R_MAX (bs, bs1), l, 0, NULL,
 								false, formatted_json, NULL,
 								NULL);
+						r_core_return_code (core, dislen);
 						r_core_seek (core, prevaddr, true);
 					}
 				}
@@ -6110,10 +6290,11 @@ static int cmd_print(void *data, const char *input) {
 					block1 = malloc (addrbytes * l);
 					if (block1) {
 						r_io_read_at (core->io, addr, block1, addrbytes * l);
-						core->num->value = r_core_print_disasm (core,
+						int dislen = r_core_print_disasm (core,
 								addr, block1, addrbytes * l, l,
 								0, NULL, true, formatted_json,
 								NULL, NULL);
+						r_core_return_code (core, dislen);
 					} else {
 						eprintf ("Cannot allocate %" PFMT64d " byte(s)\n", addrbytes * l);
 					}
@@ -6190,6 +6371,9 @@ static int cmd_print(void *data, const char *input) {
 			if (l > 0) {
 				r_print_string (core->print, core->offset, block, len, R_PRINT_STRING_ESC_NL);
 			}
+			break;
+		case 'a': // "psa"
+			cmd_psa (core, input + 1);
 			break;
 		case 'b': // "psb"
 			if (l > 0) {
