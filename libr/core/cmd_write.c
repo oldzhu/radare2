@@ -126,9 +126,9 @@ static const char *help_msg_wo[] = {
 
 static const char *help_msg_wop[] = {
 	"Usage:","wop[DO]"," len @ addr | value",
-	"wopD"," len [@ addr]","Write a De Bruijn Pattern of length 'len' at address 'addr'",
-	"wopD*"," len [@ addr]","Show wx command that creates a debruijn pattern of a specific length",
-	"wopO"," value", "Finds the given value into a De Bruijn Pattern at current offset",
+	"wopD"," len [@ addr]","write a De Bruijn Pattern of length 'len' at address 'addr'",
+	"wopD*"," len [@ addr]","show wx command that creates a debruijn pattern of a specific length",
+	"wopO"," value", "finds the given value into a De Bruijn Pattern at current offset",
 	NULL
 };
 
@@ -2136,7 +2136,9 @@ static int cmd_write(void *data, const char *input) {
 		const char *curcs = r_config_get (core->config, "cfg.charset");
 		char *str = strdup (input);
 
+#if !SHELLFILTER
 		r_str_trim_args (str);
+#endif
 		r_str_trim_tail (str);
 
 		ut64 addr = core->offset;

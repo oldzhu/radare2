@@ -301,7 +301,7 @@ static const char *help_msg_question_v[] = {
 	"$e", "", "1 if end of block, else 0",
 	"$e", "{flag}", "end of flag (flag->offset + flag->size)",
 	"$f", "", "jump fail address (e.g. jz 0x10 => next instruction)",
-	"$F", "", "Same as $FB",
+	"$F", "", "same as $FB",
 	"$Fb", "", "begin of basic block",
 	"$FB", "", "begin of function",
 	"$Fe", "", "end of basic block",
@@ -1088,8 +1088,9 @@ static int cmd_help(void *data, const char *input) {
 		r_core_clippy (core, r_str_trim_head_ro (input + 1));
 		break;
 	case 'e': // "?e" echo
+#if !SHELLFILTER
 		r_str_trim_args ((char *)input);
-
+#endif
 		switch (input[1]) {
 		case 'a': // "?ea hello world
 			{

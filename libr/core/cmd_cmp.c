@@ -4,16 +4,16 @@
 
 static const char *help_message_ci[] = {
 	"Usage: ci", "[sil] ([obid])", "Compare two bin objects",
-	"cis", " 0", "Compare symbols with current `ob 1` with given obid (0)",
-	"cii", " 0", "Compare imports",
-	"cil", " 0", "Compare libraries",
+	"cis", " 0", "compare symbols with current `ob 1` with given obid (0)",
+	"cii", " 0", "compare imports",
+	"cil", " 0", "compare libraries",
 	NULL
 };
 
 static const char *help_msg_cmp[] = {
 	"Usage: cmp", " [file] [file]", "Compare two ($alias) files, and change $? value",
-	"cmp", " ls ls.old", "Compare contents of given files",
-	"cmp", " $a $b", "Same as above but using alias files",
+	"cmp", " ls ls.old", "compare contents of given files",
+	"cmp", " $a $b", "same as above but using alias files",
 	NULL
 };
 
@@ -34,17 +34,17 @@ static const char *help_msg_c[] = {
 	// "cc", " [offset]", "code bindiff current block against offset"
 	// "cD", " [file]", "like above, but using radiff -b",
 	"cf", " [file]", "compare contents of file at current seek",
-	"cg", "[?] [o] [file]", "Graphdiff current file and [file]",
-	"ci", "[?] [obid] ([obid2])", "Compare two bin-objects (symbols, imports, ...)",
+	"cg", "[?] [o] [file]", "graphdiff current file and [file]",
+	"ci", "[?] [obid] ([obid2])", "compare two bin-objects (symbols, imports, ...)",
 	"cl|cls|clear", "", "clear screen, (clear0 to goto 0, 0 only)",
 	"cmp", " [file] [file]", "compare two files\n",
 	"cu", "[?] [addr] @at", "compare memory hexdumps of $$ and dst in unified diff",
 	"cud", " [addr] @at", "unified diff disasm from $$ and given address",
-	"cv", "[1248] [hexpairs] @at", "Compare 1,2,4,8-byte (silent return in $?)",
+	"cv", "[1248] [hexpairs] @at", "compare 1,2,4,8-byte (silent return in $?)",
 	"cV", "[1248] [addr] @at", "compare 1,2,4,8-byte address contents (silent, return in $?)",
 	"cw", "[?][*dqjru] [addr]", "compare memory watchers",
 	"cx", " [hexpair]", "compare hexpair string (use '.' as nibble wildcard)",
-	"cx*", " [hexpair]", "Compare hexpair string (output r2 commands)",
+	"cx*", " [hexpair]", "compare hexpair string (output r2 commands)",
 	"cX", " [addr]", "Like 'cc' but using hexdiff output",
 	NULL
 };
@@ -1339,8 +1339,8 @@ static int cmd_cmp(void *data, const char *input) {
 			const char *help_message[] = {
 				"Usage: cg", "", "Graph code commands",
 				"cg", "", "diff ratio among functions (columns: off-A, match-ratio, off-B)",
-				"cgf", "[fcn]", "Compare functions (curseek vs fcn)",
-				"cgo", "", "Opcode-bytes code graph diff",
+				"cgf", "[fcn]", "compare functions (curseek vs fcn)",
+				"cgo", "", "opcode-bytes code graph diff",
 				NULL
 			};
 			r_core_cmd_help (core, help_message);
@@ -1407,13 +1407,13 @@ static int cmd_cmp(void *data, const char *input) {
 		default: {
 			const char *help_msg[] = {
 				"Usage: cu", " [offset]", "# Prints unified comparison to make hexpatches",
-				"cu", " $$+1 > p", "Compare hexpairs from  current seek and +1",
-				"cu1", " $$+1 > p", "Compare bytes from current seek and +1",
-				"cu2", " $$+1 > p", "Compare words (half, 16bit) from current seek and +1",
-				"cu4", " $$+1 > p", "Compare dwords from current seek and +1",
-				"cu8", " $$+1 > p", "Compare qwords from current seek and +1",
-				"cud", " $$+1 > p", "Compare disasm current seek and +1",
-				"wu", " p", "Apply unified hex patch (see output of cu)",
+				"cu", " $$+1 > p", "compare hexpairs from  current seek and +1",
+				"cu1", " $$+1 > p", "compare bytes from current seek and +1",
+				"cu2", " $$+1 > p", "compare words (half, 16bit) from current seek and +1",
+				"cu4", " $$+1 > p", "compare dwords from current seek and +1",
+				"cu8", " $$+1 > p", "compare qwords from current seek and +1",
+				"cud", " $$+1 > p", "compare disasm current seek and +1",
+				"wu", " p", "apply unified hex patch (see output of cu)",
 				NULL
 			};
 			r_core_cmd_help (core, help_msg);
@@ -1502,7 +1502,7 @@ static int cmd_cmp(void *data, const char *input) {
 			}
 		} else if (sz == '?') {
 			eprintf ("Usage: cV[1248] [addr] @ addr2\n"
-				"Compare n bytes from one address to current one and return in $? 0 or 1\n");
+				"compare n bytes from one address to current one and return in $? 0 or 1\n");
 		}
 		sz -= '0';
 		if (sz > 0) {
@@ -1536,6 +1536,7 @@ static int cmd_cmp(void *data, const char *input) {
 			} else {
 				r_core_cmd_help (core, help_msg_cmp);
 			}
+			free (argv);
 		}
 		break;
 	default:
