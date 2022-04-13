@@ -129,8 +129,8 @@ static int string_scan_range(RList *list, RBinFile *bf, int min,
 		return -1;
 	}
 	st64 len = (st64)(to - from);
-	if (len > ST32_MAX) {
-		eprintf ("String scan range is too large\n");
+	if (len < 1 || len > ST32_MAX) {
+		eprintf ("String scan range is invalid (%"PFMT64d" bytes)\n", len);
 		return -1;
 	}
 	ut8 *buf = calloc (len, 1);
@@ -176,12 +176,11 @@ static int string_scan_range(RList *list, RBinFile *bf, int min,
 		r_charset_free (ch);
 	}
 	free (charset);
+	RConsIsBreaked is_breaked = (bin && bin->consb.is_breaked)? bin->consb.is_breaked: NULL;
 	// may oobread
 	while (needle < to) {
-		if (bin && bin->consb.is_breaked) {
-			if (bin->consb.is_breaked ()) {
-				break;
-			}
+		if (is_breaked && is_breaked ()) {
+			break;
 		}
 		// smol optimization
 		if (needle + 4 < to) {
@@ -343,6 +342,7 @@ static int string_scan_range(RList *list, RBinFile *bf, int min,
 				}
 				free (block_list);
 				if (num_blocks > R_STRING_MAX_UNI_BLOCKS) {
+					needle++;
 					continue;
 				}
 			}

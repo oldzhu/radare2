@@ -1166,6 +1166,9 @@ static RList *create_cache_bins(RBinFile *bf, RDyldCache *cache) {
 			r_list_free (target_lib_names);
 			return NULL;
 		}
+	} else {
+		eprintf ("bin.dyldcache: Use R_DYLDCACHE_FILTER to specify a colon ':' separated\n");
+		eprintf ("bin.dyldcache: list of names to avoid loading all the files in memory.\n");
 	}
 
 	ut32 i;
@@ -1370,7 +1373,7 @@ static void rebase_bytes_v2(RDyldRebaseInfo2 *rebase_info, ut8 *buf, ut64 offset
 				ut32 delta = 1;
 				while (delta) {
 					ut64 position = in_buf + first_rebase_off - page_offset;
-					if (position >= count) {
+					if (position + 8 >= count) {
 						break;
 					}
 					ut64 raw_value = r_read_le64 (buf + position);
@@ -1414,7 +1417,7 @@ static void rebase_bytes_v3(RDyldRebaseInfo3 *rebase_info, ut8 *buf, ut64 offset
 		if (first_rebase_off >= page_offset && first_rebase_off < page_offset + count) {
 			do {
 				ut64 position = in_buf + first_rebase_off - page_offset;
-				if (position >= count) {
+				if (position + 8 >= count) {
 					break;
 				}
 				ut64 raw_value = r_read_le64 (buf + position);
@@ -1832,7 +1835,7 @@ static objc_cache_opt_info *get_objc_opt_info(RBinFile *bf, RDyldCache *cache) {
 			}
 			ut64 cursor = selrefs_offset;
 			ut64 end = cursor + selrefs_size;
-			while (cursor < end) {
+			while (cursor + 8 < end) {
 				ut64 sel_ptr = r_buf_read_le64_at (cache->buf, cursor);
 				if (sel_ptr == UT64_MAX) {
 					break;
@@ -2097,12 +2100,18 @@ static RList *sections(RBinFile *bf) {
 
 	RListIter *iter;
 	RDyldBinImage *bin;
+	ut32 i = 0;
+	RConsIsBreaked is_breaked = (bf->rbin && bf->rbin->consb.is_breaked)? bf->rbin->consb.is_breaked: NULL;
 	r_list_foreach (cache->bins, iter, bin) {
+		i++;
+		if (is_breaked && is_breaked ()) {
+			eprintf ("Parsing sections stopped %d / %d\n", i, r_list_length (cache->bins));
+			break;
+		}
 		sections_from_bin (ret, bf, bin);
 	}
 
 	RBinSection *ptr = NULL;
-	int i;
 	for (i = 0; i < cache->n_maps; i++) {
 		if (!(ptr = R_NEW0 (RBinSection))) {
 			r_list_free (ret);
@@ -2143,7 +2152,14 @@ static RList *symbols(RBinFile *bf) {
 
 	RListIter *iter;
 	RDyldBinImage *bin;
+	ut32 i = 0;
+	RConsIsBreaked is_breaked = (bf->rbin && bf->rbin->consb.is_breaked)? bf->rbin->consb.is_breaked: NULL;
 	r_list_foreach (cache->bins, iter, bin) {
+		i++;
+		if (is_breaked && is_breaked ()) {
+			eprintf ("Parsing symbols stopped %d / %d\n", i, r_list_length (cache->bins));
+			break;
+		}
 		SetU *hash = set_u_new ();
 		if (!hash) {
 			r_list_free (ret);
@@ -2203,7 +2219,14 @@ static RList *classes(RBinFile *bf) {
 
 	RBuffer *orig_buf = bf->buf;
 	ut32 num_of_unnamed_class = 0;
+	ut32 i = 0;
+	RConsIsBreaked is_breaked = (bf->rbin && bf->rbin->consb.is_breaked)? bf->rbin->consb.is_breaked: NULL;
 	r_list_foreach (cache->bins, iter, bin) {
+		i++;
+		if (is_breaked && is_breaked ()) {
+			eprintf ("Parsing classes stopped %d / %d\n", i, r_list_length (cache->bins));
+			break;
+		}
 		struct MACH0_(obj_t) *mach0 = bin_to_mach0 (bf, bin);
 		if (!mach0) {
 			goto beach;
@@ -2266,7 +2289,9 @@ static RList *classes(RBinFile *bf) {
 				bf->buf = orig_buf;
 
 				if (!klass->name) {
-					eprintf ("KLASS ERROR AT 0x%"PFMT64x", is_classlist %d\n", pointer_to_class, is_classlist);
+					if (bf->rbin->verbose) {
+						eprintf ("KLASS ERROR AT 0x%"PFMT64x", is_classlist %d\n", pointer_to_class, is_classlist);
+					}
 					klass->name = r_str_newf ("UnnamedClass%u", num_of_unnamed_class);
 					if (!klass->name) {
 						R_FREE (klass);
@@ -2455,6 +2480,7 @@ RBinPlugin r_bin_plugin_dyldcache = {
 	.baddr = &baddr,
 	.symbols = &symbols,
 	.sections = &sections,
+	.minstrlen = 5,
 	.check_buffer = &check_buffer,
 	.destroy = &destroy,
 	.classes = &classes,
