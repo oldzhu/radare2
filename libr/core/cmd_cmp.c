@@ -37,7 +37,7 @@ static const char *help_msg_c[] = {
 	"cg", "[?] [o] [file]", "graphdiff current file and [file]",
 	"ci", "[?] [obid] ([obid2])", "compare two bin-objects (symbols, imports, ...)",
 	"cl|cls|clear", "", "clear screen, (clear0 to goto 0, 0 only)",
-	"cmp", " [file] [file]", "compare two files\n",
+	"cmp", " [file] [file]", "compare two files",
 	"cu", "[?] [addr] @at", "compare memory hexdumps of $$ and dst in unified diff",
 	"cud", " [addr] @at", "unified diff disasm from $$ and given address",
 	"cv", "[1248] [hexpairs] @at", "compare 1,2,4,8-byte (silent return in $?)",
@@ -804,41 +804,53 @@ static int cmd_cp(void *data, const char *input) {
 	return false;
 }
 
-static void __core_cmp_bits(RCore *core, ut64 addr) {
-	const bool scr_color = r_config_get_i (core->config, "scr.color");
+/* Show the bits for the bytes at addr and offset.
+ * If scr.color is enabled, when bytes differ 1 is colored graph_true and 0 is
+ * colored graph_false.
+ */
+static void cmp_bits(RCore *core, ut64 addr) {
+	RConsPrintablePalette *pal = &r_cons_singleton ()->context->pal;
+	const bool use_color = r_config_get_b (core->config, "scr.color");
+	const char *color_end = use_color? Color_RESET: "";
 	int i;
 	ut8 a, b;
-	r_io_read_at (core->io, core->offset, &a, 1);
-	r_io_read_at (core->io, addr, &b, 1);
-	RConsPrintablePalette *pal = &r_cons_singleton ()->context->pal;
-	const char *color = scr_color? pal->offset: "";
-	const char *color_end = scr_color? Color_RESET: "";
-	if (r_config_get_i (core->config, "hex.header")) {
-		char *n = r_str_newf ("0x%08"PFMT64x, core->offset);
-		const char *extra = r_str_pad (' ', strlen (n) - 10);
-		free (n);
-		r_cons_printf ("%s- offset -%s  7 6 5 4 3 2 1 0%s\n", color, extra, color_end);
-	}
-	color = scr_color? pal->graph_false: "";
-	color_end = scr_color? Color_RESET: "";
+	bool a_bits[8], b_bits[8];
+	const char *a_colors[8], *b_colors[8];
 
-	r_cons_printf ("%s0x%08"PFMT64x"%s  ", color, core->offset, color_end);
-	for (i = 7; i >= 0; i--) {
-		bool b0 = (a & 1<<i)? 1: 0;
-		bool b1 = (b & 1<<i)? 1: 0;
-		color = scr_color? (b0 == b1)? "": b0? pal->graph_true:pal->graph_false: "";
-		color_end = scr_color ? Color_RESET: "";
-		r_cons_printf ("%s%d%s ", color, b0, color_end);
+	r_io_nread_at (core->io, core->offset, &a, 1);
+	r_io_nread_at (core->io, addr, &b, 1);
+
+	/* Print offset header if enabled */
+	if (r_config_get_i (core->config, "hex.header")) {
+		const char *color = use_color? pal->offset: "";
+		char *n = r_str_newf ("0x%08" PFMT64x, core->offset);
+		const char *padding = r_str_pad (' ', strlen (n) - 10);
+		free (n);
+		r_cons_printf ("%s- offset -%s  7 6 5 4 3 2 1 0%s\n", color, padding, color_end);
 	}
-	color = scr_color? pal->graph_true: "";
-	color_end = scr_color? Color_RESET: "";
-	r_cons_printf ("\n%s0x%08"PFMT64x"%s  ", color, addr, color_end);
+
+	/* Set up bits and colors */
 	for (i = 7; i >= 0; i--) {
-		bool b0 = (a & 1<<i)? 1: 0;
-		bool b1 = (b & 1<<i)? 1: 0;
-		color = scr_color? (b0 == b1)? "": b1? pal->graph_true: pal->graph_false: "";
-		color_end = scr_color ? Color_RESET: "";
-		r_cons_printf ("%s%d%s ", color, b1, color_end);
+		a_bits[i] = a & (1 << i);
+		b_bits[i] = b & (1 << i);
+
+		if (use_color && a_bits[i] != b_bits[i]) {
+			a_colors[i] = a_bits[i]? pal->graph_true: pal->graph_false;
+			b_colors[i] = b_bits[i]? pal->graph_true: pal->graph_false;
+		} else {
+			a_colors[i] = "";
+			b_colors[i] = "";
+		}
+	}
+
+	r_cons_printf ("%s0x%08" PFMT64x "%s  ", use_color? pal->graph_false: "", core->offset, color_end);
+	for (i = 7; i >= 0; i--) {
+		r_cons_printf ("%s%d%s%s", a_colors[i], a_bits[i], color_end, i? " ": "");
+	}
+
+	r_cons_printf ("\n%s0x%08" PFMT64x "%s  ", use_color? pal->graph_true: "", addr, color_end);
+	for (i = 7; i >= 0; i--) {
+		r_cons_printf ("%s%d%s%s", b_colors[i], b_bits[i], color_end, i? " ": "");
 	}
 	r_cons_newline ();
 }
@@ -1063,14 +1075,12 @@ static int cmd_cmp(void *data, const char *input) {
 	ut64 val = UT64_MAX;
 	char *filled;
 	ut8 *buf;
-	ut16 v16;
-	ut32 v32;
-	ut64 v64;
+	utAny wordcmp;
 	FILE *fd;
 	const ut8* block = core->block;
 
 	switch (*input) {
-	case 'p':
+	case 'p': // "cp"
 		return cmd_cp (data, input + 1);
 		break;
 	case 'a': // "ca"
@@ -1107,7 +1117,7 @@ static int cmd_cmp(void *data, const char *input) {
 	case 'w':
 		return cmd_cmp_watcher (core, input + 1);
 		break;
-	case '*':
+	case '*': // c*"
 		if (!input[2]) {
 			eprintf ("Usage: cx* 00..22'\n");
 			return 0;
@@ -1116,16 +1126,14 @@ static int cmd_cmp(void *data, const char *input) {
 		val = radare_compare (core, block, (ut8 *) input + 2,
 			strlen (input + 2) + 1, '*');
 		break;
-	case ' ':
-	{
+	case ' ': { // "c"
 		char *str = strdup (input + 1);
 		int len = r_str_unescape (str);
 		val = radare_compare (core, block, (ut8 *) str, len, 0);
 		free (str);
+		break;
 	}
-	break;
-	case 'j':
-	{
+	case 'j': // "cj"
 		if (input[1] != ' ') {
 			eprintf ("Usage: cj [string]\n");
 		} else {
@@ -1134,9 +1142,8 @@ static int cmd_cmp(void *data, const char *input) {
 			val = radare_compare (core, block, (ut8 *) str, len, 'j');
 			free (str);
 		}
-	}
-	break;
-	case 'x':
+		break;
+	case 'x': // "cx"
 		switch (input[1]) {
 		case ' ':
 			mode = 0;
@@ -1190,7 +1197,7 @@ static int cmd_cmp(void *data, const char *input) {
 			free (buf);
 		}
 		break;
-	case 'f':
+	case 'f': // "cf"
 		if (input[1] != ' ') {
 			eprintf ("Please. use 'cf [file]'\n");
 			return false;
@@ -1260,20 +1267,27 @@ static int cmd_cmp(void *data, const char *input) {
 			free (home);
 		}
 		break;
-	case '1': // "c1"
-		__core_cmp_bits (core, r_num_math (core->num, input + 1));
+	case '1': { // "c1"
+		const char *arg = input[1]? r_str_trim_head_ro (input + 2): NULL;
+		if (input[1] == '?' || input[1] != ' ' || R_STR_ISEMPTY (arg)) {
+			r_core_cmd_help_match (core, help_msg_c, "c1", true);
+			break;
+		}
+
+		cmp_bits (core, r_num_math (core->num, arg));
 		break;
+	}
 	case '2': // "c2"
-		v16 = (ut16) r_num_math (core->num, input + 1);
-		val = radare_compare (core, block, (ut8 *) &v16, sizeof (v16), 0);
+		wordcmp.v16 = (ut16) r_num_math (core->num, input + 1);
+		val = radare_compare (core, block, (ut8 *) &wordcmp.v16, sizeof (wordcmp.v16), 0);
 		break;
 	case '4': // "c4"
-		v32 = (ut32) r_num_math (core->num, input + 1);
-		val = radare_compare (core, block, (ut8 *) &v32, sizeof (v32), 0);
+		wordcmp.v32 = (ut32) r_num_math (core->num, input + 1);
+		val = radare_compare (core, block, (ut8 *) &wordcmp.v32, sizeof (wordcmp.v32), 0);
 		break;
 	case '8': // "c8"
-		v64 = (ut64) r_num_math (core->num, input + 1);
-		val = radare_compare (core, block, (ut8 *) &v64, sizeof (v64), 0);
+		wordcmp.v64 = r_num_math (core->num, input + 1);
+		val = radare_compare (core, block, (ut8 *) &wordcmp.v64, sizeof (wordcmp.v64), 0);
 		break;
 	case 'c': // "cc"
 		if (input[1] == '?') { // "cc?"
