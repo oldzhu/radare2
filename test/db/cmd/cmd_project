@@ -391,7 +391,7 @@ om*~[2]
 EOF
 EXPECT=<<EOF
  3 * r-x 0x000021da bins/elf/analysis/main
-* 1 fd: 3 +0x00000000 0x00001337 - 0x00003510 r-x 
+* 1 fd: 3 +0x00000000 0x00001337 - 0x00003510 r-x
 om 3 0x00001337 0x000021da 0x00000000 r-x
 --
 --
@@ -646,5 +646,21 @@ rm .tmp/
 EOF
 EXPECT=<<EOF
 |           0x00400506      55             push rbp                    ; test
+EOF
+RUN
+
+NAME=Check Pc's return value
+FILE=bins/elf/analysis/main
+ARGS=-A -eprj.vc=false -edir.projects=.tmp/
+CMDS=<<EOF
+Pc aabb
+?v $?
+Ps hello
+Pc hello >/dev/null
+?v $?
+EOF
+EXPECT=<<EOF
+0x1
+0x0
 EOF
 RUN
