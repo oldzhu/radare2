@@ -797,7 +797,7 @@ static bool cb_asmarch(void *user, void *data) {
 	}
 	//if (!strcmp (node->value, "bf"))
 	//	r_config_set (core->config, "dbg.backend", "bf");
-	__setsegoff (core->config, node->value, core->rasm->bits);
+	__setsegoff (core->config, node->value, core->rasm->config->bits);
 
 	// set a default endianness
 	int bigbin = r_bin_is_big_endian (core->bin);
@@ -867,7 +867,7 @@ static bool cb_asmbits(void *user, void *data) {
 	if (!bits) {
 		return false;
 	}
-	if (bits == core->rasm->bits && bits == core->anal->bits && bits == core->dbg->bits) {
+	if (bits == core->rasm->config->bits && bits == core->anal->bits && bits == core->dbg->bits) {
 		// early optimization
 		return true;
 	}
@@ -963,9 +963,9 @@ static bool cb_asmfeatures(void *user, void *data) {
 		print_node_options (node);
 		return 0;
 	}
-	R_FREE (core->rasm->features);
+	R_FREE (core->rasm->config->features);
 	if (node->value[0]) {
-		core->rasm->features = strdup (node->value);
+		core->rasm->config->features = strdup (node->value);
 	}
 	return 1;
 }
@@ -1046,7 +1046,7 @@ static bool cb_asm_armimm(void *user, void *data) {
 static bool cb_asm_invhex(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->rasm->invhex = node->i_value;
+	core->rasm->config->invhex = node->i_value;
 	return true;
 }
 
@@ -1057,7 +1057,7 @@ static bool cb_asm_pcalign(void *user, void *data) {
 	if (align < 0) {
 		align = 0;
 	}
-	core->rasm->pcalign = align;
+	core->rasm->config->pcalign = align;
 	core->anal->pcalign = align;
 	return true;
 }
@@ -2647,7 +2647,7 @@ static bool cb_segoff(void *user, void *data) {
 static bool cb_seggrn(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->rasm->seggrn = node->i_value;
+	core->rasm->config->seggrn = node->i_value;
 	core->anal->seggrn = node->i_value;
 	core->print->seggrn = node->i_value;
 	return true;
@@ -3203,7 +3203,7 @@ static bool cb_log_config_traplevel(void *coreptr, void *nodeptr) {
 
 static bool cb_log_config_ts(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
-	r_log_set_ts (node->i_value);
+	r_log_show_ts (node->i_value);
 	return true;
 }
 
@@ -3218,6 +3218,12 @@ static bool cb_log_config_file(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	const char *value = node->value;
 	r_log_set_file (value);
+	return true;
+}
+
+static bool cb_log_origin(void *coreptr, void *nodeptr) {
+	RConfigNode *node = (RConfigNode *)nodeptr;
+	r_log_show_origin (r_str_is_true (node->value));
 	return true;
 }
 
@@ -3244,6 +3250,7 @@ static bool cb_dbg_verbose(void *user, void *data) {
 		break;
 	default:
 		core->dbg->verbose = false;
+		break;
 	}
 	return true;
 }
@@ -3269,7 +3276,7 @@ static bool cb_prjvctype(void *user, void *data) {
 	if (!strcmp (node->value, "rvc")) {
 		return true;
 	}
-	eprintf ("Unknown vc %s\n", node->value);
+	R_LOG_ERROR ("Unknown version control '%s'.", node->value);
 	return false;
 }
 
@@ -3714,15 +3721,13 @@ R_API int r_core_config_init(RCore *core) {
 
 	SETCB ("log.events", "false", &cb_log_events, "remote HTTP server to sync events with");
 #endif
-	SETICB ("log.level", R_LOGLVL_DEFAULT, cb_log_config_level, "Target log level/severity"\
-	 " (0:NONE, 1:INFO, 2:WARN, 3:DEBUG, 4:ERROR, 5:FATAL)"
-	);
-
+	SETICB ("log.level", R_LOGLVL_DEFAULT, cb_log_config_level, "Target log level/severity (0:FATAL 1:ERROR 2:INFO 3:WARN 4:DEBUG)");
 	SETCB ("log.ts", "false", cb_log_config_ts, "Show timestamp in log messages");
 
 	SETICB ("log.traplevel", 0, cb_log_config_traplevel, "Log level for trapping R2 when hit");
 	SETCB ("log.file", "", cb_log_config_file, "Logging output filename / path");
 	SETCB ("log.filter", "", cb_log_config_filter, "Filter only messages matching given origin");
+	SETCB ("log.origin", "false", cb_log_origin, "Show [origin] in log messages");
 	SETCB ("log.color", "false", cb_log_config_colors, "Should the log output use colors");
 	SETCB ("log.quiet", "false", cb_log_config_quiet, "Be quiet, dont log anything to console");
 
