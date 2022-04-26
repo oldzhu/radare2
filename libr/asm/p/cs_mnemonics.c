@@ -1,6 +1,6 @@
 static char *mnemonics(RAsm *a, int id, bool json) {
 	int i;
-	a->cur->disassemble (a, NULL, NULL, -1);
+	(void) a->cur->disassemble (a, NULL, NULL, -1);
 	if (id != -1) {
 		const char *name = cs_insn_name (cd, id);
 		if (json) {
@@ -14,9 +14,9 @@ static char *mnemonics(RAsm *a, int id, bool json) {
 		pj = pj_new ();
 		pj_a (pj);
 	} else {
-		r_strbuf_new ("");
+		buf = r_strbuf_new ("");
 	}
-	for (i = 1; ; i++) {
+	for (i = 1; i < 8000; i++) {
 		const char *op = cs_insn_name (cd, i);
 		if (!op) {
 			break;

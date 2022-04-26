@@ -2082,7 +2082,7 @@ static void do_ref_search(RCore *core, ut64 addr,ut64 from, ut64 to, struct sear
 			free (print_comment);
 			if (from <= ref->addr && to >= ref->addr) {
 				r_cons_printf ("%s 0x%" PFMT64x " [%s] %s\n",
-						buf_fcn, ref->addr, r_anal_xrefs_type_tostring (ref->type), str);
+						buf_fcn, ref->addr, r_anal_ref_type_tostring (ref->type), str);
 				if (*param->cmd_hit) {
 					ut64 here = core->offset;
 					r_core_seek (core, ref->addr, true);
@@ -3714,11 +3714,13 @@ reread:
 		case 'd': // "/cd"
 			{
 				RSearchKeyword *kw;
+				if (input[2] == 'j') {
+					param.outmode = R_MODE_JSON;
+				}
 				kw = r_search_keyword_new_hex ("308200003082", "ffff0000ffff", NULL);
 				r_search_reset (core->search, R_SEARCH_KEYWORD);
 				if (kw) {
 					r_search_kw_add (core->search, kw);
-					// eprintf ("Searching %d byte(s)...\n", kw->keyword_length);
 					r_search_begin (core->search);
 				} else {
 					eprintf ("bad pointer\n");
@@ -3729,6 +3731,9 @@ reread:
 		case 'g': // "/cg"
 			{
 				RSearchKeyword *kw;
+				if (input[2] == 'j') {
+					param.outmode = R_MODE_JSON;
+				}
 				r_search_reset (core->search, R_SEARCH_KEYWORD);
 				// PGP ASCII Armor according to https://datatracker.ietf.org/doc/html/rfc4880
 				kw = r_search_keyword_new_str ("BEGIN PGP PRIVATE KEY", NULL, NULL, false);
@@ -3775,6 +3780,9 @@ reread:
 		case 'a': // "/ca"
 			{
 				RSearchKeyword *kw;
+				if (input[2] == 'j') {
+					param.outmode = R_MODE_JSON;
+				}
 				kw = r_search_keyword_new_hexmask ("00", NULL);
 				// AES search is done over 40 bytes
 				kw->keyword_length = AES_SEARCH_LENGTH;
@@ -3787,6 +3795,9 @@ reread:
 		case 'r': // "/cr"
 			{
 				RSearchKeyword *kw;
+				if (input[2] == 'j') {
+					param.outmode = R_MODE_JSON;
+				}
 				kw = r_search_keyword_new_hexmask ("00", NULL);
 				// Private key search is at least 11 bytes
 				kw->keyword_length = PRIVATE_KEY_SEARCH_LENGTH;
