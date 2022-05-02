@@ -1293,8 +1293,20 @@ static int cmd_type(void *data, const char *input) {
 		}
 		break;
 	}
-	case ' ':
-		showFormat (core, input + 1, 0);
+	case ' ': // "t "
+		  {
+			  const char *token = r_str_trim_head_ro (input + 1);
+			  const char *typdef = sdb_const_get (core->anal->sdb_types, token, 0);
+			  // Tresolve typedef if any
+			  if (typdef && !strcmp (typdef, "typedef")) {
+				  r_strf_var (a, 128, "typedef.%s", token);
+				  const char *tokendef = sdb_const_get (core->anal->sdb_types, a, 0);
+				  if (tokendef) {
+					  token = tokendef;
+				  }
+			  }
+			  showFormat (core, token, 0);
+		  }
 		break;
 	// t* - list all types in 'pf' syntax
 	case 'j': // "tj"
@@ -1392,9 +1404,7 @@ static int cmd_type(void *data, const char *input) {
 			// TODO #7967 help refactor: move to detail
 			r_core_cmd_help (core, help_msg_td);
 			r_cons_printf ("Note: The td command should be put between double quotes\n"
-				"Example: \"td struct foo {int bar;int cow;};\""
-				"\nt");
-
+				"Example: \"td struct foo {int bar;int cow;};\"\n");
 		} else if (input[1] == ' ') {
 			char *tmp = r_str_newf ("%s;", input + 2);
 			if (!tmp) {
@@ -1408,11 +1418,11 @@ static int cmd_type(void *data, const char *input) {
 				free (out);
 			}
 			if (error_msg) {
-				eprintf ("%s", error_msg);
+				R_LOG_ERROR ("%s", error_msg);
 				free (error_msg);
 			}
 		} else {
-			eprintf ("Invalid use of td. See td? for help\n");
+			R_LOG_ERROR ("Invalid use of td. See td? for help\n");
 		}
 		break;
 	case 'x': {
@@ -1485,7 +1495,7 @@ static int cmd_type(void *data, const char *input) {
 				r_list_free (uniqList);
 			}
 			break;
-		case 't':
+		case 't': // "txt"
 		case ' ': // "tx " -- show which function use given type
 			type = (char *)r_str_trim_head_ro (input + 2);
 			r_list_foreach (core->anal->fcns, iter, fcn) {
@@ -1736,7 +1746,7 @@ static int cmd_type(void *data, const char *input) {
 			break;
 		}
 		break;
-	case 't': {
+	case 't': { // "tt"
 		if (!input[1] || input[1] == 'j') {
 			PJ *pj = NULL;
 			if (input[1] == 'j') {

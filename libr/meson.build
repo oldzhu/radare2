@@ -166,7 +166,6 @@ anal_plugins += [
   'sparc_cs',
   's390_cs',
   'tms320',
-  #'tms320c64x',
   'tricore',
   'v810',
   'v850',
@@ -201,7 +200,6 @@ asm_plugins += [
   'lm32',
   'm680x_cs',
   'malbolge',
-  'mcore',
   'mcs96',
   'mips_cs',
   'nios2',
@@ -215,10 +213,7 @@ asm_plugins += [
   'sh',
   'snes',
   'sparc_cs',
-  's390_cs',
   'tms320',
-  'tms320c64x',
-  'tricore',
   'v810',
   'v850',
   'vax',
@@ -229,7 +224,6 @@ asm_plugins += [
   'x86_nz',
   'xap',
   'xcore_cs',
-  'xtensa',
 ]
 
 if no_user_plugins
@@ -244,7 +238,6 @@ if no_user_plugins
       'mips_gnu',
       'ppc_gnu',
       'sparc_gnu',
-      's390_gnu',
       'v850_gnu',
     ]
     anal_plugins += [
@@ -252,6 +245,7 @@ if no_user_plugins
       'arm_gnu',
       'mips_gnu',
       'loongarch_gnu',
+      's390_gnu',
       'ppc_gnu',
       'sparc_gnu',
     ]

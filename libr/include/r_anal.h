@@ -1327,6 +1327,7 @@ typedef struct r_anal_plugin_t {
 	char *arch;
 	char *author;
 	char *version;
+	int endian; // bitmask to define little, big, etc.
 	char *cpus;
 	int bits;
 	int esil; // can do esil or not
@@ -1578,7 +1579,6 @@ R_API char *r_anal_get_reg_profile(RAnal *anal);
 R_API ut64 r_anal_get_bbaddr(RAnal *anal, ut64 addr);
 R_API bool r_anal_set_bits(RAnal *anal, int bits);
 R_API bool r_anal_set_os(RAnal *anal, const char *os);
-R_API void r_anal_set_cpu(RAnal *anal, const char *cpu);
 R_API void r_anal_set_big_endian(RAnal *anal, int boolean);
 R_API ut8 *r_anal_mask(RAnal *anal, int size, const ut8 *data, ut64 at);
 R_API void r_anal_trace_bb(RAnal *anal, ut64 addr);
@@ -2256,8 +2256,8 @@ extern RAnalPlugin r_anal_plugin_snes;
 extern RAnalPlugin r_anal_plugin_sparc_cs;
 extern RAnalPlugin r_anal_plugin_sparc_gnu;
 extern RAnalPlugin r_anal_plugin_s390_cs;
+extern RAnalPlugin r_anal_plugin_s390_gnu;
 extern RAnalPlugin r_anal_plugin_tms320;
-extern RAnalPlugin r_anal_plugin_tms320c64x;
 extern RAnalPlugin r_anal_plugin_tricore;
 extern RAnalPlugin r_anal_plugin_v810;
 extern RAnalPlugin r_anal_plugin_v850;

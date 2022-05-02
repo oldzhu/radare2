@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2021 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2022 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -218,7 +218,6 @@ R_API int r_anal_add(RAnal *anal, RAnalPlugin *foo) {
 R_API bool r_anal_use(RAnal *anal, const char *name) {
 	RListIter *it;
 	RAnalPlugin *h;
-
 	if (anal) {
 		r_list_foreach (anal->plugins, it, h) {
 			if (!h->name || strcmp (h->name, name)) {
@@ -231,6 +230,7 @@ R_API bool r_anal_use(RAnal *anal, const char *name) {
 			}
 #endif
 			anal->cur = h;
+			r_arch_use (anal->config, h->arch);
 			r_anal_set_reg_profile (anal, NULL);
 			return true;
 		}
@@ -325,15 +325,6 @@ R_API bool r_anal_set_bits(RAnal *anal, int bits) {
 		return true;
 	}
 	return false;
-}
-
-R_API void r_anal_set_cpu(RAnal *anal, const char *cpu) {
-	free (anal->config->cpu);
-	anal->config->cpu = cpu ? strdup (cpu) : NULL;
-	int v = r_anal_archinfo (anal, R_ANAL_ARCHINFO_ALIGN);
-	if (v != -1) {
-		anal->config->pcalign = v;
-	}
 }
 
 R_API void r_anal_set_big_endian(RAnal *anal, int bigend) {
