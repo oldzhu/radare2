@@ -9,6 +9,8 @@
 #define FMT_QUIET 'q'
 #define FMT_EMOJI 'e'
 
+R_TH_LOCAL RList *dirstack = NULL;
+
 static char *showfile(char *res, const int nth, const char *fpath, const char *name, int printfmt, bool needs_newline) {
 #if __UNIX__
 	struct stat sb;
@@ -514,7 +516,8 @@ R_API char *r_syscmd_mktemp(const char *dir) {
 	const char *space = strchr (dir, ' ');
 	const char *suffix = space? r_str_trim_head_ro (space): "";
 	if (!*suffix || (!strncmp (suffix, "-d ", 3) && strstr (suffix, " -"))) {
-		return strdup ("Usage: mktemp [-d] [file|directory]\n"); 
+		eprintf ("Usage: mktemp [-d] [file|directory]\n");
+		return NULL;
 	}
 	bool dodir = (bool) strstr (suffix, "-d");
 	int ret;
@@ -522,6 +525,10 @@ R_API char *r_syscmd_mktemp(const char *dir) {
 		? strdup (suffix + 3): strdup (suffix);
 	r_str_trim (dirname);
 	char *arg = NULL;
+	if (!*dirname || *dirname == '-') {
+		eprintf ("Usage: mktemp [-d] [file|directory]\n");
+		return NULL;
+	}
 	int fd = r_file_mkstemp (dirname, &arg);
 	if (fd != -1) {
 		ret = 1;
@@ -534,34 +541,83 @@ R_API char *r_syscmd_mktemp(const char *dir) {
 		ret = r_sys_mkdirp (arg);
 	}
 	if (!ret) {
-		char *res = r_str_newf ("Cannot create '%s'\n", dirname);
+		eprintf ("Cannot create '%s'\n", dirname);
 		free (dirname);
-		return res;
+		return NULL;
 	}
-	free (dirname);
-	return NULL;
+	return dirname;
 }
 
-R_API char *r_syscmd_mkdir(const char *dir) {
+R_API bool r_syscmd_mkdir(const char *dir) {
 	const char *space = strchr (dir, ' ');
 	const char *suffix = space? r_str_trim_head_ro (space): "";
 	if (!*suffix || (!strncmp (suffix, "-p ", 3) && strstr (suffix, " -"))) {
-		return strdup ("Usage: mkdir [-p] [directory]\n");
+		eprintf ("Usage: mkdir [-p] [directory]\n");
+		return false;
 	}
-	int ret;
 	char *dirname = (!strncmp (suffix, "-p ", 3))
 		? strdup (suffix + 3): strdup (suffix);
 	r_str_trim (dirname);
-	ret = r_sys_mkdirp (dirname);
-	if (!ret) {
+	if (!*dirname || *dirname == '-') {
+		eprintf ("Usage: mkdir [-p] [directory]\n");
+		free (dirname);
+		return false;
+	}
+	if (!r_sys_mkdirp (dirname)) {
 		if (r_sys_mkdir_failed ()) {
-			char *res = r_str_newf ("Cannot create '%s'\n", dirname);
+			eprintf ("Cannot create '%s'\n", dirname);
 			free (dirname);
-			return res;
+			return false;
 		}
 	}
 	free (dirname);
-	return NULL;
+	return true;
+}
+
+R_API bool r_syscmd_pushd(const char *input) {
+	if (!dirstack) {
+		dirstack = r_list_newf (free);
+	}
+	char *cwd = r_sys_getdir ();
+	if (!cwd) {
+		eprintf ("Where am I?\n");
+		return false;
+	}
+	bool suc = r_sys_chdir (input);
+	if (suc) {
+		r_list_push (dirstack, cwd);
+	} else {
+		eprintf ("Cannot chdir\n");
+	}
+	return suc;
+}
+
+R_API bool r_syscmd_popd(void) {
+	if (!dirstack) {
+		return false;
+	}
+	char *d = r_list_pop (dirstack);
+	if (d) {
+		r_sys_chdir (d);
+		eprintf ("%s\n", d);
+		free (d);
+	}
+	if (r_list_empty (dirstack)) {
+		r_list_free (dirstack);
+		dirstack = NULL;
+		return false;
+	}
+	return true;
+}
+
+R_API bool r_syscmd_popalld(void) {
+	if (!dirstack || r_list_empty (dirstack)) {
+		return false;
+	}
+	while (r_syscmd_popd ()) {
+		// wait for it
+	}
+	return true;
 }
 
 R_API bool r_syscmd_mv(const char *input) {
