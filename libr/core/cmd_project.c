@@ -1,21 +1,21 @@
-/* radare - LGPL - Copyright 2009-2021 - pancake */
+/* radare - LGPL - Copyright 2009-2022 - pancake */
 
-#include "r_config.h"
-#include "r_core.h"
-#include "r_util.h"
+#include <r_core.h>
 
 static const char *help_msg_P[] = {
 	"Usage:", "P[?osi] [file]", "Project management",
-	"P", "", "list all projects",
+	"P", " [file]", "open project (formerly Po)",
+	"P.", "", "show current loaded project (see prj.name)",
+	"P+", " [file]", "save project (same as Ps, but doesnt checks for changes)",
+	"P-", " [file]", "delete project (alias for Pd)",
 	"Pc", " [file]", "show project script to console",
 	"Pd", " [file]", "delete project",
 	"Pi", " [file]", "show project information",
+	"Pl", "", "list all projects",
+	"Pn", " -", "edit current loaded project notes using cfg.editor",
 	"Pn", "[j]", "manage notes associated with the project",
-	"Pn", " -", "edit notes with cfg.editor",
-	"Po", " [file]", "open project",
-	"Ps", " [file]", "save project",
+	"Ps", " [file]", "save project (see dir.projects)",
 	"PS", " [file]", "save script file",
-	"P-", " [file]", "delete project (alias for Pd)",
 	"NOTE:", "", "the 'e prj.name' evar can save/open/rename/list projects.",
 	"NOTE:", "", "see the other 'e??prj.' evars for more options.",
 	"NOTE:", "", "project are stored in " R_JOIN_2_PATHS ("~", R2_HOME_PROJECTS),
@@ -65,7 +65,8 @@ static int cmd_project(void *data, const char *input) {
 			eprintf ("Usage: Pc [prjname]\n");
 		}
 		break;
-	case 'o': // "Po"
+	case ' ': // "P [prj]"
+	case 'o': // "Po" DEPRECATED
 		if (input[1] == '&') { // "Po&"
 			r_core_cmdf (core, "& Po %s", file);
 		} else if (input[1]) { // "Po"
@@ -84,6 +85,8 @@ static int cmd_project(void *data, const char *input) {
 			eprintf ("Usage: Pd [prjname]   # Use P or Pl to list the available projects.\n");
 		}
 		break;
+	case '+': // "P+"
+		// xxx
 	case 's': // "Ps"
 		if (R_STR_ISEMPTY (file)) {
 			file = str;
@@ -226,7 +229,7 @@ static int cmd_project(void *data, const char *input) {
 			}
 		}
 		break;
-	case 'i': // "Pi"
+	case 'i': // "Pi" DEPRECATE
 		if (file && *file) {
 			char *prj_name = r_core_project_name (core, file);
 			if (!R_STR_ISEMPTY (prj_name)) {
@@ -238,8 +241,17 @@ static int cmd_project(void *data, const char *input) {
 			r_cons_println (core->prj->path);
 		}
 		break;
+	case '.': // "P."
+		if (file && *file) {
+			char *prj_name = r_core_project_name (core, file);
+			if (R_STR_ISNOTEMPTY (prj_name)) {
+				r_cons_println (prj_name);
+				free (prj_name);
+			}
+		}
+		break;
+	case 'P':
 	case 'l':
-	case 0:
 	case 'j': // "Pj"
 		r_core_project_list (core, input[0]);
 		break;
