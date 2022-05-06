@@ -6613,6 +6613,8 @@ virtualmouse:
 				}
 			}
 			__set_panel_addr (core, cur, core->offset);
+		} else if (!strcmp (cur->model->title, "Stack")) {
+			r_config_set_i (core->config, "stack.delta", 0);
 		}
 		break;
 	case '?':
