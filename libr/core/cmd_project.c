@@ -3,13 +3,15 @@
 #include <r_core.h>
 
 static const char *help_msg_P[] = {
-	"Usage:", "P[?osi] [file]", "Project management",
+	"Usage:", "P[?.+-*cdilnsS] [file]", "Project management",
 	"P", " [file]", "open project (formerly Po)",
 	"P.", "", "show current loaded project (see prj.name)",
 	"P+", " [file]", "save project (same as Ps, but doesnt checks for changes)",
 	"P-", " [file]", "delete project (alias for Pd)",
+	"P*", "", "save project (same as Ps, but doesnt checks for changes)",
+	"P!", "([cmd])", "open a shell in the project directory",
 	"Pc", " [file]", "show project script to console",
-	"Pd", " [file]", "delete project",
+	"Pd", " [N]", "diff Nth commit",
 	"Pi", " [file]", "show project information",
 	"Pl", "", "list all projects",
 	"Pn", " -", "edit current loaded project notes using cfg.editor",
@@ -65,8 +67,10 @@ static int cmd_project(void *data, const char *input) {
 			eprintf ("Usage: Pc [prjname]\n");
 		}
 		break;
-	case ' ': // "P [prj]"
 	case 'o': // "Po" DEPRECATED
+		eprintf ("TODO: Po is deprecated, use 'P [prjname]' instead\n");
+		// fallthru
+	case ' ': // "P [prj]"
 		if (input[1] == '&') { // "Po&"
 			r_core_cmdf (core, "& Po %s", file);
 		} else if (input[1]) { // "Po"
@@ -78,11 +82,26 @@ static int cmd_project(void *data, const char *input) {
 		}
 		break;
 	case 'd': // "Pd"
+		{
+			char *pdir = r_file_new (
+				r_config_get (core->config, "dir.projects"),
+				r_config_get (core->config, "prj.name"), NULL);
+			if (r_syscmd_pushd (pdir)) {
+				if (r_file_is_directory (".git")) {
+					r_sys_cmdf ("git diff @~%d", atoi (input + 1));
+				} else {
+					eprintf ("TODO: Not a git project. Diffing projects is WIP for now.\n");
+				}
+				r_syscmd_popd ();
+			}
+			free (pdir);
+		}
+		break;
 	case '-': // "P-"
 		if (R_STR_ISNOTEMPTY (file)) {
 			r_core_project_delete (core, file);
 		} else {
-			eprintf ("Usage: Pd [prjname]   # Use P or Pl to list the available projects.\n");
+			eprintf ("Usage: P- [prjname]   # Use Pl to list the available projects.\n");
 		}
 		break;
 	case '+': // "P+"
@@ -98,6 +117,32 @@ static int cmd_project(void *data, const char *input) {
 		} else {
 			r_cons_eprintf ("Use: Ps [projectname]\n");
 		}
+		break;
+	case '!': // "P!"
+		if (input [1] == '?') {
+			eprintf ("Usage: P!([cmd]) - run shell or command in project directory\n");
+		} else if (r_config_get_b (core->config, "scr.interactive")) {
+			char *pdir = r_file_new (
+				r_config_get (core->config, "dir.projects"),
+				r_config_get (core->config, "prj.name"), NULL);
+			r_syscmd_pushd (pdir);
+			free (pdir);
+			if (R_STR_ISNOTEMPTY (r_str_trim_head_ro (input + 1))) {
+				r_sys_cmdf ("%s", input + 1);
+			} else {
+#if __WINDOWS__
+				r_sys_cmdf ("cmd");
+#else
+				r_sys_cmdf ("sh");
+#endif
+			}
+			r_syscmd_popd ();
+		} else {
+			R_LOG_ERROR ("P! requires scr.interactive to open a shell");
+		}
+		break;
+	case '*': // "P*"
+		r_core_project_save_script (core, "/dev/stdout", R_CORE_PRJ_ALL);
 		break;
 	case 'S': // "PS"
 		if (input[1] == ' ') {
