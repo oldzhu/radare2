@@ -3450,8 +3450,21 @@ static bool anal_block_cb(RAnalBlock *bb, BlockRecurseCtx *ctx) {
 	if (!buf) {
 		return false;
 	}
-	(void) r_io_read_at (ctx->core->io, bb->addr, buf, bb->size);
-
+	bool skip_bb = false;
+	if (r_io_read_at (ctx->core->io, bb->addr, buf, bb->size) < 1) {
+		skip_bb = true;
+	} else {
+		if (bb->size > 1024) {
+			// optimization skipping huge nop bbs
+			ut8 zbuf[8] = {0};
+			if (!memcmp (buf, zbuf, sizeof (zbuf))) {
+				skip_bb = true;
+			}
+		}
+	}
+	if (skip_bb) {
+		return false;
+	}
 	int *parent_reg_set = r_pvector_at (&ctx->reg_set, r_pvector_len (&ctx->reg_set) - 1);
 	int *reg_set = R_NEWS (int, REG_SET_SIZE);
 	memcpy (reg_set, parent_reg_set, REG_SET_SIZE * sizeof (int));
@@ -5704,10 +5717,17 @@ R_IPI int r_core_search_value_in_range(RCore *core, bool relative, RInterval sea
 				if (!r_io_map_locate (core->io, &next, 1, 0)) {
 					from += sizeof (buf);
 				} else {
-					from += (next - from);
+					if (next > from) {
+						from += (next - from);
+					} else {
+						from ++;
+					}
 				}
 				continue;
 			}
+		}
+		if (vsize > size) {
+			break;
 		}
 		for (i = 0; i <= (size - vsize); i++) {
 			void *v = (buf + i);
@@ -5777,7 +5797,11 @@ R_IPI int r_core_search_value_in_range(RCore *core, bool relative, RInterval sea
 		if (size == to - from) {
 			break;
 		}
-		from += size - vsize + 1;
+		if (size > vsize + 1) {
+			from += size - vsize + 1;
+		} else {
+			from += 1;
+		}
 	}
 beach:
 	r_cons_break_pop ();
