@@ -22,7 +22,11 @@ static int vax_buffer_read_memory(bfd_vma memaddr, bfd_byte *myaddr, ut32 length
 	if (delta < 0) {
 		return -1; // disable backward reads
 	}
-	memcpy (myaddr, bytes + delta, R_MIN (length, bytes_size));
+	if (delta >= bytes_size) {
+		return -1;
+	}
+	const int left = bytes_size - delta;
+	memcpy (myaddr, bytes + delta, R_MIN (length, left));
 	return 0;
 }
 
@@ -173,8 +177,8 @@ static int vax_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *buf, int len, 
 		break;
 	case 0xfb: // calls
 		op->type = R_ANAL_OP_TYPE_CALL;
-		if (len > 3 && op->size <= len) {
-			int oa = 3;
+		if (len > 6 && op->size <= len) {
+			const int oa = 3;
 			ut32 delta = buf[oa];
 			delta |= (ut32)(buf[oa + 1]) << 8;
 			delta |= (ut32)(buf[oa + 2]) << 16;
