@@ -595,13 +595,14 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		}
 		ut8 buf[sizeof (ut64)] = {0};
 		(void)r_io_read_at (core->io, n, buf, R_MIN (sizeof (buf), refsz));
+		bool be = core->rasm->config->big_endian;
 		switch (refsz) {
 		case 8:
-			return r_read_ble64 (buf, core->print->big_endian);
+			return r_read_ble64 (buf, be);
 		case 4:
-			return r_read_ble32 (buf, core->print->big_endian);
+			return r_read_ble32 (buf, be);
 		case 2:
-			return r_read_ble16 (buf, core->print->big_endian);
+			return r_read_ble16 (buf, be);
 		case 1:
 			return r_read_ble8 (buf);
 		default:
@@ -2999,9 +3000,11 @@ R_API bool r_core_init(RCore *core) {
 	core->lastcmd = NULL;
 	core->cmdlog = NULL;
 
-	sdb_free (core->print->charset->db);
-	core->print->charset->db = sdb_ns (core->sdb, "charset", 1);
-	core->print->charset->db->refs++; // increase reference counter to avoid double-free
+	if (core->print->charset) {
+		sdb_free (core->print->charset->db);
+		core->print->charset->db = sdb_ns (core->sdb, "charset", 1);
+		core->print->charset->db->refs++; // increase reference counter to avoid double-free
+	}
 	// ideally sdb_ns_set should be used here, but it doesnt seems to work well. must fix
 	// sdb_ns_set (DB, "charset", core->print->charset->db);
 	core->stkcmd = NULL;
@@ -3051,8 +3054,10 @@ R_API bool r_core_init(RCore *core) {
 	core->rasm->num = core->num;
 	r_asm_set_user_ptr (core->rasm, core);
 	core->anal = r_anal_new ();
+	r_ref_set (core->print->config, core->rasm->config);
 	r_ref_set (core->anal->config, core->rasm->config);
 	r_ref_set (core->anal->reg->config, core->rasm->config);
+	// RAnal.new() doesnt initializes this field. but it should be refcounted
 	core->anal->print = core->print;
 	r_anal_set_bits (core->anal, 32); // core->rasm->config->bits);
 	r_anal_bind (core->anal, &core->rasm->analb);
