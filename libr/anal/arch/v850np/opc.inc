@@ -12,21 +12,21 @@ static unsigned long G_pos;
 #define V850NP_INSERT(n) ut64 insert_##n(ut64 insn, long value, const char ** errmsg)
 
 /* Regular opcodes.  */
-#define OP(x)		((x & 0x3f) << 5)
-#define OP_MASK		OP (0x3f)
+#define OP(x) ((x & 0x3f) << 5)
+#define OP_MASK OP (0x3f)
 
 /* Conditional branch opcodes (Format III).  */
-#define BOP(x)		((0x58 << 4) | (x & 0x0f))
-#define BOP_MASK	((0x78 << 4) | 0x0f)
+#define BOP(x) ((0x58 << 4) | (x & 0x0f))
+#define BOP_MASK ((0x78 << 4) | 0x0f)
 
 /* Conditional branch opcodes (Format VII).  */
-#define BOP7(x)		(0x107e0 | (x & 0xf))
-#define BOP7_MASK	(0x1ffe0 | 0xf)
+#define BOP7(x)	(0x107e0 | (x & 0xf))
+#define BOP7_MASK (0x1ffe0 | 0xf)
 
-#define one(x)		((unsigned int) (x))
-#define two(x,y)	((unsigned int) (x) | ((unsigned int) (y) << 16))
+#define one(x) ((unsigned int) (x))
+#define two(x,y) ((unsigned int) (x) | ((unsigned int) (y) << 16))
 
-static const char *not_valid    = "displacement value is not in range and is not aligned";
+static const char *not_valid = "displacement value is not in range and is not aligned";
 static const char *out_of_range = "displacement value is out of range";
 static const char *not_aligned  = "displacement value is not aligned";
 static const char *immediate_out_of_range = "immediate value is out of range";
@@ -41,9 +41,11 @@ static const char *vector5_out_of_range = "vector5 is out of range";
 static const char *imm10_out_of_range = "imm10 is out of range";
 static const char *sr_selid_out_of_range = "SR/SelID is out of range";
 
-bool v850_msg_is_out_of_range(const char* msg) {
+#if 0
+static bool v850_msg_is_out_of_range(const char* msg) {
 	return msg == out_of_range || msg == immediate_out_of_range || msg == branch_out_of_range;
 }
+#endif
 
 static V850NP_INSERT(i5div1) {
 	if (value > 30 || value < 2) {
@@ -81,7 +83,7 @@ static V850NP_EXTRACT(i5div2) {
 
 static V850NP_INSERT(i5div3) {
 	if (value > 32 || value < 2) {
-		* errmsg = (value&1)? not_valid: out_of_range;
+		* errmsg = (value & 1)? not_valid: out_of_range;
 	} else if (value & 1) {
 		* errmsg = not_aligned;
 	}
@@ -98,7 +100,7 @@ static V850NP_EXTRACT(i5div3) {
 
 static V850NP_INSERT(d5_4) {
 	if (value > 0x1f || value < 0) {
-		*errmsg = (value&1)? not_valid: out_of_range;
+		*errmsg = (value & 1)? not_valid: out_of_range;
 	} else if (value & 1) {
 		*errmsg = not_aligned;
 	}
@@ -242,7 +244,7 @@ static V850NP_INSERT(d23) {
 
 static V850NP_INSERT(d23_align1) {
 	if (value > 0x3fffff || value < -0x400000) {
-		*errmsg = (value&1)? not_valid: out_of_range;
+		*errmsg = (value & 1)? not_valid: out_of_range;
 	} else if (value & 0x1) {
 		*errmsg = not_aligned;
 	}
@@ -919,9 +921,10 @@ const struct v850_opcode v850_opcodes[] = {
 	{ "ld.w", two (0x0780, 0x0009), two (0xffe0, 0x001f), {D23_ALIGN1, R1, R3}, 2, V850_CPU_E2_UP, R_ANAL_OP_TYPE_LOAD, "#0,[4],#1,=" },
 	{ "ld.w23", two (0x0780, 0x0009), two (0x07e0, 0x001f), {D23_ALIGN1, R1, R3}, 2, V850_CPU_E2_UP | V850_CPU_OPTION_ALIAS, R_ANAL_OP_TYPE_LOAD },
 	{ "ldl.w", two (0x07e0, 0x0378), two (0xffe0, 0x07ff), {R1, R3}, 1, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
-	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, SR2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
-	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, SR2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
-	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, OLDSR2}, 0, (V850_CPU_ALL & (~ V850_CPU_E3V5_UP)), R_ANAL_OP_TYPE_LOAD },
+	/// XXX load status word is always zero 
+	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, SR2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD, "#1,#0,:=" },
+	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, SR2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD, "#1,#0,:=" },
+	{ "ldsr", two (0x07e0, 0x0020), two (0x07e0, 0x07ff), {R1, OLDSR2}, 0, (V850_CPU_ALL & (~ V850_CPU_E3V5_UP)), R_ANAL_OP_TYPE_LOAD, "#1,#0,:=" },
 	{ "ldtc.gr", two (0x07e0, 0x0032), two (0x07e0, 0xffff), {R1, R2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
 	{ "ldtc.sr", two (0x07e0, 0x0030), two (0x07e0, 0x07ff), {R1, SR2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
 	{ "ldtc.sr", two (0x07e0, 0x0030), two (0x07e0, 0x07ff), {R1, SR2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_LOAD },
@@ -1018,21 +1021,21 @@ const struct v850_opcode v850_opcodes[] = {
 	{ "sst.w", one (0x0501), one (0x0781), {R2, D8_6U,EP}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE },
 	{ "stacch", two (0x07e0, 0x0bca), two (0x07ff, 0xffff), {R2}, 0, V850_CPU_E2_UP | V850_CPU_OPTION_EXTENSION },
 	{ "staccl", two (0x07e0, 0x0bc8), two (0x07ff, 0xffff), {R2}, 0, V850_CPU_E2_UP | V850_CPU_OPTION_EXTENSION },
-	{ "st.b", two (0x0740, 0x0000), two (0x07e0, 0x0000), {R2, D16, R1}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE, "#0,#1,#2,+,~,=[4]" },
-	{ "st.b", two (0x0780, 0x000d), two (0x07e0, 0x000f), {R3, D23, R1}, 3, V850_CPU_E2_UP, R_ANAL_OP_TYPE_STORE, "#0,#1,#2,+,~,=[4]" },
+	{ "st.b", two (0x0740, 0x0000), two (0x07e0, 0x0000), {R2, D16, R1}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE, "#1,#0,=[1]" },
+	{ "st.b", two (0x0780, 0x000d), two (0x07e0, 0x000f), {R3, D23, R1}, 3, V850_CPU_E2_UP, R_ANAL_OP_TYPE_STORE, "#1,#0,=[1]" }, // ",#0,#1,#2,+,~,=[1]" },
 	{ "st.b23", two (0x0780, 0x000d), two (0x07e0, 0x000f), {R3, D23, R1}, 3, V850_CPU_E2_UP | V850_CPU_OPTION_ALIAS, R_ANAL_OP_TYPE_STORE },
 	{ "st.dw", two (0x07a0, 0x000f), two (0xffe0, 0x001f), {R3_EVEN, D23_ALIGN1, R1}, 3, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
 	{ "st.dw23", two (0x07a0, 0x000f), two (0xffe0, 0x001f), {R3_EVEN, D23_ALIGN1, R1}, 3, V850_CPU_E3V5_UP | V850_CPU_OPTION_ALIAS, R_ANAL_OP_TYPE_STORE },
-	{ "st.h", two (0x0760, 0x0000), two (0x07e0, 0x0001), {R2, D16_15, R1}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[4]" },
-	{ "st.h", two (0x07a0, 0x000d), two (0x07e0, 0x000f), {R3, D23_ALIGN1, R1}, 3, V850_CPU_E2_UP, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[4]" },
+	{ "st.h", two (0x0760, 0x0000), two (0x07e0, 0x0001), {R2, D16_15, R1}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[2]" },
+	{ "st.h", two (0x07a0, 0x000d), two (0x07e0, 0x000f), {R3, D23_ALIGN1, R1}, 3, V850_CPU_E2_UP, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[2]" },
 	{ "st.h23", two (0x07a0, 0x000d), two (0x07e0, 0x000f), {R3, D23_ALIGN1, R1}, 3, V850_CPU_E2_UP | V850_CPU_OPTION_ALIAS, R_ANAL_OP_TYPE_STORE },
 	{ "st.w", two (0x0760, 0x0001), two (0x07e0, 0x0001), {R2, D16_15, R1}, 3, V850_CPU_ALL, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[4]" },
 	{ "st.w", two (0x0780, 0x000f), two (0x07e0, 0x000f), {R3, D23_ALIGN1, R1}, 3, V850_CPU_E2_UP, R_ANAL_OP_TYPE_STORE, "#0,#1,~,=[4]" },
 	{ "st.w23", two (0x0780, 0x000f), two (0x07e0, 0x000f), {R3, D23_ALIGN1, R1}, 3, V850_CPU_E2_UP | V850_CPU_OPTION_ALIAS, R_ANAL_OP_TYPE_STORE },
-	{ "stc.w", two (0x07e0, 0x037a), two (0xffe0, 0x07ff), {R3, R1}, 2, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
-	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {SR1, R2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
-	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {SR1, R2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
-	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {OLDSR1, R2}, 0, (V850_CPU_ALL & (~ V850_CPU_E3V5_UP)), R_ANAL_OP_TYPE_STORE },
+	{ "stc.w", two (0x07e0, 0x037a), two (0xffe0, 0x07ff), {R3, R1}, 2, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE, "#0,#1,=[4]" },
+	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {SR1, R2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_MOV, "#0,#1,:=" },
+	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {SR1, R2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_MOV, "#0,#1,:=" },
+	{ "stsr", two (0x07e0, 0x0040), two (0x07e0, 0x07ff), {OLDSR1, R2}, 0, (V850_CPU_ALL & (~ V850_CPU_E3V5_UP)), R_ANAL_OP_TYPE_MOV, "#0,#1,:=" },
 	{ "sttc.gr", two (0x07e0, 0x0052), two (0x07e0, 0xffff), {R1, R2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
 	{ "sttc.sr", two (0x07e0, 0x0050), two (0x07e0, 0x07ff), {SR1, R2, SELID}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },
 	{ "sttc.sr", two (0x07e0, 0x0050), two (0x07e0, 0x07ff), {SR1, R2}, 0, V850_CPU_E3V5_UP, R_ANAL_OP_TYPE_STORE },

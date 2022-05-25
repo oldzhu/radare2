@@ -35,6 +35,10 @@ static void print_value(RStrBuf *sb, int flags, ut64 memaddr, long value) {
 
 static long get_operand_value(const struct v850_operand *operand, unsigned long insn, const ut8* buffer, size_t len, bool *invalid) {
 	if ((operand->flags & V850E_IMMEDIATE16) || (operand->flags & V850E_IMMEDIATE16HI)) {
+		if (len < 2) {
+			// truncated
+			return 0;
+		}
 		ut32 value = r_read_le16 (buffer);
 		if (operand->flags & V850E_IMMEDIATE16HI) {
 			value <<= 16;
@@ -45,27 +49,36 @@ static long get_operand_value(const struct v850_operand *operand, unsigned long 
 	}
 
 	if (operand->flags & V850E_IMMEDIATE23) {
+		if (len < 2) {
+			// truncated
+			return 0;
+		}
 		ut32 value = r_read_le16 (buffer);
 		return (operand->extract) (value, invalid);
 	}
 	if (operand->flags & V850E_IMMEDIATE32) {
+		if (len < 4) {
+			// truncated
+			return 0;
+		}
 		// len += 4;
 		return r_read_le32 (buffer);
 	}
 	if (operand->extract) {
-		return (operand->extract) (insn, invalid);
+		return operand->extract (insn, invalid);
 	}
 	ut64 value = (operand->bits == -1)
 		? (insn & operand->shift)
-		: (insn >> operand->shift) & ((1ul << operand->bits) - 1);
+		: (insn >> operand->shift) & ((1UL << operand->bits) - 1);
 	if (operand->flags & V850_OPERAND_SIGNED) {
-		unsigned long sign = 1ul << (operand->bits - 1);
+		unsigned long sign = 1UL << (operand->bits - 1);
 		value = (value ^ sign) - sign;
 	}
 	return value;
 }
 
 static const char *get_v850_sreg_name(size_t reg) {
+#if 0
 	static const char *const v850_sreg_names[] = {
 		"eipc/vip/mpm", "eipsw/mpc", "fepc/tid", "fepsw/ppa", "ecr/vmecr", "psw/vmtid",
 		"sr6/fpsr/vmadr/dcc", "sr7/fpepc/dc0",
@@ -76,6 +89,18 @@ static const char *get_v850_sreg_name(size_t reg) {
 		"bpav/dpa1u", "bpam/dpa2l", "bpdv/dpa2u", "bpdm/dpa3l", "eiwr/dpa3u",
 		"fewr", "dbwr", "bsel"
 	};
+#else
+	static const char *const v850_sreg_names[] = {
+		"eipc", "eipsw", "fepc", "fepsw", "ecr", "psw",
+		"sr6", "sr7",
+		"sr8", "sr9", "sr10", "sr11",
+		"sr12", "eiic", "feic", "dbic",
+		"ctpc", "ctpsw", "dbpc", "dbpsw", "ctbp",
+		"dir", "bpc", "asid",
+		"bpav", "bpam", "bpdv", "bpdm", "eiwr",
+		"fewr", "dbwr", "bsel"
+	};
+#endif
 	if (reg < R_ARRAY_SIZE (v850_sreg_names)) {
 		return v850_sreg_names[reg];
 	}
@@ -317,6 +342,9 @@ char *distillate(v850np_inst *inst, const char *esilfmt) {
 	return res;
 }
 
+// do absolute addressing on references relative to r0
+#define ABS_R0REF 1
+
 static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, const ut8* buffer, int buffer_size, unsigned long insn) {
 	const v850_opcode *op = (v850_opcode *) v850_opcodes;
 	const struct v850_operand *operand = NULL;
@@ -389,13 +417,17 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 		inst->value = 0;
 		opindex_ptr = op->operands;
 		opnum = 1;
+		long prevalue = 0;
+		long value = 0;
 		for (; *opindex_ptr; opindex_ptr++, opnum++) {
 			bool square = false;
 
+			bool done = false;
 			operand = &v850_operands[*opindex_ptr];
+			prevalue = value;
 
 			bool invalid = false;
-			long value = get_operand_value (operand, insn, buffer + 2, buffer_size - 2, &invalid);
+			value = get_operand_value (operand, insn, buffer + 2, buffer_size - 2, &invalid);
 			if (invalid) {
 				// eprintf ("Warning: Cannot get operand value.\n");
 				break;
@@ -416,8 +448,20 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 			} else if (opnum > 1
 					&& (v850_operands[*(opindex_ptr - 1)].flags & V850_OPERAND_DISP)
 					&& opnum == memop) {
+#if ABS_R0REF
+				if (value == 0) { // "-X[r0]"
+					ut32 addr = UT32_MAX + 1 + prevalue;
+					r_strbuf_appendf (sb, "0x%08"PFMT32x, addr);
+					inst->value = addr;
+					done = true;
+				} else {
+					r_strbuf_appendf (sb, "%s[", prefix);
+					square = true;
+				}
+#else
 				r_strbuf_appendf (sb, "%s[", prefix);
 				square = true;
+#endif
 			} else if (opnum == 2 && (op->opcode == 0x00e407e0 /* clr1 */
 						|| op->opcode == 0x00e207e0 /* not1 */
 						|| op->opcode == 0x00e007e0 /* set1 */
@@ -442,6 +486,7 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 					| V850_OPERAND_PREFOP
 					| V850_OPERAND_FLOAT_CC);
 
+			if (!done)
 			switch (flag) {
 			case V850_OPERAND_REG:
 				r_strbuf_append (sb, get_v850_reg_name (value));
@@ -476,8 +521,23 @@ static bool v850np_disassemble(v850np_inst *inst, int cpumodel, ut64 memaddr, co
 				r_strbuf_append (sb, get_v850_vreg_name (value));
 				break;
 			default:
-				print_value (sb, operand->flags, memaddr, value);
-				inst->value = value;
+				{
+#if ABS_R0REF
+					const struct v850_operand *nextop = &v850_operands[opindex_ptr[1]];
+					long nextvalue = get_operand_value (nextop, insn, buffer + 2, buffer_size - 2, &invalid);
+					if (opnum > 0 && (v850_operands[*(opindex_ptr)].flags & V850_OPERAND_DISP)
+							&& opnum + 1 == memop && nextvalue == 0) {
+						// dont print coz we replace later
+						//r_strbuf_append (sb, "?");
+					} else {
+						print_value (sb, operand->flags, memaddr, value);
+						inst->value = value;
+					}
+#else
+					print_value (sb, operand->flags, memaddr, value);
+#endif
+					inst->value = value;
+				}
 				break;
 			}
 			inst->args[opnum - 1].atype = atype;
@@ -581,6 +641,10 @@ int v850np_disasm(v850np_inst *inst, int cpumodel, ut64 addr, const ut8* buffer,
 	}
 
 	if (length == 4 || (length == 0 && (insn & 0x0600) == 0x0600)) {
+		if (len < 4) {
+			inst->text = r_str_newf ("truncated from %d to %d", code_length, length);
+			return -1;
+		}
 		/* This is a 4 byte insn.  */
 		insn = r_read_le32 (buffer);
 		length = code_length = 4;
