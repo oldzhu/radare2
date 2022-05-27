@@ -84,14 +84,14 @@ R_API bool r_core_is_project(RCore *core, const char *name) {
 }
 
 R_API void r_core_project_cat(RCore *core, const char *name) {
-	r_core_return_code (core, R_CMD_RC_FAILURE);
+	r_core_return_value (core, R_CMD_RC_FAILURE);
 	char *path = get_project_script_path (core, name);
 	if (path) {
 		char *data = r_file_slurp (path, NULL);
 		if (data) {
 			r_cons_println (data);
 			free (data);
-			r_core_return_code (core, R_CMD_RC_SUCCESS);
+			r_core_return_value (core, R_CMD_RC_SUCCESS);
 		}
 		free (path);
 	}
@@ -316,6 +316,19 @@ static bool r_core_project_load(RCore *core, const char *prj_name, const char *r
 		r_sandbox_grain (oldgrain);
 	} else {
 		ret = r_core_cmd_file (core, rcpath);
+	}
+	char *prj_path = r_file_dirname(rcpath);
+	if (prj_path) {
+		//check if the project uses git
+		Rvc *vc = r_vc_git_open (prj_path);
+		if (!vc) {
+			// if the project does not use git, try rvc
+			vc = r_vc_open (prj_path);
+		}
+		core->prj->rvc = vc;
+		free (prj_path);
+	} else {
+		eprintf ( "Failed to load rvc\n");
 	}
 	r_config_set_b (core->config, "cfg.fortunes", cfg_fortunes);
 	r_config_set_b (core->config, "scr.interactive", scr_interactive);
@@ -662,9 +675,10 @@ R_API bool r_core_project_save(RCore *core, const char *prj_name) {
 		free (prj_bin_dir);
 		free (bin_file);
 	}
-	if (r_config_get_b (core->config, "prj.vc")) {
-		if (!rvc_git_repo_exists (core, prj_dir)) {
-			if (!rvc_git_init (core, prj_dir)) {
+	if (core->prj->rvc || r_config_get_b (core->config, "prj.vc")) {
+		// assume that if the repo is not loaded, the repo doesn't exist
+		if (!core->prj->rvc) {
+			if (!(core->prj->rvc = rvc_git_init (core, prj_dir))) {
 				free (prj_dir);
 				free (script_path);
 				return false;
@@ -673,7 +687,8 @@ R_API bool r_core_project_save(RCore *core, const char *prj_name) {
 		RList *paths = r_list_new ();
 		if (paths) {
 			if (r_list_append (paths, prj_dir)) {
-				if (!rvc_git_commit (core, prj_dir, NULL, NULL, paths)) {
+				if (!rvc_git_commit (core, core->prj->rvc,
+							NULL, NULL, paths)) {
 					r_list_free (paths);
 					free (prj_dir);
 					free (script_path);

@@ -10,6 +10,9 @@
 
 typedef char RStringShort[32];
 
+static R_TH_LOCAL HtUU *ht_itblock = NULL;
+static R_TH_LOCAL HtUU *ht_it = NULL;
+
 /* arm64 */
 #define IMM64(x) (ut64)(insn->detail->arm64.operands[x].imm)
 #define INSOP64(x) insn->detail->arm64.operands[x]
@@ -63,9 +66,6 @@ typedef char RStringShort[32];
 #define ISWRITEBACK64() (insn->detail->arm64.writeback == true)
 #define ISPREINDEX64() (((OPCOUNT64() == 2) && (ISMEM64(1)) && (ISWRITEBACK64())) || ((OPCOUNT64() == 3) && (ISMEM64(2)) && (ISWRITEBACK64())))
 #define ISPOSTINDEX64() (((OPCOUNT64() == 3) && (ISIMM64(2)) && (ISWRITEBACK64())) || ((OPCOUNT64() == 4) && (ISIMM64(3)) && (ISWRITEBACK64())))
-
-static R_TH_LOCAL HtUU *ht_itblock = NULL;
-static R_TH_LOCAL HtUU *ht_it = NULL;
 
 #define BITMASK_BY_WIDTH_COUNT 64
 static const ut64 bitmask_by_width[BITMASK_BY_WIDTH_COUNT] = {
@@ -4434,10 +4434,11 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	if (a->config->cpu && strstr (a->config->cpu, "cortex")) {
 		mode |= CS_MODE_MCLASS;
 	}
-
 	if (mode != omode || a->config->bits != obits) {
-		cs_close (&handle);
-		handle = 0; // unnecessary
+		if (handle != 0) {
+			cs_close (&handle);
+			handle = 0; // unnecessary
+		}
 		omode = mode;
 		obits = a->config->bits;
 	}
@@ -4498,7 +4499,10 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 		}
 		cs_free (insn, n);
 	}
-//	cs_close (&handle);
+#if 0
+	cs_close (handle);
+	handle = 0;
+#endif
 	return op->size;
 }
 

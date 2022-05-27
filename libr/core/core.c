@@ -613,11 +613,19 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		break;
 	case '$':
 		if (ok) {
-			*ok = 1;
+			*ok = true;
 		}
-		// TODO: group analop-dependant vars after a char, so i can filter
-		r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize, R_ANAL_OP_MASK_BASIC);
-		r_anal_op_fini (&op); // we don't need strings or pointers, just values, which are not nullified in fini
+		switch (str[1]) {
+		case 'e':
+		case 'j':
+		case 'f':
+		case 'm':
+		case 'v':
+		case 'l':
+			r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize, R_ANAL_OP_MASK_BASIC);
+			r_anal_op_fini (&op); // we don't need strings or pointers, just values, which are not nullified in fini
+			break;
+		}
 		// XXX the above line is assuming op after fini keeps jump, fail, ptr, val, size and r_anal_op_is_eob()
 		switch (str[1]) {
 		case 'i': // "$i"
@@ -3457,7 +3465,7 @@ R_API int r_core_prompt(RCore *r, int sync) {
 	if (r->scr_gadgets && *line && *line != 'q') {
 		r_core_cmd0 (r, "pg");
 	}
-	r->num->value = r->rc;
+	// r->num->value = r->rc;
 	return true;
 }
 
@@ -3477,11 +3485,9 @@ R_API int r_core_prompt_exec(RCore *r) {
 			r_core_cmd_queue (r, NULL);
 			break;
 		}
-		r->rc = r->num->value;
-		// int ret = r_core_cmd (r, cmd, true);
 		if (r->cons && r->cons->context->use_tts) {
 			const char *buf = r_cons_get_buffer ();
-			if (buf && *buf) {
+			if (R_STR_ISNOTEMPTY (buf)) {
 				r_sys_tts (buf, true);
 			}
 			r->cons->context->use_tts = false;
