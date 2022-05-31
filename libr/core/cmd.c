@@ -524,7 +524,7 @@ static bool print_aliases(void *use_b64, const void *key, const void *val){
 }
 
 static int cmd_uname(void *data, const char *input) { // "uniq"
-	RSysInfo *si = r_sys_info();
+	RSysInfo *si = r_sys_info ();
 	if (si) {
 		r_cons_printf ("%s", si->sysname);
 		if (strstr (input, "-r")) {
@@ -662,19 +662,13 @@ static int cmd_undo(void *data, const char *input) {
 		return 1;
 	default:
 	case '?': // "u?"
-		r_core_cmd_help (data, help_msg_u);
+		if (*input && input[1] == 'j') {
+			r_cons_cmd_help_json (help_msg_u);
+		} else {
+			r_core_cmd_help (data, help_msg_u);
+		}
 		return 1;
 	}
-#if __UNIX__
-	struct utsname un;
-	uname (&un);
-	r_cons_printf ("%s %s %s %s\n", un.sysname,
-		un.nodename, un.release, un.machine);
-#elif __WINDOWS__
-	r_cons_printf ("windows\n");
-#else
-	r_cons_printf ("unknown\n");
-#endif
 	return 0;
 }
 
@@ -799,7 +793,6 @@ static int cmd_alias(void *data, const char *input) {
 			/* Commands are always strings */
 			r_cons_println ((char *)v->data);
 			r_cons_flush ();
-
 			free (buf);
 			return 1;
 		} else if (v) {
@@ -839,7 +832,7 @@ static int cmd_alias(void *data, const char *input) {
 				r_core_cmd0 (core, (char *)v->data);
 			}
 		} else {
-			eprintf ("No such alias \"$%s\"\n", buf);
+			R_LOG_WARN ("No such alias \"$%s\"", buf);
 		}
 	}
 	free (buf);
@@ -1365,11 +1358,26 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					free (cmd);
 					ret = 1;
 				} else if (!strcmp (ext, "py")) {
-					char *cmd = cmdstr ("python");
-					r_lang_use (core->lang, "pipe");
-					lang_run_file (core, core->lang, cmd);
-					free (cmd);
-					ret = 1;
+					char *fp = r_file_path ("python3");
+					if (!fp) {
+						fp = r_file_path ("python2");
+						if (!fp) {
+							fp = r_file_path ("python");
+						}
+					}
+					if (fp) {
+#if __WINDOWS__
+						char *cmd = r_str_newf ("%s %s", fp, file);
+#else
+						char *cmd = r_str_newf ("%s '%s'", fp, file);
+#endif
+						r_lang_use (core->lang, "pipe");
+						lang_run_file (core, core->lang, cmd);
+						free (cmd);
+						ret = 1;
+					} else {
+						R_LOG_ERROR ("Cannot find python in PATH");
+					}
 				} else {
 					ret = r_core_cmd_file (core, file);
 				}
@@ -2812,7 +2820,7 @@ static void cmd_autocomplete_help(RCore *core) {
 		}
 	}
 	r_core_cmd_help (core, help);
-	free (help);
+	free ((void*)help);
 }
 
 static void cmd_autocomplete(RCore *core, const char *input) {
@@ -5728,6 +5736,10 @@ R_API char *r_core_cmd_strf(RCore *core, const char *fmt, ...) {
 
 /* return: pointer to a buffer with the output of the command */
 R_API char *r_core_cmd_str(RCore *core, const char *cmd) {
+	if (*cmd != '"' && strchr (cmd, '>')) {
+		r_core_cmd0 (core, cmd);
+		return strdup ("");
+	}
 	r_cons_push ();
 	core->cons->context->noflush = true;
 	core->cons->context->cmd_str_depth++;
