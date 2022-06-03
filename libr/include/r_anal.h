@@ -2228,6 +2228,7 @@ extern RAnalPlugin r_anal_plugin_arm_cs;
 extern RAnalPlugin r_anal_plugin_arm_gnu;
 extern RAnalPlugin r_anal_plugin_avr;
 extern RAnalPlugin r_anal_plugin_bf;
+extern RAnalPlugin r_anal_plugin_bpf_cs;
 extern RAnalPlugin r_anal_plugin_chip8;
 extern RAnalPlugin r_anal_plugin_cr16;
 extern RAnalPlugin r_anal_plugin_cris;
@@ -2283,6 +2284,7 @@ extern RAnalPlugin r_anal_plugin_arm_v35;
 extern RAnalPlugin r_anal_plugin_z80;
 extern RAnalPlugin r_anal_plugin_pyc;
 extern RAnalPlugin r_anal_plugin_evm_cs;
+extern RAnalPlugin r_anal_plugin_bpf;
 extern RAnalEsilPlugin r_esil_plugin_dummy;
 
 #ifdef __cplusplus
