@@ -39,6 +39,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	if (handle == 0) {
 		ret = cs_open (CS_ARCH_BPF, mode, &handle);
 		if (ret != CS_ERR_OK) {
+			R_LOG_ERROR ("Capstone failed: cs_open(CS_ARCH_BPF, %x, ...): %s\n", mode, cs_strerror (ret));
 			handle = 0;
 			return -1;
 		}
@@ -638,7 +639,7 @@ RAnalPlugin r_anal_plugin_bpf_cs = {
 	.name = "bpf",
 	.desc = "Capstone BPF arch plugin",
 	.license = "BSD",
-	.author = "terorie",
+	.author = "terorie, aemmitt",
 	.esil = false, // TODO
 	.arch = "bpf",
 	.endian = R_SYS_ENDIAN_LITTLE | R_SYS_ENDIAN_BIG,
@@ -664,4 +665,4 @@ R_API RLibStruct radare_plugin = {
 	.version = R2_VERSION
 };
 #endif
-#endif
+#endif // CS_API_MAJOR
