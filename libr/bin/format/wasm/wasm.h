@@ -88,8 +88,8 @@ typedef struct r_bin_wasm_type_vector_t {
 } RBinWasmTypeVec;
 
 typedef struct r_bin_wasm_type_t {
+	ut32 sec_i;
 	ut64 file_offset;
-	ut32 index;
 	ut8 form;
 	RBinWasmTypeVec *args;
 	RBinWasmTypeVec *rets;
@@ -127,26 +127,26 @@ typedef struct r_bin_wasm_import_t {
 } RBinWasmImportEntry;
 
 typedef struct r_bin_wasm_function_t {
+	ut32 sec_i;
 	ut64 file_offset;
-	ut32 index;
 	ut32 typeindex;
 } RBinWasmFunctionEntry;
 
 typedef struct r_bin_wasm_table_t {
-	ut32 index;
+	ut32 sec_i;
 	ut64 file_offset;
 	ut8 element_type; // only anyfunc
 	struct r_bin_wasm_resizable_limits_t limits;
 } RBinWasmTableEntry;
 
 typedef struct r_bin_wasm_memory_t {
-	ut32 index;
+	ut32 sec_i;
 	ut64 file_offset;
 	struct r_bin_wasm_resizable_limits_t limits;
 } RBinWasmMemoryEntry;
 
 typedef struct r_bin_wasm_global_t {
-	ut32 index;
+	ut32 sec_i;
 	ut64 file_offset;
 	r_bin_wasm_value_type_t content_type;
 	ut8 mutability; // 0 if immutable, 1 if mutable
@@ -154,6 +154,8 @@ typedef struct r_bin_wasm_global_t {
 } RBinWasmGlobalEntry;
 
 typedef struct r_bin_wasm_export_t {
+	ut32 sec_i;
+	ut64 file_offset;
 	ut32 field_len;
 	char *field_str;
 	ut8 kind;
@@ -239,10 +241,10 @@ typedef struct r_bin_wasm_obj_t {
 	RList *g_sections;
 	RList *g_imports;
 	RPVector *g_funcs;
-	RList *g_exports;
 	RPVector *g_tables;
 	RPVector *g_memories;
 	RPVector *g_globals;
+	RPVector *g_exports;
 	RList *g_elements;
 	RList *g_codes;
 	RList *g_datas;
@@ -259,10 +261,10 @@ RList *r_bin_wasm_get_sections(RBinWasmObj *bin);
 RPVector *r_bin_wasm_get_types(RBinWasmObj *bin);
 RList *r_bin_wasm_get_imports(RBinWasmObj *bin);
 RPVector *r_bin_wasm_get_functions(RBinWasmObj *bin);
-RList *r_bin_wasm_get_exports(RBinWasmObj *bin);
 RPVector *r_bin_wasm_get_tables(RBinWasmObj *bin);
 RPVector *r_bin_wasm_get_memories(RBinWasmObj *bin);
 RPVector *r_bin_wasm_get_globals(RBinWasmObj *bin);
+RPVector *r_bin_wasm_get_exports(RBinWasmObj *bin);
 RList *r_bin_wasm_get_elements(RBinWasmObj *bin);
 RList *r_bin_wasm_get_codes(RBinWasmObj *bin);
 RList *r_bin_wasm_get_datas(RBinWasmObj *bin);
