@@ -68,7 +68,7 @@ if not no_user_plugins
     parse_plugins += [ 'arm_pseudo' ]
   endif
   if user_plugins.contains('v850')
-    asm_plugins += [ 'v850', 'v810' ]
+    asm_plugins += [ 'v850' ]
     anal_plugins += [ 'v850', 'v850_np', 'v810' ]
     parse_plugins += [ 'v850_pseudo' ]
   endif
@@ -128,7 +128,6 @@ endif
 if no_user_plugins
 
 asm_plugins += [
-  '6502',
   '8051',
   'amd29k',
   'arm_as',
@@ -157,7 +156,6 @@ asm_plugins += [
   'sh',
   'sparc_cs',
   'tms320',
-  'v810',
   'v850',
   'x86_as',
   'x86_cs',
@@ -244,6 +242,7 @@ if no_user_plugins
       'mips_gnu',
       'loongarch_gnu',
       's390_gnu',
+      'pdp11_gnu',
       'ppc_gnu',
       'sparc_gnu',
     ]
