@@ -68,7 +68,6 @@ if not no_user_plugins
     parse_plugins += [ 'arm_pseudo' ]
   endif
   if user_plugins.contains('v850')
-    asm_plugins += [ 'v850' ]
     anal_plugins += [ 'v850', 'v850_np', 'v810' ]
     parse_plugins += [ 'v850_pseudo' ]
   endif
@@ -134,17 +133,14 @@ asm_plugins += [
   'arm_cs',
   'arm_winedbg',
   'avr',
-  'cr16',
   'dalvik',
   'dcpu16',
   'gb',
   'h8300',
   'i8080',
   'java',
-  'lh5801',
   'lm32',
   'm680x_cs',
-  'malbolge',
   'mcs96',
   'mips_cs',
   'or1k',
@@ -156,7 +152,6 @@ asm_plugins += [
   'sh',
   'sparc_cs',
   'tms320',
-  'v850',
   'x86_as',
   'x86_cs',
   'x86_nasm',
@@ -190,6 +185,7 @@ anal_plugins += [
   'i8080',
   'java',
   'kvx',
+  'lh5801',
   'loongarch_gnu',
   'm68k_cs',
   'm680x_cs',

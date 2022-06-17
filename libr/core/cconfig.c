@@ -3698,7 +3698,13 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("cfg.user", whoami, "set current username/pid");
 	free (whoami);
 	SETCB ("cfg.fortunes", "true", &cb_cfg_fortunes, "if enabled show tips at start");
-	SETCB ("cfg.fortunes.type", "tips,fun", &cb_cfg_fortunes_type, "type of fortunes to show (tips, fun)");
+	RList *fortune_types = r_core_fortune_types ();
+	char *fts = r_str_list_join(fortune_types, ",");
+	r_list_free (fortune_types);
+	char *fortune_desc = r_str_newf ("type of fortunes to show(%s)", fts);
+	SETCB ("cfg.fortunes.type", fts, &cb_cfg_fortunes_type, fortune_desc);
+	free (fts);
+	free (fortune_desc);
 	SETBPREF ("cfg.fortunes.clippy", "false", "use ?E instead of ?e");
 	SETBPREF ("cfg.fortunes.tts", "false", "speak out the fortune");
 	SETPREF ("cfg.prefixdump", "dump", "filename prefix for automated dumps");
