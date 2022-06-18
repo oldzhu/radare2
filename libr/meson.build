@@ -128,16 +128,12 @@ if no_user_plugins
 
 asm_plugins += [
   '8051',
-  'amd29k',
   'arm_as',
   'arm_cs',
   'arm_winedbg',
-  'avr',
   'dalvik',
   'dcpu16',
   'gb',
-  'h8300',
-  'i8080',
   'java',
   'lm32',
   'm680x_cs',
@@ -156,8 +152,6 @@ asm_plugins += [
   'x86_cs',
   'x86_nasm',
   'x86_nz',
-  'xap',
-  'xcore_cs',
 ]
 
 # TODO: add the pyc plugin for meson builds too
