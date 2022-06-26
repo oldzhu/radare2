@@ -76,7 +76,6 @@ if not no_user_plugins
     parse_plugins += [ 'wasm_pseudo' ]
   endif
   if user_plugins.contains('sparc')
-    asm_plugins += [ 'sparc_cs' ]
     anal_plugins += [ 'sparc_cs' ]
     if use_gpl
       asm_plugins += [ 'sparc_gnu' ]
@@ -135,7 +134,6 @@ asm_plugins += [
   'dcpu16',
   'gb',
   'java',
-  'lm32',
   'm680x_cs',
   'mcs96',
   'mips_cs',
@@ -146,7 +144,6 @@ asm_plugins += [
   'riscv',
   'rsp',
   'sh',
-  'sparc_cs',
   'tms320',
   'x86_as',
   'x86_cs',
@@ -159,6 +156,7 @@ anal_plugins += [
   '6502',
   '6502_cs',
   '8051',
+  'alpha',
   'amd29k',
   #'arc',
   'arm_cs',
@@ -180,6 +178,7 @@ anal_plugins += [
   'java',
   'kvx',
   'lh5801',
+  'lm32',
   'loongarch_gnu',
   'm68k_cs',
   'm680x_cs',

@@ -201,7 +201,6 @@ extern RAsmPlugin r_asm_plugin_h8300;
 extern RAsmPlugin r_asm_plugin_hppa_gnu;
 extern RAsmPlugin r_asm_plugin_java;
 extern RAsmPlugin r_asm_plugin_lanai_gnu;
-extern RAsmPlugin r_asm_plugin_lm32;
 extern RAsmPlugin r_asm_plugin_m680x_cs;
 extern RAsmPlugin r_asm_plugin_mcs96;
 extern RAsmPlugin r_asm_plugin_mips_cs;
@@ -215,7 +214,6 @@ extern RAsmPlugin r_asm_plugin_propeller;
 extern RAsmPlugin r_asm_plugin_riscv;
 extern RAsmPlugin r_asm_plugin_rsp;
 extern RAsmPlugin r_asm_plugin_sh;
-extern RAsmPlugin r_asm_plugin_sparc_cs;
 extern RAsmPlugin r_asm_plugin_sparc_gnu;
 extern RAsmPlugin r_asm_plugin_tms320;
 extern RAsmPlugin r_asm_plugin_tricore;
@@ -227,7 +225,6 @@ extern RAsmPlugin r_asm_plugin_x86_cs;
 extern RAsmPlugin r_asm_plugin_x86_nasm;
 extern RAsmPlugin r_asm_plugin_x86_nz;
 extern RAsmPlugin r_asm_plugin_xtensa;
-extern RAsmPlugin r_asm_plugin_alpha;
 extern RAsmPlugin r_asm_plugin_vasm;
 
 #endif
