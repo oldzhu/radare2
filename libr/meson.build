@@ -130,11 +130,9 @@ asm_plugins += [
   'arm_cs',
   'arm_winedbg',
   'dalvik',
-  'dcpu16',
   'gb',
   'java',
   'm680x_cs',
-  'mcs96',
   'mips_cs',
   'or1k',
   'ppc_as',
@@ -154,6 +152,7 @@ asm_plugins += [
 anal_plugins += [
   '6502',
   '6502_cs',
+  'mcs96',
   '8051',
   'alpha',
   'amd29k',
@@ -216,7 +215,6 @@ if no_user_plugins
     asm_plugins += [
       # 'z80',
       'arm_gnu',
-      'cris_gnu',
   #    'hppa_gnu',
       'm68k_gnu',
       'lanai_gnu',
