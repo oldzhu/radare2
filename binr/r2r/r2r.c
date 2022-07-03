@@ -339,7 +339,12 @@ int main(int argc, char **argv) {
 	}
 	atexit (r2r_subprocess_fini);
 
-	r_sys_setenv ("ASAN_OPTIONS", "detect_leaks=false");
+	char *have_options = r_sys_getenv ("ASAN_OPTIONS");
+	if (have_options) {
+		free (have_options);
+	} else {
+		r_sys_setenv ("ASAN_OPTIONS", "detect_leaks=false detect_odr_violation=0");
+	}
 	r_sys_setenv ("RABIN2_TRYLIB", "0");
 	r_sys_setenv ("R2_DEBUG_ASSERT", "1");
 	r_sys_setenv ("R2_DEBUG_EPRINT", "0");
@@ -547,6 +552,7 @@ coast:
 	r_pvector_clear (&state.results);
 	r_pvector_clear (&state.completed_paths);
 	r2r_test_database_free (state.db);
+	ht_pp_free (state.path_left);
 	r_th_lock_free (state.lock);
 	r_th_cond_free (state.cond);
 beach:
