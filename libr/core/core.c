@@ -1219,19 +1219,15 @@ typedef struct {
 	const char *needle;
 	int needle_len;
 	bool must_be_data;
-
 	const char **valid_completions;
 	const RCmdAliasVal **valid_completion_vals;
 	int num_completions;
 } AliasAutocompletions;
 
 static bool check_alias_completion(void *in, const void *k, const void *v) {
-	// This repetition kind of sucks but we need
-	// to carry state somehow
 	AliasAutocompletions *c = in;
 	const char *needle = c->needle;
 	const int needle_len = c->needle_len;
-
 	const RCmdAliasVal *val = v;
 
 	/* Skip command aliases if we're filtering them out */
@@ -1295,8 +1291,8 @@ static void autocomplete_alias(RLineCompletion *completion, RCmd *cmd, const cha
 		}
 	}
 	/* If 0 possible completions, do nothing */
-	free (c.valid_completions);
-	free (c.valid_completion_vals);
+	free ((void*)c.valid_completions);
+	free ((void*)c.valid_completion_vals);
 }
 
 static void autocomplete_process_path(RLineCompletion *completion, const char *str, const char *path) {
@@ -1536,7 +1532,7 @@ static void autocomplete_minus(RCore *core, RLineCompletion *completion, const c
 	int length = strlen (str);
 	int i;
 
-	const char **keys = r_cmd_alias_keys (core->rcmd);
+	char **keys = (char **)r_cmd_alias_keys (core->rcmd);
 	for (i = 0; i < core->rcmd->aliases->count; i++) {
 		if (!strncmp (keys[i], str, length)) {
 			r_line_completion_push (completion, keys[i]);
