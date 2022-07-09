@@ -256,7 +256,7 @@ R_API void r_str_case(char *str, bool up) {
 	}
 }
 
-R_API char *r_str_home(const char *str) {
+R_API R_MUSTUSE char *r_str_home(const char *str) {
 	char *dst, *home = r_sys_getenv (R_SYS_HOME);
 	size_t length;
 	if (!home) {
@@ -284,7 +284,7 @@ fail:
 	return dst;
 }
 
-R_API char *r_str_r2_prefix(const char *str) {
+R_API R_MUSTUSE char *r_str_r2_prefix(const char *str) {
 	return r_str_newf ("%s%s%s", r_sys_prefix (NULL), R_SYS_DIR, str);
 }
 
@@ -338,7 +338,7 @@ R_API int r_str_split(char *str, char ch) {
 R_API int r_str_word_set0(char *str) {
 	int i, quote = 0;
 	char *p;
-	if (!str || !*str) {
+	if (R_STR_ISEMPTY (str)) {
 		return 0;
 	}
 	for (i = 0; str[i] && str[i + 1]; i++) {
@@ -1059,8 +1059,7 @@ alloc_fail:
  * g     - if true, replace all occurrences of key
  *
  * It returns a pointer to the modified string */
-R_API R_MUSTUSE char* r_str_replace_thunked(char *str, char *clean, int *thunk, int clen,
-				  const char *key, const char *val, int g) {
+R_API R_MUSTUSE char* r_str_replace_thunked(char *str, char *clean, int *thunk, int clen, const char *key, const char *val, int g) {
 	int i, klen, vlen, slen, delta = 0, bias;
 	char *newstr, *scnd, *p = clean, *str_p;
 

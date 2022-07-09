@@ -1224,6 +1224,9 @@ typedef struct r_anal_esil_t {
 	bool (*cmd)(ESIL *esil, const char *name, ut64 a0, ut64 a1);
 	void *user;
 	int stack_fd;	// ahem, let's not do this
+#if R2_580
+	bool in_cmd_step;
+#endif
 } RAnalEsil;
 
 #undef ESIL
@@ -2271,7 +2274,6 @@ extern RAnalPlugin r_anal_plugin_tms320;
 extern RAnalPlugin r_anal_plugin_tricore;
 extern RAnalPlugin r_anal_plugin_v810;
 extern RAnalPlugin r_anal_plugin_v850;
-extern RAnalPlugin r_anal_plugin_v850_np;
 extern RAnalPlugin r_anal_plugin_vax;
 extern RAnalPlugin r_anal_plugin_wasm;
 extern RAnalPlugin r_anal_plugin_ws;
