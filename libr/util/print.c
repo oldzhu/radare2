@@ -666,6 +666,7 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *buf, int len, int opti
 	bool wrap = (options & R_PRINT_STRING_WRAP);
 	bool urlencode = (options & R_PRINT_STRING_URLENCODE);
 	bool esc_nl = (options & R_PRINT_STRING_ESC_NL);
+	bool color = (p->flags & R_PRINT_FLAGS_COLOR);
 	int col = 0;
 	i = 0;
 	for (; !r_print_is_interrupted () && i < len; i++) {
@@ -691,7 +692,11 @@ R_API int r_print_string(RPrint *p, ut64 seek, const ut8 *buf, int len, int opti
 		} else {
 			if (b == '\\') {
 				p->cb_printf ("\\\\");
-			} else if ((b == '\n' && !esc_nl) || IS_PRINTABLE (b)) {
+			} else if ((b == '\n' && !esc_nl)) {
+				p->cb_printf ("\n");
+				if (color)
+					p->cb_printf (R_CONS_CLEAR_FROM_CURSOR_TO_EOL);
+			} else if (IS_PRINTABLE (b)) {
 				p->cb_printf ("%c", b);
 			} else {
 				p->cb_printf ("\\x%02x", b);
@@ -1849,8 +1854,6 @@ R_API void r_print_fill(RPrint *p, const ut8 *arr, int size, ut64 addr, int step
 	}
 	cols /= 5;
 	for (i = 0; i < size; i++) {
-		ut8 next = (i + 1 < size)? arr[i + 1]: 0;
-		int base = 0, k = 0;
 		if (addr != UT64_MAX && step > 0) {
 			ut64 at = addr + (i * step);
 			if (show_offset) {
@@ -1871,34 +1874,8 @@ R_API void r_print_fill(RPrint *p, const ut8 *arr, int size, ut64 addr, int step
 		} else {
 			p->cb_printf ("%s", v_line);
 		}
-		if (next < INC) {
-			base = 1;
-		}
-		if (next < arr[i]) {
-			if (arr[i] > INC) {
-				for (j = 0; j < next + base; j += INC) {
-					printHistBlock (p, k, cols);
-					k++;
-				}
-			}
-			for (j = next + INC; j + base < arr[i]; j += INC) {
-				printHistBlock (p, k, cols);
-				k++;
-			}
-		} else {
-			printHistBlock (p, k, cols);
-			k++;
-		}
-		if (i + 1 == size) {
-			for (j = arr[i] + INC + base; j + base < next; j += INC) {
-				printHistBlock (p, k, cols);
-				k++;
-			}
-		} else if (arr[i + 1] > arr[i]) {
-			for (j = arr[i] + INC + base; j + base < next; j += INC) {
-				printHistBlock (p, k, cols);
-				k++;
-			}
+		for (j = 0; j < arr[i] / 5; j++) {
+			printHistBlock (p, j, cols);
 		}
 		if (show_colors) {
 			p->cb_printf ("%s", Color_RESET);
