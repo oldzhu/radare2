@@ -98,11 +98,11 @@ static int check_format(RMagic *, struct r_magic *);
 static int get_op(char);
 
 static size_t maxmagic = 0;
-static size_t magicsize = sizeof(struct r_magic);
+static size_t magicsize = sizeof (struct r_magic);
 
 static const char usg_hdr[] = "cont\toffset\ttype\topcode\tmask\tvalue\tdesc";
 static const char mime_marker[] = "!:mime";
-static const size_t mime_marker_len = sizeof(mime_marker) - 1;
+static const size_t mime_marker_len = sizeof (mime_marker) - 1;
 
 static const struct type_tbl_s {
 	const char name[16];
@@ -1916,7 +1916,7 @@ error1:
 #if QUICK
 		(void)munmap((void *)mm, (size_t)st.st_size);
 #else
-		free(mm);
+		free (mm);
 #endif
 	} else {
 		*magicp = NULL;
@@ -1969,9 +1969,9 @@ static int apprentice_compile(RMagic *ms, struct r_magic **magicp, ut32 *nmagicp
 
 	rv = 0;
 beach:
-	(void)close(fd);
+	(void)close (fd);
 out:
-	free(dbname);
+	free (dbname);
 	return rv;
 }
 
