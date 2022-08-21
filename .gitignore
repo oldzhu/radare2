@@ -142,3 +142,6 @@ libr/include/sdb
 radare2_dist
 # Artifacts
 /dist/artifacts
+# libFuzzer
+crash-*
+corpus*
