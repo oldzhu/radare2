@@ -1,5 +1,8 @@
 #!/bin/sh
 
+
+# find calls without (
+#(git grep -n -e '[a-z]('  | grep -v static | grep -v _API | grep -v shlr | grep libr/core) && exit 1
 # validated and ready to go lintings
 (git grep -n 'cmp(' libr | grep -v R_API | grep -v static | grep c:) && exit 1
 # (git grep -n 'len(' libr | grep -v R_API | grep -v static | grep c:) && exit 1
@@ -10,6 +13,7 @@
 (git grep -n 'for (long' | grep -v sys/) && exit 1
 (git grep -n 'for (ut' | grep -v sys/) && exit 1
 (git grep -n 'for (size_t' | grep -v sys/) && exit 1
+(git grep -n -e '	$' | grep libr/ | grep c:) && exit 1
 (git grep -n 'R_LOG_' | grep '\\n' | grep -v sys/) && exit 1
 (git grep "`printf '\tfree('`" libr | grep c: ) && exit 1
 (git grep '=0' libr| grep c:|grep -v '"' |grep -v '=0x') && exit 1
@@ -38,6 +42,14 @@
 (git grep -n -e 'eprintf ("Could' -e 'eprintf ("Failed' -e 'eprintf ("Cannot' libr \
     | grep -v -e ^libr/core/cmd -e ^libr/main/ -e ^libr/util/syscmd \
     | grep -v -e r_cons_eprintf -e alloc) && exit 1
+
+(
+ # ensure c++ compat
+ cd libr/include
+ git grep cplusplus|cut -d : -f1|grep -v heap|grep -v userconf | grep -v sflib | grep -v r_version | sort -u > /tmp/.a
+ find *| grep h$|grep -v r_version | grep -v userconf| grep -v heap|grep -v sflib | sort -u > /tmp/.b
+ diff -ru /tmp/.a /tmp/.b
+) || exit 1
 
 # pending cleanups
 # ( git grep 'desc = "[A-Z]' ) && exit 1

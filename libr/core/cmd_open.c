@@ -142,6 +142,7 @@ static const char *help_msg_om[] = {
 	"om-*", "", "remove all maps",
 	"om-..", "", "hud view of all the maps to select the one to remove",
 	"om.", "", "show map, that is mapped to current offset",
+	"om,", " [query]", "list maps using table api",
 	"om=", "", "list all maps in ascii art",
 	"oma"," [fd]", "create a map covering all VA for given fd",
 	"omb", " ", "list/select memory map banks",
@@ -160,8 +161,7 @@ static const char *help_msg_om[] = {
 	"ompf", " [fd]", "prioritize map by fd",
 	"omq", "", "list all maps and their fds",
 	"omqq", "", "list all maps addresses (See $MM to get the size)",
-	"omr", " mapid newsize", "resize map with corresponding id",
-	"omt", " [query]", "list maps using table api", // "om,"
+	"omr", " [mapid newsize]", "resize map with corresponding id",
 	NULL
 };
 
@@ -316,7 +316,7 @@ static void cmd_open_bin(RCore *core, const char *input) {
 			r_list_foreach (ofiles, iter, desc) {
 				r_list_append (files, (void*)(size_t)desc->fd);
 			}
-		
+
 			void *_fd;
 			r_list_foreach (files, iter, _fd) {
 				int fd = (size_t)_fd;
@@ -338,7 +338,7 @@ static void cmd_open_bin(RCore *core, const char *input) {
 			break;
 		}
 		core->allbins = false;
-		
+
 		char *v = input[2] ? strdup (input + 2) : NULL;
 		if (!v) {
 			eprintf ("Invalid arguments\n");
@@ -583,9 +583,10 @@ static void cmd_omf(RCore *core, int argc, char *argv[]) {
 
 static void r_core_cmd_omt(RCore *core, const char *arg) {
 	RTable *t = r_table_new ("iomaps");
-
+	if (!t) {
+		return;
+	}
 	r_table_set_columnsf (t, "nnnnnnnss", "id", "fd", "pa", "pa_end", "size", "va", "va_end", "perm", "name", NULL);
-
 	ut32 mapid;
 	r_id_storage_get_lowest (core->io->maps, &mapid);
 	do {
@@ -601,7 +602,7 @@ static void r_core_cmd_omt(RCore *core, const char *arg) {
 			va, va_end, r_str_rwx_i (m->perm), name);
 	} while (r_id_storage_get_next (core->io->maps, &mapid));
 	if (r_table_query (t, arg)) {
-		char *ts = r_table_tofancystring (t);
+		char *ts = strchr (arg, ':')? r_table_tostring (t) : r_table_tofancystring (t);
 		r_cons_printf ("%s", ts);
 		free (ts);
 	}
@@ -876,7 +877,15 @@ static void cmd_open_map(RCore *core, const char *input) {
 		}
 		break;
 	case 'r': // "omr"
+		if (input[2] == '?') {
+			r_core_cmd_help_match (core, help_msg_om, "omr", true);
+			break;
+		}
 		if (input[2] != ' ') {
+			RIOMap *map = r_io_map_get_at (core->io, core->offset);
+			if (map) {
+				r_cons_printf ("%"PFMT64d"\n", r_itv_size (map->itv));
+			}
 			break;
 		}
 		P = strchr (input + 3, ' ');
@@ -955,6 +964,10 @@ static void cmd_open_map(RCore *core, const char *input) {
 		}
 		break;
 	case 't': // "omt"
+		R_LOG_WARN ("Deprecated. use 'om,' instead of 'omt'")
+		r_core_cmd_omt (core, input + 2);
+		break;
+	case ',': // "om,"
 		r_core_cmd_omt (core, input + 2);
 		break;
 	case ' ': // "om"
@@ -1642,7 +1655,7 @@ static bool cmd_onn(RCore *core, const char* input) {
 			return true;
 		}
 	}
-	
+
 	RIODesc *desc = r_io_open_at (core->io, ptr, perms, 0644, addr);
 	if (!desc || desc->fd == -1) {
 		R_LOG_ERROR ("Cannot open file '%s'", ptr);

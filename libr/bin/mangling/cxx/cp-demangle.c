@@ -1324,8 +1324,14 @@ d_encoding (struct d_info *di, int top_level)
 	     really apply here; this happens when parsing a class
 	     which is local to a function.  */
 	  if (dc->type == DEMANGLE_COMPONENT_LOCAL_NAME)
-	    while (is_fnqual_component_type (d_right (dc)->type))
-	      d_right (dc) = d_left (d_right (dc));
+	    {
+	      while (d_right (dc) != NULL
+		     && is_fnqual_component_type (d_right (dc)->type))
+		d_right (dc) = d_left (d_right (dc));
+
+	      if (d_right (dc) == NULL)
+		dc = NULL;
+	    }
 	}
       else
 	{
@@ -2611,7 +2617,7 @@ cplus_demangle_type (struct d_info *di)
 	    ret = NULL;
 	  can_subst = 1;
 	  break;
-	
+
 	case 'p':
 	  /* Pack expansion.  */
 	  ret = d_make_comp (di, DEMANGLE_COMPONENT_PACK_EXPANSION,
@@ -3333,7 +3339,7 @@ d_expression_1 (struct d_info *di)
       d_advance (di, 2);
       if (peek == 't')
 	type = cplus_demangle_type (di);
-      if (!d_peek_next_char (di))
+      if (!d_peek_char (di) || !d_peek_next_char (di))
 	return NULL;
       return d_make_comp (di, DEMANGLE_COMPONENT_INITIALIZER_LIST,
 			  type, d_exprlist (di, 'E'));
@@ -4384,7 +4390,7 @@ d_lookup_template_argument (struct d_print_info *dpi,
       d_print_error (dpi);
       return NULL;
     }
-	
+
   return d_index_template_argument
     (d_right (dpi->templates->template_decl),
      dc->u.s_number.number);
@@ -4731,12 +4737,8 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
 	    typed_name = d_right (typed_name);
 	    if (typed_name->type == DEMANGLE_COMPONENT_DEFAULT_ARG)
 	      typed_name = typed_name->u.s_unary_num.sub;
-	    if (typed_name == NULL)
-	      {
-		d_print_error (dpi);
-		return;
-	      }
-	    while (is_fnqual_component_type (typed_name->type))
+	    while (typed_name != NULL
+		   && is_fnqual_component_type (typed_name->type))
 	      {
 		if (i >= sizeof adpm / sizeof adpm[0])
 		  {
@@ -4754,6 +4756,11 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
 		++i;
 
 		typed_name = d_left (typed_name);
+	      }
+	    if (typed_name == NULL)
+	      {
+		d_print_error (dpi);
+		return;
 	      }
 	  }
 
