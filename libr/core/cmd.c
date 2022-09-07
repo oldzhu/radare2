@@ -14,7 +14,7 @@
 #endif
 #endif
 
-static const char *SPECIAL_CHARS_REGULAR = "@;~$#|`\"'()<>";
+static const char * const SPECIAL_CHARS_REGULAR = "@;~$#|`\"'()<>";
 
 static bool isAnExport(RBinSymbol *s) {
 	/* workaround for some bin plugs */
@@ -96,6 +96,13 @@ static const char *help_msg_plus[] = {
 	"Usage:", "+", "seek forward, same as s+X (see s? and -? for more help)",
 	"+", "8", "seek 8 bytes forward, same as s+8",
 	"++", "", "seek one block forward. Same as s++ (see `b` command)",
+	NULL
+};
+
+static const char *help_msg_j[] = {
+	"Usage:", "j[:o]in", "run command with json facilities or join two files",
+	"j:", "?e", "run '?e' command and show the result stats in json",
+	"join", " f1 f2", "join the contents of two files",
 	NULL
 };
 
@@ -346,6 +353,9 @@ static const char *help_msg_vertical_bar[] = {
 	"|.", "", "alias for .[cmd]",
 	"|?", "", "show this help",
 	"|H", "", "enable scr.html, respect scr.color",
+	"|J", "", "same as j:cmd",
+	"|E", "", "base64 encode the output of the command",
+	"|D", "", "decode the output of the command as base64",
 	"|T", "", "use scr.tts to speak out the stdout",
 	NULL
 };
@@ -616,14 +626,14 @@ static int cmd_undo(void *data, const char *input) {
 	case 'c': // "uc"
 		switch (input[1]) {
 		case ' ': {
-			char *cmd = strdup (input + 2);
+			char *cmd = r_str_trim_dup (input + 2);
 			char *rcmd = strchr (cmd, ',');
 			if (rcmd) {
 				*rcmd++ = 0;
 				RCoreUndo *undo = r_core_undo_new (core->offset, cmd, rcmd);
 				r_core_undo_push (core, undo);
 			} else {
-				eprintf ("Usage: uc [cmd],[revert-cmd]\n");
+				r_core_cmd_help_match (core, help_msg_uc, "uc", true);
 			}
 			free (cmd);
 			}
@@ -1220,6 +1230,31 @@ static char *langFromHashbang(RCore *core, const char *file) {
 	return NULL;
 }
 
+// R2_580 - move into r_file_is_executable()
+static bool is_executable(const char *file) {
+	bool ret = false;
+#if __UNIX__
+	struct stat buf = {0};
+	if (stat (file, &buf) != 0) {
+		return false;
+	}
+	if (buf.st_mode & 0111) {
+		return true;
+	}
+#endif
+#if 0
+	int osz = 0;
+	char *data = r_file_slurp_range (file, 0, 1024, &osz);
+	if (data) {
+		if (!memcmp (data, "\xca\xfe\xba\xbe", 4)) {
+			ret = true;
+		}
+		free (data);
+	}
+#endif
+	return ret;
+}
+
 R_API bool r_core_run_script(RCore *core, const char *file) {
 	bool ret = false;
 	RListIter *iter;
@@ -1403,7 +1438,12 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 						R_LOG_ERROR ("Cannot find python in PATH");
 					}
 				} else {
-					ret = r_core_cmd_file (core, file);
+					if (is_executable (file)) {
+						r_core_cmdf (core, "#!pipe %s%s", (*file=='/')?"":"./", file);
+						ret = 1;
+					} else {
+						ret = r_core_cmd_file (core, file);
+					}
 				}
 			} else {
 				char *abspath = r_file_path (file);
@@ -1415,6 +1455,11 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					free (lang);
 					free (cmd);
 					ret = 1;
+				} else {
+					if (is_executable (file)) {
+						r_core_cmdf (core, "#!pipe %s%s", (*file=='/')?"":"./", file);
+						ret = 1;
+					}
 				}
 				free (abspath);
 			}
@@ -1519,6 +1564,25 @@ static int cmd_l(void *data, const char *input) { // "l"
 
 static int cmd_join(void *data, const char *input) { // "join"
 	RCore *core = (RCore *)data;
+	if (input[0] == ':') {
+		PJ *pj = r_core_pj_new (core);
+		// buffer rlog calls into a string
+		char *s = r_core_cmd_str (core, input + 1);
+		pj_o (pj);
+		pj_ks (pj, "command", input + 1);
+		pj_ks (pj, "output", s);
+		pj_ki (pj, "offset", core->offset);
+		pj_ki (pj, "blocksize", core->blocksize);
+		pj_ks (pj, "log", ""); // TODO: use r_log api here
+		pj_ki (pj, "rc", core->rc); // XXX always 0?
+		pj_ki (pj, "value", core->num->value);
+		pj_end (pj);
+		free (s);
+		s = pj_drain (pj);
+		r_cons_printf ("%s\n", s);
+		free (s);
+		return 0;
+	}
 	char *tmp = strdup (input);
 	const char *arg1 = strchr (tmp, ' ');
 	if (!arg1) {
@@ -1560,7 +1624,7 @@ static int cmd_join(void *data, const char *input) { // "join"
 	free (tmp);
 	return 0;
 beach:
-	eprintf ("Usage: join [file1] [file2] # join the contents of the two files\n");
+	r_core_cmd_help (core, help_msg_j);
 	free (tmp);
 	return 0;
 }
@@ -2304,6 +2368,17 @@ static int cmd_bsize(void *data, const char *input) {
 	RFlagItem *flag;
 	RCore *core = (RCore *)data;
 	switch (input[0]) {
+	case '6': // "b6"
+		if (r_str_startswith (input, "64:")) {
+			int len = 0;
+			char *cmd = (char *)sdb_decode (input + 3, &len);
+			cmd[len] = 0;
+			r_core_cmd0 (core, cmd);
+			free (cmd);
+		} else {
+			eprintf ("Usage: b64:P2UgaGVsbG8K - decode base64 and run command\n");
+		}
+		break;
 	case 'm': // "bm"
 		n = r_num_math (core->num, input + 1);
 		if (n > 1) {
@@ -3757,6 +3832,26 @@ static int r_core_cmd_subst_i(RCore *core, char *cmd, char *colon, bool *tmpseek
 				if (!strcmp (ptr + 1, "?")) { // "|?"
 					r_core_cmd_help (core, help_msg_vertical_bar);
 					r_list_free (tmpenvs);
+					return ret;
+				} else if (ptr[1] == 'D') { // "|D"
+					char *s = r_core_cmd_str (core, cmd);
+					int len;
+					char *e = (char *)sdb_decode (s, &len);
+					r_cons_printf ("%s\n", e);
+					free (e);
+					free (s);
+					return 0;
+				} else if (ptr[1] == 'E') { // "|E"
+					char *s = r_core_cmd_str (core, cmd);
+					char *e = sdb_encode ((const ut8*)s, strlen (s));
+					r_cons_printf ("%s\n", e);
+					free (e);
+					free (s);
+					return 0;
+				} else if (ptr[1] == 'J') { // "|J" same as "j:"
+					char *ncmd = r_str_newf ("j:%s", cmd);
+					int ret = r_core_cmd0 (core, ncmd);
+					free (ncmd);
 					return ret;
 				} else if (ptr[1] == 'H') { // "|H"
 					scr_html = r_config_get_b (core->config, "scr.html");
