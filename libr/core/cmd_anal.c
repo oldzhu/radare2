@@ -497,16 +497,15 @@ static const char *help_msg_aets[] = {
 static const char *help_msg_af[] = {
 	"Usage:", "af", "",
 	"af", " ([name]) ([addr])", "analyze functions (start at addr or $$)",
-	"afr", " ([name]) ([addr])", "analyze functions recursively",
 	"af+", " addr name [type] [diff]", "hand craft a function (requires afb+)",
 	"af-", " [addr]", "clean all function analysis data (or function at addr)",
 	"afa", "", "analyze function arguments in a call (afal honors dbg.funcarg)",
-	"afb+", " fcnA bbA sz [j] [f] ([t]( [d]))", "add bb to function @ fcnaddr",
-	"afb", "[?] [addr]", "List basic blocks of given function",
-	"afbF", "([0|1])", "Toggle the basic-block 'folded' attribute",
 	"afB", " 16", "set current function as thumb (change asm.bits)",
-	"afC[lc]", " ([addr])@[addr]", "calculate the Cycles (afC) or Cyclomatic Complexity (afCc)",
+	"afb", "[?] [addr]", "List basic blocks of given function",
+	"afb+", " fcnA bbA sz [j] [f] ([t]( [d]))", "add bb to function @ fcnaddr",
+	"afbF", "([0|1])", "Toggle the basic-block 'folded' attribute",
 	"afc", "[?] type @[addr]", "set calling convention for function",
+	"afC[lc]", " ([addr])@[addr]", "calculate the Cycles (afC) or Cyclomatic Complexity (afCc)",
 	"afd", "[addr]","show function + delta for given offset",
 	"afF", "[1|0|]", "fold/unfold/toggle",
 	"afi", " [addr|fcn.name]", "show function(s) information (verbose afl)",
@@ -517,6 +516,7 @@ static const char *help_msg_af[] = {
 	"afn", "[?] name [addr]", "rename name for function at address (change flag too)",
 	"afna", "", "suggest automatic name for current offset",
 	"afo", "[?j] [fcn.name]", "show address for the function name or current offset",
+	"afr", " ([name]) ([addr])", "analyze functions recursively",
 	"afs", "[!] ([fcnsign])", "get/set function signature at current address (afs! uses cfg.editor)",
 	"afS", "[stack_size]", "set stack frame size for function at current address",
 	"afsr", " [function_name] [new_type]", "change type for given function",
@@ -603,10 +603,11 @@ static const char *help_msg_afl[] = {
 	"aflt", " [query]", "list functions in table format",
 	"afll", " [column]", "list functions in verbose mode (sorted by column name)",
 	"afllj", "", "list functions in verbose mode (alias to aflj)",
-	"aflm", "", "list functions in makefile style (af@@=`aflm~0x`)",
+	"aflm", "[?]", "list functions in makefile style (af@@=`aflm~0x`)",
 	"aflq", "", "list functions in quiet mode",
 	"aflqj", "", "list functions in json quiet mode",
 	"afls", "[?asn]", "sort function list by address, size or name",
+	"aflx", "", "list function xrefs (who references or calls the current function)",
 	NULL
 };
 
@@ -1093,6 +1094,22 @@ static bool anal_is_bad_call(RCore *core, ut64 from, ut64 to, ut64 addr, ut8 *bu
 	return false;
 }
 #endif
+
+static ut64 faddr(RCore *core, ut64 addr, bool *nr) {
+	RList *fcns = r_anal_get_functions_in (core->anal, addr);
+	if (fcns && r_list_length (fcns) > 0) {
+		RListIter *iter;
+		RAnalFunction *fcn;
+		r_list_foreach (fcns, iter, fcn) {
+			if (nr && fcn->is_noreturn) {
+				*nr = true;
+			}
+			return fcn->addr;
+		}
+	}
+	r_list_free (fcns);
+	return addr;
+}
 
 // function argument types and names into anal/types
 static void __add_vars_sdb(RCore *core, RAnalFunction *fcn) {
@@ -2857,6 +2874,8 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 	ut64 opaddr = __opaddr (b, addr);
 	if (pj) {
 		pj_o (pj);
+		pj_kn (pj, "addr", b->addr);
+		pj_ki (pj, "size", b->size);
 		if (b->jump != UT64_MAX) {
 			pj_kn (pj, "jump", b->jump);
 		}
@@ -2887,11 +2906,18 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 			pj_end (pj);
 		}
 		pj_kn (pj, "opaddr", opaddr);
-		pj_kn (pj, "addr", b->addr);
-		pj_ki (pj, "size", b->size);
 		pj_ki (pj, "inputs", inputs);
 		pj_ki (pj, "outputs", outputs);
 		pj_ki (pj, "ninstr", b->ninstr);
+		pj_ko (pj, "instrs");
+		{
+			int i;
+			for (i = 0; i <= b->ninstr; i++) {
+				int delta = (i > 0)? b->op_pos[i-1]: 0;
+				pj_n (pj, b->addr + delta);
+			}
+		}
+		pj_end (pj);
 		pj_kb (pj, "traced", b->traced);
 		pj_end (pj);
 	} else {
@@ -4420,6 +4446,35 @@ static int cmd_af(RCore *core, const char *input) {
 		case '?':
 			r_core_cmd_help (core, help_msg_afl);
 			break;
+		case 'x': // "aflx"
+			{
+				ut64 addr = faddr (core, core->offset, NULL);
+				RList *xrefs = r_anal_xrefs_get (core->anal, addr);
+				Sdb *db = sdb_new0 ();
+				// sort by function and uniq to avoid dupped results
+				RListIter *iter;
+				RAnalRef *ref;
+				r_list_foreach (xrefs, iter, ref) {
+					bool nr = false;
+					ut64 fa = faddr (core, ref->addr, &nr);
+					char *key = r_str_newf ("0x%08"PFMT64x, fa);
+					sdb_array_add_num (db, key, ref->addr, 0);
+				}
+				SdbList *keys = sdb_foreach_list (db, true);
+				SdbListIter *liter;
+				SdbKv *kv;
+				bool rad = input[3] == '*';
+				ls_foreach (keys, liter, kv) {
+					if (rad) {
+						r_cons_printf ("s %s;af-;af;s-\n", (const char *)kv->base.key);
+					} else {
+						r_cons_printf ("%s %s\n", (const char *)kv->base.key, (const char *)kv->base.value);
+					}
+				}
+				sdb_free (db);
+				ls_free (keys);
+			}
+			break;
 		case 's': // "afls"
 			switch (input[3]) {
 			default:
@@ -4467,8 +4522,12 @@ static int cmd_af(RCore *core, const char *input) {
 		case 'c': // "aflc"
 			r_cons_printf ("%d\n", r_list_length (core->anal->fcns));
 			break;
-		default: // "afl "
+		case ' ': // "afl [addr]" argument ignored
+		case 0: // "afl"
 			r_core_anal_fcn_list (core, NULL, "o");
+			break;
+		default: // "afl "
+			r_core_cmd_help (core, help_msg_afl);
 			break;
 		}
 		break;
@@ -9737,6 +9796,51 @@ static void cmd_agraph_edge(RCore *core, const char *input) {
 	}
 }
 
+R_API void cmd_agfb(RCore *core) {
+	const int c = r_config_get_b (core->config, "scr.color");
+	r_config_set_i (core->config, "scr.color", 0);
+	r_cons_push ();
+	r_core_visual_graph (core, NULL, NULL, false);
+	r_config_set_i (core->config, "scr.color", c);
+	char *s = strdup (r_cons_singleton()->context->buffer);
+	r_cons_pop ();
+	cmd_agfb2 (core, s);
+	free (s);
+}
+
+R_API void cmd_aggb(RCore *core) {
+	const int c = r_config_get_b (core->config, "scr.color");
+	r_config_set_i (core->config, "scr.color", 0);
+	r_cons_push ();
+	int ograph_zoom = r_config_get_i (core->config, "graph.zoom");
+	r_config_set_i (core->config, "graph.zoom", 1);
+	r_core_cmd0 (core, "agg");
+	r_config_set_i (core->config, "scr.color", c);
+	char *s = strdup (r_cons_singleton()->context->buffer);
+	r_cons_pop ();
+	cmd_agfb2 (core, s);
+	r_config_set_i (core->config, "graph.zoom", ograph_zoom);
+	free (s);
+}
+
+R_API void cmd_agfb3(RCore *core, const char *s, int x, int y) {
+	int h, w = r_str_size (s, &h);
+	RConsPixel *p = r_cons_pixel_new (w, h);
+	r_cons_pixel_sets (p, 0, 0, s);
+	r_cons_pixel_flush (p, x, y);
+	R_FREE (p);
+}
+
+R_API void cmd_agfb2(RCore *core, const char *s) {
+	int h, w = r_str_size (s, &h);
+	RConsPixel *p = r_cons_pixel_new (w, h);
+	r_cons_pixel_sets (p, 0, 0, s);
+	char *pix = r_cons_pixel_drain (p);
+	r_cons_printf ("%s\n", pix);
+	free (pix);
+}
+
+
 static char *mermaid_sanitize_str(const char *str) {
 	if (!str) {
 		return NULL;
@@ -9847,6 +9951,9 @@ R_API void r_core_agraph_print(RCore *core, int use_utf, const char *input) {
 		core->graph->is_tiny = false;
 		break;
 	}
+	case 'b': // "aggb"
+		cmd_aggb (core);
+		break;
 	case 'm': // "aggm"
 		if (core->graph) {
 			mermaid_graph (core->graph->graph, mermaid_anod_body);
@@ -10111,35 +10218,6 @@ static void r_core_graph_print(RCore *core, RGraph /*<RGraphNodeInfo>*/ *graph, 
 		r_core_cmd_help (core, help_msg_ag);
 		break;
 	}
-}
-
-R_API void cmd_agfb(RCore *core) {
-	const int c = r_config_get_b (core->config, "scr.color");
-	r_config_set_i (core->config, "scr.color", 0);
-	r_cons_push ();
-	r_core_visual_graph (core, NULL, NULL, false);
-	r_config_set_i (core->config, "scr.color", c);
-	char *s = strdup (r_cons_singleton()->context->buffer);
-	r_cons_pop ();
-	cmd_agfb2 (core, s);
-	free (s);
-}
-
-R_API void cmd_agfb3(RCore *core, const char *s, int x, int y) {
-	int h, w = r_str_size (s, &h);
-	RConsPixel *p = r_cons_pixel_new (w, h);
-	r_cons_pixel_sets (p, 0, 0, s);
-	r_cons_pixel_flush (p, x, y);
-	R_FREE (p);
-}
-
-R_API void cmd_agfb2(RCore *core, const char *s) {
-	int h, w = r_str_size (s, &h);
-	RConsPixel *p = r_cons_pixel_new (w, h);
-	r_cons_pixel_sets (p, 0, 0, s);
-	char *pix = r_cons_pixel_drain (p);
-	r_cons_printf ("%s\n", pix);
-	free (pix);
 }
 
 static inline bool mermaid_add_node_asm(RAnal *a, RAnalBlock *bb, RStrBuf *nodes) {
