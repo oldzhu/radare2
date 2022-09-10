@@ -64,7 +64,7 @@ static R_TH_LOCAL ut64 t9_pre = UT64_MAX;
 #define ES_J(addr) addr ",SETJT,1,SETD"
 #else
 #define ES_TRAP_DS() ""
-#define ES_J(addr)   addr ",pc,="
+#define ES_J(addr)   addr ",pc,:="
 #endif
 
 #define ES_SIGN32_64(arg) es_sign_n_64 (a, op, arg, 32)
@@ -777,7 +777,7 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, gnu_insn *insn) {
 
 	switch (insn->id) {
 	case MIPS_INS_NOP:
-		r_strbuf_setf (&op->esil, ",");
+		r_strbuf_set (&op->esil, ",");
 		break;
 	case MIPS_INS_BREAK:
 		// r_strbuf_setf (&op->esil, "%d,%d,TRAP", IMM (0), IMM (0));

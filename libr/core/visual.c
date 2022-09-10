@@ -52,13 +52,13 @@ static const char *printfmtColumns[NPF] = {
 };
 
 // to print the stack in the debugger view
-#define PRINT_HEX_FORMATS 10
+#define PRINT_HEX_FORMATS 11
 #define PRINT_3_FORMATS 2
 #define PRINT_4_FORMATS 9
 #define PRINT_5_FORMATS 7
 
 static const char *printHexFormats[PRINT_HEX_FORMATS] = {
-	"px", "pxa", "pxr", "prx", "pxb", "pxh", "pxw", "pxq", "pxd", "pxr",
+	"px", "pxa", "pxr", "prx", "pxb", "pxh", "pxw", "pxq", "pxu", "pxd", "pxr",
 };
 static R_TH_LOCAL int current3format = 0;
 static const char *print3Formats[PRINT_3_FORMATS] = { //  not used at all. its handled by the pd format
@@ -80,7 +80,7 @@ R_API void r_core_visual_applyHexMode(RCore *core, int hexMode) {
 	case 0: /* px */
 	case 3: /* prx */
 	case 6: /* pxw */
-	case 9: /* pxr */
+	case 10: /* pxr */
 		r_config_set (core->config, "hex.compact", "false");
 		r_config_set (core->config, "hex.comments", "true");
 		break;
@@ -95,7 +95,8 @@ R_API void r_core_visual_applyHexMode(RCore *core, int hexMode) {
 		break;
 	case 2: /* pxr */
 	case 5: /* pxh */
-	case 8: /* pxd */
+	case 8: /* pxu */
+	case 9: /* pxd */
 		r_config_set (core->config, "hex.compact", "false");
 		r_config_set (core->config, "hex.comments", "false");
 		break;
@@ -615,8 +616,8 @@ repeat:
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'v':
-		r_strbuf_appendf (p, "Visual Views:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Views:\n\n");
+		r_strbuf_append (p,
 			" \\     toggle horizonal split mode\n"
 			" tt     create a new tab (same as t+)\n"
 			" t=     give a name to the current tab\n"
@@ -630,16 +631,16 @@ repeat:
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'p':
-		r_strbuf_appendf (p, "Visual Print Modes:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Print Modes:\n\n");
+		r_strbuf_append (p,
 			" pP  -> change to the next/previous print mode (hex, dis, ..)\n"
 			" TAB -> rotate between all the configurations for the current print mode\n"
 		);
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'e':
-		r_strbuf_appendf (p, "Visual Evals:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Evals:\n\n");
+		r_strbuf_append (p,
 			" E      toggle asm.hint.lea\n"
 			" &      rotate asm.bits=16,32,64\n"
 		);
@@ -650,8 +651,8 @@ repeat:
 		r_strbuf_free (p);
 		return ret;
 	case 'i':
-		r_strbuf_appendf (p, "Visual Insertion Help:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Insertion Help:\n\n");
+		r_strbuf_append (p,
 			" i   -> insert bits, bytes or text depending on view\n"
 			" a   -> assemble instruction and write the bytes in the current offset\n"
 			" A   -> visual assembler\n"
@@ -661,8 +662,8 @@ repeat:
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'd':
-		r_strbuf_appendf (p, "Visual Debugger Help:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Debugger Help:\n\n");
+		r_strbuf_append (p,
 			" $   -> set the program counter (PC register)\n"
 			" s   -> step in\n"
 			" S   -> step over\n"
@@ -672,8 +673,8 @@ repeat:
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'm':
-		r_strbuf_appendf (p, "Visual Moving Around:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Moving Around:\n\n");
+		r_strbuf_append (p,
 			" g        type flag/offset/register name to seek\n"
 			" hl       seek to the next/previous byte\n"
 			" jk       seek to the next row (core.offset += hex.cols)\n"
@@ -686,8 +687,8 @@ repeat:
 		ret = r_cons_less_str (r_strbuf_get (p), "?");
 		break;
 	case 'a':
-		r_strbuf_appendf (p, "Visual Analysis:\n\n");
-		r_strbuf_appendf (p,
+		r_strbuf_append (p, "Visual Analysis:\n\n");
+		r_strbuf_append (p,
 			" df -> define function\n"
 			" du -> undefine function\n"
 			" dc -> define as code\n"
@@ -1547,7 +1548,7 @@ repeat:
 					// TODO: show disasm with context. not seek addr
 					// dis = r_core_cmd_strf (core, "pd $r-4 @ 0x%08"PFMT64x, refi->addr);
 					dis = NULL;
-					res = r_str_appendf (res, "; ---------------------------\n");
+					res = r_str_append (res, "; ---------------------------\n");
 					switch (printMode) {
 					case 0:
 						dis = r_core_cmd_strf (core, "pd--6 @ 0x%08"PFMT64x, refi->addr);
