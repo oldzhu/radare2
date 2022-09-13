@@ -182,7 +182,7 @@ R_API void r_cons_canvas_clear(RConsCanvas *c) {
 R_API bool r_cons_canvas_gotoxy(RConsCanvas *c, int x, int y) {
 	bool ret = true;
 	if (!c) {
-		return 0;
+		return false;
 	}
 	y += c->sy;
 	x += c->sx;
@@ -457,6 +457,9 @@ R_API int r_cons_canvas_resize(RConsCanvas *c, int w, int h) {
 	for (i = 0; i < h; i++) {
 		if (i < c->h) {
 			newline = realloc (c->b[i], sizeof (*c->b[i]) * (w + 1));
+			if (newline) {
+				c->b[i] = newline;
+			}
 		} else {
 			newline = malloc (w + 1);
 		}
