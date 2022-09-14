@@ -317,7 +317,7 @@ static bool ranal2_list(RCore *core, const char *arch, int fmt) {
 
 static inline void __setsegoff(RConfig *cfg, const char *asmarch, int asmbits) {
 	int autoseg = r_str_startswith (asmarch, "x86") && asmbits == 16;
-	r_config_set (cfg, "asm.segoff", r_str_bool (autoseg));
+	r_config_set (cfg, "asm.offset.segment", r_str_bool (autoseg));
 }
 
 static bool cb_debug_hitinfo(void *user, void *data) {
@@ -2651,7 +2651,7 @@ static bool cb_segoff(void *user, void *data) {
 	return true;
 }
 
-static bool cb_seggrn(void *user, void *data) {
+static bool cb_asm_offset_segment_bits(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	core->rasm->config->seggrn = node->i_value;
@@ -3241,6 +3241,12 @@ static bool cb_log_origin(void *coreptr, void *nodeptr) {
 	return true;
 }
 
+static bool cb_log_source(void *coreptr, void *nodeptr) {
+	RConfigNode *node = (RConfigNode *)nodeptr;
+	r_log_show_source (r_str_is_true (node->value));
+	return true;
+}
+
 static bool cb_log_config_colors(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	r_log_set_colors (r_str_is_true (node->value));
@@ -3352,7 +3358,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("anal.verbose", "false", &cb_analverbose, "show RAnal warnings when analyzing code");
 	SETBPREF ("anal.a2f", "false",  "use the new WIP analysis algorithm (core/p/a2f), anal.depth ignored atm");
 	SETCB ("anal.roregs", "gp,zero", (RConfigCallback)&cb_anal_roregs, "comma separated list of register names to be readonly");
-	SETICB ("anal.cs", 0, (RConfigCallback)&cb_anal_cs, "set the value for the x86-16 CS segment register (see asm.seggrn and asm.segoff)");
+	SETICB ("anal.cs", 0, (RConfigCallback)&cb_anal_cs, "set the value for the x86-16 CS segment register (see asm.offset.segment and asm.offset.segment.bits)");
 	SETICB ("anal.gp", 0, (RConfigCallback)&cb_anal_gp, "set the value of the GP register (MIPS)");
 	SETBPREF ("anal.gpfixed", "true", "set gp register to anal.gp before emulating each instruction in aae");
 	SETCB ("anal.limits", "false", (RConfigCallback)&cb_anal_limits, "restrict analysis to address range [anal.from:anal.to]");
@@ -3553,14 +3559,17 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("asm.middle", "false", "allow disassembling jumps in the middle of an instruction");
 	SETBPREF ("asm.bbmiddle", "true", "realign disassembly if a basic block starts in the middle of an instruction");
 	SETBPREF ("asm.noisy", "true", "show comments considered noisy but possibly useful");
-	SETBPREF ("asm.offset", "true", "show offsets in disassembly");
 	SETBPREF ("hex.offset", "true", "show offsets in hex-dump");
 	SETBPREF ("scr.square", "true", "use square pixels or not");
 	SETCB ("scr.wideoff", "false", &cb_scr_wideoff, "adjust offsets to match asm.bits");
 	SETCB ("scr.rainbow", "false", &cb_scrrainbow, "shows rainbow colors depending of address");
 	SETCB ("scr.last", "true", &cb_scrlast, "cache last output after flush to make _ command work (disable for performance)");
-	SETBPREF ("asm.reloff", "false", "show relative offsets instead of absolute address in disasm");
-	SETBPREF ("asm.reloff.flags", "false", "show relative offsets to flags (not only functions)");
+	SETBPREF ("asm.offset", "true", "show offsets in disassembly");
+	SETCB ("asm.offset.segment", "false", &cb_segoff, "show segmented address in prompt (x86-16)");
+	SETICB ("asm.offset.segment.bits", 4, &cb_asm_offset_segment_bits, "segment granularity in bits (x86-16)");
+	SETCB ("asm.offset.base10", "false", &cb_decoff, "show address in base 10 instead of hexadecimal");
+	SETBPREF ("asm.offset.relative", "false", "show relative offsets instead of absolute address in disasm");
+	SETBPREF ("asm.offset.flags", "false", "show relative offsets to flags (not only functions)");
 	SETBPREF ("asm.section", "false", "show section name before offset");
 	SETBPREF ("asm.section.perm", "false", "show section permissions in the disasm");
 	SETBPREF ("asm.section.name", "true", "show section name in the disasm");
@@ -3605,9 +3614,6 @@ R_API int r_core_config_init(RCore *core) {
 	n = NODECB ("asm.parser", "x86.pseudo", &cb_asmparser);
 	SETDESC (n, "set the asm parser to use");
 	update_asmparser_options (core, n);
-	SETCB ("asm.segoff", "false", &cb_segoff, "show segmented address in prompt (x86-16)");
-	SETCB ("asm.decoff", "false", &cb_decoff, "show segmented address in prompt (x86-16)");
-	SETICB ("asm.seggrn", 4, &cb_seggrn, "segment granularity in bits (x86-16)");
 	n = NODECB ("asm.syntax", "intel", &cb_asmsyntax);
 	SETDESC (n, "select assembly syntax");
 	SETOPTIONS (n, "att", "intel", "masm", "jz", "regnum", NULL);
@@ -3754,9 +3760,10 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("log.ts", "false", cb_log_config_ts, "Show timestamp in log messages");
 
 	SETICB ("log.traplevel", 0, cb_log_config_traplevel, "Log level for trapping R2 when hit");
-	SETCB ("log.file", "", cb_log_config_file, "Logging output filename / path");
+	SETCB ("log.file", "", cb_log_config_file, "Save log messages to given filename"); // 580 -rename to file.log ?)
 	SETCB ("log.filter", "", cb_log_config_filter, "Filter only messages matching given origin");
 	SETCB ("log.origin", "false", cb_log_origin, "Show [origin] in log messages");
+	SETCB ("log.source", "false", cb_log_source, "Show source [file:line] in the log message");
 	SETCB ("log.color", "false", cb_log_config_colors, "Should the log output use colors");
 	SETCB ("log.quiet", "false", cb_log_config_quiet, "Be quiet, dont log anything to console");
 
@@ -3930,7 +3937,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("hex.header", "true", &cb_hex_header, "show header in hexdump");
 	SETCB ("hex.bytes", "true", &cb_hex_bytes, "show bytes column in hexdump");
 	SETCB ("hex.ascii", "true", &cb_hex_ascii, "show ascii column in hexdump");
-	SETCB ("hex.hdroff", "false", &cb_hex_hdroff, "show aligned 1 byte in header instead of delta nibble");
+	SETCB ("hex.hdroff", "true", &cb_hex_hdroff, "show aligned 1 byte in header instead of delta nibble");
 	SETCB ("hex.style", "false", &cb_hex_style, "improve the hexdump header style");
 	SETCB ("hex.pairs", "true", &cb_hex_pairs, "show bytes paired in 'px' hexdump");
 	SETCB ("hex.align", "false", &cb_hex_align, "align hexdump with flag + flagsize");
@@ -4135,7 +4142,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("scr.tts", "false", "use tts if available by a command (see ic)");
 	SETCB ("scr.prompt", "true", &cb_scrprompt, "show user prompt (used by r2 -q)");
 	SETCB ("scr.tee", "", &cb_teefile, "pipe output to file of this name");
-	SETPREF ("scr.seek", "", "seek to the specified address on startup");
 	SETICB ("scr.color", (core->print->flags&R_PRINT_FLAGS_COLOR)?COLOR_MODE_16:COLOR_MODE_DISABLED, &cb_color, "enable colors (0: none, 1: ansi, 2: 256 colors, 3: truecolor)");
 	r_config_set_getter (cfg, "scr.color", (RConfigCallback)cb_color_getter);
 	SETCB ("scr.color.grep", "false", &cb_scr_color_grep, "enable colors when using ~grep");
@@ -4204,7 +4210,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("io.pcache.write", "false", &cb_iopcachewrite, "enable write-cache");
 	SETCB ("io.pcache.read", "false", &cb_iopcacheread, "enable read-cache");
 	SETCB ("io.ff", "true", &cb_ioff, "fill invalid buffers with 0xff instead of returning error");
-	SETBPREF ("io.basemap", "true", "create a map at base address 0 when opening a file");
+	SETBPREF ("io.basemap", "false", "create a map at base address 0 when opening a file");
 	SETICB ("io.mask", 0, &cb_iomask, "mask addresses before resolving as maps");
 	SETBPREF ("io.exec", "true", "see !!r2 -h~-x");
 	SETICB ("io.0xff", 0xff, &cb_io_oxff, "use this value instead of 0xff to fill unallocated areas");
@@ -4217,7 +4223,6 @@ R_API int r_core_config_init(RCore *core) {
 
 	/* file */
 	SETBPREF ("file.info", "true", "RBin info loaded");
-	SETPREF ("file.offset", "", "offset where the file will be mapped at");
 	SETPREF ("file.type", "", "type of current file");
 	SETI ("file.loadalign", 1024, "alignment of load addresses");
 	/* magic */

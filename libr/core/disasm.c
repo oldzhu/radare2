@@ -83,7 +83,7 @@ typedef struct {
 	bool show_color;
 	bool show_color_bytes;
 	bool show_color_args;
-	int colorop;
+	bool colorop;
 	int acase;
 	bool capitalize;
 	bool show_flgoff;
@@ -649,15 +649,14 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->pre_emu = r_config_get_i (core->config, "emu.pre");
 	ds->show_flgoff = r_config_get_i (core->config, "asm.flags.offset");
 	ds->show_nodup = r_config_get_i (core->config, "asm.nodup");
-	{
-		const char *ah = r_config_get (core->config, "asm.highlight");
-		ds->asm_highlight = (ah && *ah)? r_num_math (core->num, ah): UT64_MAX;
-	}
+	const char *ah = r_config_get (core->config, "asm.highlight");
+	ds->asm_highlight = R_STR_ISNOTEMPTY (ah)? r_num_math (core->num, ah): UT64_MAX;
 	ds->asm_anal = r_config_get_i (core->config, "asm.anal");
 	ds->show_color = r_config_get_i (core->config, "scr.color");
-	ds->show_color_bytes = r_config_get_i (core->config, "scr.color.bytes"); // maybe rename to asm.color.bytes
+	ds->show_color_bytes = r_config_get_i (core->config, "scr.color.bytes");
 	ds->show_color_args = r_config_get_i (core->config, "scr.color.args");
-	ds->colorop = r_config_get_i (core->config, "scr.color.ops"); // XXX confusing name // asm.color.inst (mnemonic + operands) ?
+	ds->colorop = r_config_get_b (core->config, "scr.color.ops");
+	R_LOG_TODO ("find a better name for 'scr.color.ops'");
 	ds->show_utf8 = r_config_get_i (core->config, "scr.utf8");
 	ds->acase = r_config_get_i (core->config, "asm.ucase");
 	ds->capitalize = r_config_get_i (core->config, "asm.capitalize");
@@ -708,7 +707,7 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->asm_demangle = r_config_get_i (core->config, "asm.demangle");
 	ds->asm_describe = r_config_get_i (core->config, "asm.describe");
 	ds->show_offset = r_config_get_i (core->config, "asm.offset");
-	ds->show_offdec = r_config_get_i (core->config, "asm.decoff");
+	ds->show_offdec = r_config_get_i (core->config, "asm.offset.base10");
 	ds->show_bbline = r_config_get_i (core->config, "asm.lines.bb");
 	ds->show_section = r_config_get_i (core->config, "asm.section");
 	ds->show_section_col = r_config_get_i (core->config, "asm.section.col");
@@ -745,7 +744,7 @@ static RDisasmState *ds_init(RCore *core) {
 		}
 	}
 	ds->stackptr = core->anal->stackptr;
-	ds->show_offseg = r_config_get_i (core->config, "asm.segoff");
+	ds->show_offseg = r_config_get_b (core->config, "asm.offset.segment");
 	ds->show_flags = r_config_get_b (core->config, "asm.flags");
 	ds->show_bytes = r_config_get_b (core->config, "asm.bytes");
 	ds->show_bytes_right = r_config_get_i (core->config, "asm.bytes.right");
@@ -753,8 +752,8 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->show_optype = r_config_get_i (core->config, "asm.optype");
 	ds->asm_meta = r_config_get_i (core->config, "asm.meta");
 	ds->asm_xrefs_code = r_config_get_i (core->config, "asm.xrefs.code");
-	ds->show_reloff = r_config_get_i (core->config, "asm.reloff");
-	ds->show_reloff_flags = r_config_get_i (core->config, "asm.reloff.flags");
+	ds->show_reloff = r_config_get_i (core->config, "asm.offset.relative");
+	ds->show_reloff_flags = r_config_get_i (core->config, "asm.offset.flags");
 	ds->show_lines_fcn = ds->show_lines ? r_config_get_i (core->config, "asm.lines.fcn") : false;
 	ds->show_comments = r_config_get_i (core->config, "asm.comments");
 	ds->show_usercomments = r_config_get_i (core->config, "asm.usercomments");
@@ -912,7 +911,7 @@ static void ds_free(RDisasmState *ds) {
 		return;
 	}
 	if (ds->show_emu_stack) {
-		// TODO: destroy fake stack in here
+		R_LOG_TODO ("destroy fake stack");
 		if (ds->stackFd != -1) {
 			r_io_fd_close (ds->core->io, ds->stackFd);
 		}
@@ -5392,7 +5391,8 @@ static char *ds_sub_jumps(RDisasmState *ds, char *str) {
 		}
 	} else if (f) {
 		RBinReloc *rel = NULL;
-		if (!ds->core->bin->is_reloc_patched) {
+		RBinObject *bo = r_bin_cur_object (ds->core->bin);
+		if (bo && !bo->is_reloc_patched) {
 			rel = r_core_getreloc (ds->core, ds->analop.addr, ds->analop.size);
 		}
 		if (!rel) {
@@ -6279,6 +6279,9 @@ static bool handle_backwards_disasm(RCore *core, int *nb_opcodes, int *nb_bytes)
 			}
 			if (nbytes > core->blocksize) {
 				r_core_block_size (core, nbytes);
+			}
+			if (nbytes < 1) {
+				return false;
 			}
 			r_io_read_at (core->io, core->offset, core->block, nbytes);
 		}

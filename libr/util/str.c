@@ -524,8 +524,9 @@ R_API const char *r_str_word_get0(const char *str, int idx) {
 }
 
 // Return the number of times that the character ch appears in the string.
-R_API int r_str_char_count(const char *string, char ch) {
-	int i, count = 0;
+R_API size_t r_str_char_count(const char *string, char ch) {
+	r_return_val_if_fail (string, 0);
+	ut32 i, count = 0;
 	for (i = 0; string[i]; i++) {
 		if (string[i] == ch) {
 			count++;
@@ -3768,13 +3769,13 @@ R_API void r_str_stripLine(char *str, const char *key) {
 
 R_API char *r_str_list_join(RList *str, const char *sep) {
 	r_return_val_if_fail (str && sep, NULL);
+	RListIter *iter;
 	RStrBuf *sb = r_strbuf_new ("");
-	const char *p;
-	while ((p = r_list_pop_head (str))) {
+	r_list_foreach_iter (str, iter) {
 		if (r_strbuf_length (sb) != 0) {
 			r_strbuf_append (sb, sep);
 		}
-		r_strbuf_append (sb, p);
+		r_strbuf_append (sb, iter->data);
 	}
 	return r_strbuf_drain (sb);
 }
