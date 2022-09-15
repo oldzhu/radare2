@@ -11,6 +11,7 @@
 #include <r_cons.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #if __APPLE__ && LIBC_HAVE_FORK
 #if !__POWERPC__
@@ -465,13 +466,13 @@ static int handle_redirection_proc(const char *cmd, bool in, bool out, bool err)
 }
 #endif
 
-static int handle_redirection(const char *cmd, bool in, bool out, bool err) {
+static bool handle_redirection(const char *cmd, bool in, bool out, bool err) {
 #if __APPLE__ && !__POWERPC__
 	//XXX handle this in other layer since things changes a little bit
 	//this seems like a really good place to refactor stuff
-	return 0;
+	return true;
 #else
-	if (!cmd || !*cmd) {
+	if (R_STR_ISEMPTY (cmd)) {
 		return true;
 	}
 	if (cmd[0] == '"') {
@@ -892,7 +893,7 @@ static bool redirect_socket_to_pty(RSocket *sock) {
 	cfmakeraw (&t);
 	tcsetattr (0, TCSANOW, &t);
 
-	return 0;
+	return true;
 #else
 	// Fallback to socket to I/O redirection
 	return redirect_socket_to_stdio (sock);
@@ -905,22 +906,25 @@ R_API bool r_run_config_env(RRunProfile *p) {
 #if HAVE_PTY
 	dyn_init ();
 #endif
-
 	if (!p->_program && !p->_system && !p->_runlib) {
 		R_LOG_ERROR ("No program, system or runlib rule defined");
 		return false;
 	}
 	// when IO is redirected to a process, handle them together
 	if (!handle_redirection (p->_stdio, true, true, false)) {
+		R_LOG_WARN ("cannot handle stdio redirection");
 		return false;
 	}
 	if (!handle_redirection (p->_stdin, true, false, false)) {
+		R_LOG_WARN ("cannot handle stdin redirection");
 		return false;
 	}
 	if (!handle_redirection (p->_stdout, false, true, false)) {
+		R_LOG_WARN ("cannot handle stdout redirection");
 		return false;
 	}
 	if (!handle_redirection (p->_stderr, false, false, true)) {
+		R_LOG_WARN ("cannot handle stderr redirection");
 		return false;
 	}
 	if (p->_aslr != -1) {
@@ -973,7 +977,7 @@ R_API bool r_run_config_env(RRunProfile *p) {
 		if (!r_socket_listen (fd, p->_listen, NULL)) {
 			R_LOG_ERROR ("Cannot listen");
 			r_socket_free (fd);
-			return 1;
+			return false;
 		}
 		while (true) {
 			child = r_socket_accept (fd);
@@ -987,7 +991,8 @@ R_API bool r_run_config_env(RRunProfile *p) {
 						r_socket_free (child);
 						r_socket_free (fd);
 						return false;
-					} else if (child_pid != 0) {
+					}
+					if (child_pid != 0) {
 						// parent code
 						is_child = false;
 						if (p->_pid) {
