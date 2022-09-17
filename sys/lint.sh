@@ -2,9 +2,12 @@
 
 cd "$(dirname $0)"/..
 
+(git grep 'TODO' libr | grep R_LOG_INFO) && exit 1
+( git grep r_config_set libr binr | grep -e '"fal' -e '"tru') && exit 1
 # find calls without (
 #(git grep -n -e '[a-z]('  | grep -v static | grep -v _API | grep -v shlr | grep libr/core) && exit 1
 # validated and ready to go lintings
+(git grep -e 'R_MIN(' -e 'R_MAX(' libr | grep c:) && exit 1
 (git grep -n 'cmp(' libr | grep -v R_API | grep -v static | grep c:) && exit 1
 # (git grep -n 'len(' libr | grep -v R_API | grep -v static | grep c:) && exit 1
 # (git grep -n ',"' libr | grep -v R_API | grep -v static | grep c:) && exit 1
@@ -68,7 +71,6 @@ cd "$(dirname $0)"/..
 # pending cleanups
 # ( git grep 'desc = "[A-Z]' ) && exit 1
 # git grep -e "`printf '\x09static'`" libr | grep -v R_TH_LOCAL|grep -v const | grep -v '(' && exit 1
-# (git grep 'TODO' libr) # && exit 1 # use r_str_startswith()
 # (git grep 'XXX' libr) # && exit 1 # use r_str_startswith()
 # (git grep 'strncmp' libr) # && exit 1 # use r_str_startswith()
 # (git grep 'eprintf' libr | grep 'Warning:') # && exit 1

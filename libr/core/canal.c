@@ -497,7 +497,6 @@ R_API void r_core_anal_autoname_all_fcns(RCore *core) {
 R_API void r_core_anal_autoname_all_golang_fcns(RCore *core) {
 	RList* section_list = r_bin_get_sections (core->bin);
 	RListIter *iter;
-	const char* oldstr = NULL;
 	RBinSection *section;
 	ut64 gopclntab = 0;
 	r_list_foreach (section_list, iter, section) {
@@ -507,8 +506,7 @@ R_API void r_core_anal_autoname_all_golang_fcns(RCore *core) {
 		}
 	}
 	if (!gopclntab) {
-		oldstr = r_print_rowlog (core->print, "Could not find .gopclntab section");
-		r_print_rowlog_done (core->print, oldstr);
+		R_LOG_ERROR ("Could not find .gopclntab section");
 		return;
 	}
 	int ptr_size = core->anal->config->bits / 8;
@@ -552,12 +550,9 @@ R_API void r_core_anal_autoname_all_golang_fcns(RCore *core) {
 	}
 	r_flag_space_pop (core->flags);
 	if (num_syms) {
-		r_strf_var (msg, 128, "Found %d symbols and saved them at sym.go.*", num_syms);
-		oldstr = r_print_rowlog (core->print, msg);
-		r_print_rowlog_done (core->print, oldstr);
+		R_LOG_INFO ("Found %d symbols and saved them at sym.go.*", num_syms);
 	} else {
-		oldstr = r_print_rowlog (core->print, "Found no symbols.");
-		r_print_rowlog_done (core->print, oldstr);
+		R_LOG_ERROR ("Found no symbols");
 	}
 }
 
@@ -1418,7 +1413,7 @@ static char *core_anal_graph_label(RCore *core, RAnalBlock *bb, int opts) {
 		const bool scrColor = r_config_get (core->config, "scr.color");
 		const bool scrUtf8 = r_config_get (core->config, "scr.utf8");
 		r_config_set_i (core->config, "scr.color", COLOR_MODE_DISABLED);
-		r_config_set (core->config, "scr.utf8", "false");
+		r_config_set_b (core->config, "scr.utf8", false);
 		snprintf (cmd, sizeof (cmd), "pD %"PFMT64u" @ 0x%08" PFMT64x, bb->size, bb->addr);
 		cmdstr = r_core_cmd_str (core, cmd);
 		r_config_set_i (core->config, "scr.color", scrColor);
@@ -1432,11 +1427,11 @@ static char *core_anal_graph_label(RCore *core, RAnalBlock *bb, int opts) {
 }
 
 static char *palColorFor(const char *k) {
-	if (!r_cons_singleton ()) {
-		return NULL;
+	if (r_cons_singleton ()) {
+		RColor rcolor = r_cons_pal_get (k);
+		return r_cons_rgb_tostring (rcolor.r, rcolor.g, rcolor.b);
 	}
-	RColor rcolor = r_cons_pal_get (k);
-	return r_cons_rgb_tostring (rcolor.r, rcolor.g, rcolor.b);
+	return NULL;
 }
 
 static void core_anal_color_curr_node(RCore *core, RAnalBlock *bbi) {

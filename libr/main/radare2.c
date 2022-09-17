@@ -149,7 +149,6 @@ static int main_help(int line) {
 #if USE_THREADS && ALLOW_THREADED
 		" -t           load rabin2 info in thread\n"
 #endif
-		" -T           do not compute file hashes\n"
 		" -u           set bin.filter=false to get raw sym/sec/cls names\n"
 		" -v, -V       show radare2 version (-V show lib versions)\n"
 		" -w           open file in write mode\n"
@@ -534,7 +533,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 	const char *project_name = NULL;
 
 	RGetopt opt;
-	r_getopt_init (&opt, argc, argv, "=02AjMCwxfF:H:hm:e:nk:NdqQs:p:b:B:a:Lui:I:l:P:R:r:c:D:vVSTzuXt");
+	r_getopt_init (&opt, argc, argv, "=02AjMCwxfF:H:hm:e:nk:NdqQs:p:b:B:a:Lui:I:l:P:R:r:c:D:vVSzuXt");
 	while ((c = r_getopt_next (&opt)) != -1) {
 		switch (c) {
 		case 'j':
@@ -550,13 +549,13 @@ R_API int r_main_radare2(int argc, const char **argv) {
 		case '0':
 			zerosep = true;
 			/* implicit -q */
-			r_config_set (r->config, "scr.interactive", "false");
-			r_config_set (r->config, "scr.prompt", "false");
+			r_config_set_b (r->config, "scr.interactive", false);
+			r_config_set_b (r->config, "scr.prompt", false);
 			r_config_set_i (r->config, "scr.color", COLOR_MODE_DISABLED);
 			quiet = true;
 			break;
 		case 'u':
-			r_config_set (r->config, "bin.filter", "false");
+			r_config_set_b (r->config, "bin.filter", false);
 			break;
 		case 'a':
 			asmarch = opt.arg;
@@ -575,7 +574,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 			baddr = r_num_math (r->num, opt.arg);
 			break;
 		case 'X':
-			r_config_set (r->config, "bin.usextr", "false");
+			r_config_set_b (r->config, "bin.usextr", false);
 			break;
 		case 'c':
 			r_list_append (cmds, (void*)opt.arg);
@@ -659,8 +658,8 @@ R_API int r_main_radare2(int argc, const char **argv) {
 			s_seek = opt.arg;
 			break;
 		case 'M':
-			r_config_set (r->config, "bin.demangle", "false");
-			r_config_set (r->config, "asm.demangle", "false");
+			r_config_set_b (r->config, "bin.demangle", false);
+			r_config_set_b (r->config, "asm.demangle", false);
 			break;
 		case 'n':
 			if (load_bin == LOAD_BIN_ALL) { // "-n"
@@ -668,7 +667,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 			} else if (load_bin == LOAD_BIN_NOTHING) { // second n => "-nn"
 				load_bin = LOAD_BIN_STRUCTURES_ONLY;
 			}
-			r_config_set (r->config, "file.info", "false");
+			r_config_set_b (r->config, "file.info", false);
 			break;
 		case 'N':
 			if (run_rc) {
@@ -701,9 +700,9 @@ R_API int r_main_radare2(int argc, const char **argv) {
 			quietLeak = true;
 			break;
 		case 'q':
-			r_config_set (r->config, "scr.interactive", "false");
-			r_config_set (r->config, "scr.prompt", "false");
-			r_config_set (r->config, "cfg.fortunes", "false");
+			r_config_set_b (r->config, "scr.interactive", false);
+			r_config_set_b (r->config, "scr.prompt", false);
+			r_config_set_b (r->config, "cfg.fortunes", false);
 			if (quiet) {
 				forcequit = true;
 			}
@@ -736,9 +735,6 @@ R_API int r_main_radare2(int argc, const char **argv) {
 #endif
 			break;
 #endif
-		case 'T':
-//R2_580 remove this shitty flag compute_hashes = false;
-			break;
 		case 'v':
 			show_version = true;
 			break;
@@ -750,7 +746,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 			break;
 		case 'x':
 			perms &= ~R_PERM_X;
-			r_config_set (r->config, "io.exec", "false");
+			r_config_set_b (r->config, "io.exec", false);
 			break;
 		default:
 			help++;
@@ -985,10 +981,10 @@ R_API int r_main_radare2(int argc, const char **argv) {
 
 	switch (zflag) {
 	case 1:
-		r_config_set (r->config, "bin.strings", "false");
+		r_config_set_b (r->config, "bin.strings", false);
 		break;
 	case 2:
-		r_config_set (r->config, "bin.rawstr", "true");
+		r_config_set_b (r->config, "bin.rawstr", true);
 		break;
 	}
 	if (zflag > 3) {
@@ -999,7 +995,13 @@ R_API int r_main_radare2(int argc, const char **argv) {
 	if (run_rc) {
 		r_core_parse_radare2rc (r);
 	} else {
-		r_config_set (r->config, "scr.utf8", "false");
+		r_config_set_b (r->config, "scr.utf8", false);
+	}
+
+	char *histpath = r_str_home (".cache/radare2/history");
+	if (histpath) {
+		r_line_hist_load (histpath);
+		free (histpath);
 	}
 
 	if (r_config_get_b (r->config, "zign.autoload")) {

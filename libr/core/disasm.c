@@ -4955,7 +4955,7 @@ static void ds_print_esil_anal(RDisasmState *ds) {
 	}
 	r_anal_esil_stack_free (esil);
 	r_config_hold (hc, "io.cache", NULL);
-	r_config_set (core->config, "io.cache", "true");
+	r_config_set_b (core->config, "io.cache", true);
 	if (!ds->show_comments) {
 		goto beach;
 	}
@@ -5869,10 +5869,10 @@ toro:
 			ret = ds_print_middle (ds, ret);
 
 			ds_print_asmop_payload (ds, ds_bufat (ds));
-			if (core->rasm->config->syntax != R_ASM_SYNTAX_INTEL) {
+			if (core->rasm->config->syntax != R_ARCH_SYNTAX_INTEL) {
 				RAsmOp ao; /* disassemble for the vm .. */
 				int os = core->rasm->config->syntax;
-				r_asm_set_syntax (core->rasm, R_ASM_SYNTAX_INTEL);
+				r_asm_set_syntax (core->rasm, R_ARCH_SYNTAX_INTEL);
 				r_asm_disassemble (core->rasm, &ao, ds_bufat (ds), ds_left (ds) + 5);
 				r_asm_set_syntax (core->rasm, os);
 				r_asm_op_fini (&ao);
@@ -5909,10 +5909,10 @@ toro:
 			ret = ds_print_middle (ds, ret);
 
 			ds_print_asmop_payload (ds, ds_bufat (ds));
-			if (core->rasm->config->syntax != R_ASM_SYNTAX_INTEL) {
+			if (core->rasm->config->syntax != R_ARCH_SYNTAX_INTEL) {
 				RAsmOp ao; /* disassemble for the vm .. */
 				int os = core->rasm->config->syntax;
-				r_asm_set_syntax (core->rasm, R_ASM_SYNTAX_INTEL);
+				r_asm_set_syntax (core->rasm, R_ARCH_SYNTAX_INTEL);
 				r_asm_disassemble (core->rasm, &ao, ds_bufat (ds), ds_left (ds) + 5);
 				r_asm_set_syntax (core->rasm, os);
 				r_asm_op_fini (&ao);

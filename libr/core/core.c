@@ -3072,11 +3072,6 @@ R_API bool r_core_init(RCore *core) {
 		core->cons->user_fgets = (void *)r_core_fgets;
 #endif
 		//r_line_singleton ()->user = (void *)core;
-		char *histpath = r_str_home (".cache/radare2/history");
-		if (histpath) {
-			r_line_hist_load (histpath);
-			free (histpath);
-		}
 	}
 	core->print->cons = core->cons;
 	r_cons_bind (&core->print->consbind);
@@ -3183,7 +3178,6 @@ R_API bool r_core_init(RCore *core) {
 	core->dbg->bp->cb_printf = r_cons_printf;
 	core->dbg->ev = core->ev;
 	r_core_config_init (core);
-
 	r_core_loadlibs_init (core);
 	//r_core_loadlibs (core);
 

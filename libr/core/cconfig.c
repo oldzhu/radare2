@@ -400,7 +400,7 @@ static bool cb_analstrings(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
 	if (node->i_value) {
-		r_config_set (core->config, "bin.strings", "false");
+		r_config_set_b (core->config, "bin.strings", false);
 	}
 	return true;
 }
@@ -987,7 +987,7 @@ static bool cb_emustr(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	if (node->i_value) {
-		r_config_set (core->config, "asm.emu", "true");
+		r_config_set_b (core->config, "asm.emu", true);
 	}
 	return true;
 }
@@ -2610,6 +2610,12 @@ static bool cb_scr_histblock(void *user, void *data) {
 	return true;
 }
 
+static bool cb_scr_histsize(void *user, void *data) {
+	RConfigNode *node = (RConfigNode *) data;
+	r_line_hist_set_size(node->i_value);
+	return true;
+}
+
 static bool cb_scrprompt(void *user, void *data) {
 	RCore *core = (RCore *)user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -4071,12 +4077,11 @@ R_API int r_core_config_init(RCore *core) {
 	SETDESC (n, "encode numbers from json outputs using the specified option");
 	SETOPTIONS (n, "none", "string", "hex", NULL);
 
-
 	/* scr */
 #if __EMSCRIPTEN__ || __wasi__
-	r_config_set_cb (cfg, "scr.fgets", "true", cb_scrfgets);
+	r_config_set_b_cb (cfg, "scr.fgets", true, cb_scrfgets);
 #else
-	r_config_set_cb (cfg, "scr.fgets", "false", cb_scrfgets);
+	r_config_set_b_cb (cfg, "scr.fgets", false, cb_scrfgets);
 #endif
 	r_config_desc (cfg, "scr.fgets", "use fgets() instead of dietline for prompt input");
 	SETCB ("scr.echo", "false", &cb_screcho, "show rcons output in realtime to stderr and buffer");
@@ -4158,6 +4163,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("scr.hist.block", "true", &cb_scr_histblock, "use blocks for histogram");
 	SETCB ("scr.hist.filter", "true", &cb_scr_histfilter, "filter history for matching lines when using up/down keys");
 	SETBPREF ("scr.hist.save", "true", "always save history on exit");
+	SETICB("scr.hist.size", R_LINE_HISTSIZE, &cb_scr_histsize, "set input lines history size");
 	n = NODECB ("scr.strconv", "asciiesc", &cb_scrstrconv);
 	SETDESC (n, "convert string before display");
 	SETOPTIONS (n, "asciiesc", "asciidot", NULL);
