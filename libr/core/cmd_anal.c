@@ -6173,7 +6173,7 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 	r_io_map_set_name (stack_map, name);
 	// r_flag_set (core->flags, name, addr, size);	//why is this here?
 	char val[128], *v;
-	v = sdb_itoa (esil->stack_fd, val, 10);
+	v = sdb_itoa (esil->stack_fd, 10, val, sizeof (val));
 	sdb_set (core->sdb, "aeim.fd", v, 0);
 
 	r_config_set_i (core->config, "io.va", true);
@@ -8440,7 +8440,7 @@ static void anal_axg(RCore *core, const char *input, int level, Sdb *db, int opt
 			} else if (is_json) {
 				char taddr[64];
 				pj_o (pj);
-				pj_k (pj, sdb_itoa (addr, taddr, 10));
+				pj_k (pj, sdb_itoa (addr, 10, taddr, sizeof (taddr)));
 				pj_o (pj);
 				pj_ks (pj, "type", "fcn");
 				pj_kn (pj, "fcn_addr", fcn->addr);
@@ -8460,7 +8460,7 @@ static void anal_axg(RCore *core, const char *input, int level, Sdb *db, int opt
 			} else if (is_json) {
 				char taddr[64];
 				pj_o (pj);
-				pj_k (pj, sdb_itoa (addr, taddr, 10));
+				pj_k (pj, sdb_itoa (addr, 10, taddr, sizeof (taddr)));
 				pj_o (pj);
 				pj_k (pj, "refs");
 				pj_a (pj);
@@ -8483,7 +8483,7 @@ static void anal_axg(RCore *core, const char *input, int level, Sdb *db, int opt
 				if (level == 0) {
 					char taddr[64];
 					pj_o (pj);
-					pj_k (pj, sdb_itoa (ref->addr, taddr, 10));
+					pj_k (pj, sdb_itoa (ref->addr, 10, taddr, sizeof (taddr)));
 					pj_o (pj);
 					pj_ks (pj, "type", "fcn");
 					pj_kn (pj, "fcn_addr", fcn->addr);
@@ -8497,7 +8497,7 @@ static void anal_axg(RCore *core, const char *input, int level, Sdb *db, int opt
 					pj_end (pj);
 					pj_end (pj);
 					pj_o (pj);
-					pj_k (pj, sdb_itoa (ref->addr, taddr, 10));
+					pj_k (pj, sdb_itoa (ref->addr, 10, taddr, sizeof (taddr)));
 					pj_o (pj);
 					pj_ks (pj, "type", "fcn");
 					pj_kn (pj, "fcn_addr", fcn->addr);
@@ -8526,7 +8526,7 @@ static void anal_axg(RCore *core, const char *input, int level, Sdb *db, int opt
 			} else if (is_json) {
 				char taddr[64];
 				pj_o (pj);
-				pj_k (pj, sdb_itoa (ref->addr, taddr, 10));
+				pj_k (pj, sdb_itoa (ref->addr, 10, taddr, sizeof (taddr)));
 				pj_o (pj);
 				pj_ks (pj, "type", "???");
 				pj_k (pj, "refs");
@@ -9446,7 +9446,6 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 			}
 			char *ptr = strchr (type, '=');
 			ut64 offimm = 0;
-			int i = 0;
 			ut64 addr;
 
 			if (ptr) {
@@ -9472,20 +9471,24 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 			int ret = r_anal_op (core->anal, &op, core->offset, code, core->blocksize, R_ANAL_OP_MASK_VAL);
 			if (ret >= 0) {
 				// HACK: Just convert only the first imm seen
-				for (i = 0; i < 3; i++) {
-					if (op.src[i]) {
-						if (op.src[i]->imm) {
-							offimm = op.src[i]->imm;
-						} else if (op.src[i]->delta) {
-							offimm = op.src[i]->delta;
+				RAnalValue *src = NULL;
+				r_vector_foreach (op.srcs, src) {
+					if (src) {
+						if (src->imm) {
+							offimm = src->imm;
+						} else if (src->delta) {
+							offimm = src->delta;
 						}
 					}
 				}
-				if (!offimm && op.dst) {
-					if (op.dst->imm) {
-						offimm = op.dst->imm;
-					} else if (op.dst->delta) {
-						offimm = op.dst->delta;
+				if (!offimm) {
+					RAnalValue *dst = r_vector_index_ptr (op.dsts, 0);
+					if (dst) {
+						if (dst->imm) {
+							offimm = dst->imm;
+						} else if (dst->delta) {
+							offimm = dst->delta;
+						}
 					}
 				}
 				if (offimm != 0) {
