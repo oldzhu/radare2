@@ -2630,7 +2630,8 @@ R_API char *r_core_anal_fcn_name(RCore *core, RAnalFunction *fcn) {
 	return name;
 }
 
-#define FCN_LIST_VERBOSE_ENTRY "%s0x%0*"PFMT64x" %4"PFMT64d" %5d %5d %5d %4d 0x%0*"PFMT64x" %5"PFMT64d" 0x%0*"PFMT64x" %5d %4d %6d %4d %5d %s%s\n"
+#define FCN_LIST_VERBOSE_ENTRY "%s0x%0*"PFMT64x" %5d %4"PFMT64d" %5d %5d %5d %4d 0x%0*"PFMT64x" %5"PFMT64d" 0x%0*"PFMT64x" %5d %4d %6d %4d %5d %s%s\n"
+
 static int fcn_print_verbose(RCore *core, RAnalFunction *fcn, bool use_color) {
 	char *name = r_core_anal_fcn_name (core, fcn);
 	int ebbs = 0;
@@ -2653,7 +2654,7 @@ static int fcn_print_verbose(RCore *core, RAnalFunction *fcn, bool use_color) {
 	}
 
 	r_cons_printf (FCN_LIST_VERBOSE_ENTRY, color,
-			addrwidth, fcn->addr,
+			addrwidth, fcn->addr, fcn->is_noreturn,
 			r_anal_function_realsize (fcn),
 			r_list_length (fcn->bbs),
 			r_anal_function_count_edges (fcn, &ebbs),
@@ -2707,11 +2708,11 @@ static int fcn_list_verbose(RCore *core, RList *fcns, const char *sortby) {
 	}
 
 	// TODO: add ninstr and islineal?
-	r_cons_printf ("%-*s %4s %5s %5s %5s %4s %*s range %-*s %s %s %s %s %s %s\n",
-			headeraddr_width, "address", "size", "nbbs", "edges", "cc", "cost",
+	r_cons_printf ("%-*s %5s %4s %5s %5s %5s %4s %*s range %-*s %s %s %s %s %s %s\n",
+			headeraddr_width, "address", "noret", "size", "nbbs", "edges", "cc", "cost",
 			headeraddr_width, "min bound", headeraddr_width, "max bound", "calls",
 			"locals", "args", "xref", "frame", "name");
-	r_cons_printf ("%s ==== ===== ===== ===== ==== %s ===== %s ===== ====== ==== ==== ===== ====\n",
+	r_cons_printf ("%s ===== ===== ===== ===== ===== ==== %s ===== %s ===== ====== ==== ==== ===== ====\n",
 			headeraddr, headeraddr, headeraddr);
 	RListIter *iter;
 	RAnalFunction *fcn;
@@ -3252,7 +3253,6 @@ static int fcn_list_table(RCore *core, const char *q, int fmt) {
 		r_table_add_row (t, fcnAddr, fcnSize, fcn->name, noret, nbbs, nins, xref, castr, ccstr, NULL);
 	}
 	if (r_table_query (t, q)) {
-		t->showHeader = false;
 		char *s = (fmt == 'j')
 			? r_table_tojson (t)
 			: r_table_tostring (t);
@@ -3377,7 +3377,7 @@ R_API int r_core_anal_fcn_list(RCore *core, const char *input, const char *rad) 
 			fcn_list_verbose_json (core, fcns);
 		} else {
 			char *sp = strchr (rad, ' ');
-			fcn_list_verbose (core, fcns, sp?sp+1: NULL);
+			fcn_list_verbose (core, fcns, sp? sp + 1: NULL);
 		}
 		break;
 	case 'q':
