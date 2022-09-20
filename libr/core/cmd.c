@@ -844,9 +844,11 @@ static int cmd_alias(void *data, const char *input) {
 		if (v) {
 			if (v->is_data) {
 				char *v_str = r_cmd_alias_val_strdup (v);
-				r_cons_strcat (v_str);
-				r_cons_newline ();
-				free (v_str);
+				if (v_str) {
+					r_cons_strcat (v_str);
+					r_cons_newline ();
+					free (v_str);
+				}
 			} else if (q) {
 				char *out = r_str_newf ("%s %s", (char *)v->data, q + 1);
 				r_core_cmd0 (core, out);
@@ -2430,7 +2432,6 @@ static bool cmd_r2cmd(RCore *core, const char *_input) {
 		r_sys_cmdf ("%s", input);
 		// rc = __runMain (core->r_main_ragg2, input);
 	} else if (r_str_startswith (input, "r2pm")) {
-		r_sys_setenv ("R2PM_NATIVE", "1");
 		rc = __runMain (core->r_main_r2pm, input);
 	} else if (r_str_startswith (input, "radiff2")) {
 		rc = __runMain (core->r_main_radiff2, input);
@@ -5261,8 +5262,10 @@ R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each) {
 					}
 				}
 				char *s = r_strbuf_drain (sb);
-				r_cons_strcat (s);
-				free (s);
+				if (s) {
+					r_cons_strcat (s);
+					free (s);
+				}
 				core->cons->context->grep = grep;
 			}
 			goto out_finish;
@@ -5473,8 +5476,10 @@ R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each) {
 					tmp = r_cons_get_buffer ();
 					buf = tmp? strdup (tmp): NULL;
 					r_cons_pop ();
-					r_cons_strcat (buf);
-					free (buf);
+					if (buf) {
+						r_cons_strcat (buf);
+						free (buf);
+					}
 					if (!foreach_newline (core)) {
 						break;
 					}

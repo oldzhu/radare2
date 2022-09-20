@@ -21,8 +21,17 @@ typedef enum {
 	R_STRING_ENC_GUESS = 'g',
 } RStrEnc;
 
+typedef struct {
+	char *str;
+	char buf[64]; // 20s vs 11s - 2x faster if string fits in buffer
+	int len;
+	char *ptr;
+	bool weak;
+} RString;
+
 typedef int (*RStrRangeCallback) (void *, int);
 
+// can be replaced with RString
 #define r_strf_buffer(s) char strbuf[s]
 #define r_strf_var(n,s, f, ...) char n[s]; snprintf (n, s, f, __VA_ARGS__);
 #define r_strf(s,...) (snprintf (strbuf, sizeof (strbuf), s, __VA_ARGS__)?strbuf: strbuf)
@@ -150,6 +159,7 @@ R_API int r_str_word_set0_stack(char *str);
 R_API const char *r_str_word_get0(const char *str, int idx);
 R_API char *r_str_word_get_first(const char *string);
 R_API void r_str_trim(char *str);
+R_API int r_str_ntrim(char *str, int n);
 R_API char *r_str_wrap(const char *str, int w);
 R_API char *r_str_trim_dup(const char *str);
 R_API char *r_str_trim_lines(char *str);
@@ -272,6 +282,17 @@ R_API const char *r_str_rsep(const char *base, const char *p, const char *sep);
 R_API char *r_str_donut(int size);
 R_API char *r_str_version(const char *program);
 R_API char *r_str_ss(const char* msg, const char *nl, int cs);
+
+// rstr
+
+R_API char *r_string_get(const RString *s, int *len);
+R_API RString r_string_new(const char *is, int len);
+R_API RString r_string_from(const char *is, int len);
+R_API void r_string_unweak(RString *a);
+R_API void r_string_trim(RString *s);
+R_API RString r_string_newf(const char *fmt, ...);
+R_API bool r_string_append(RString *a, const char *s);
+R_API void r_string_appendf(RString *a, const char *fmt, ...);
 
 #ifdef __cplusplus
 }

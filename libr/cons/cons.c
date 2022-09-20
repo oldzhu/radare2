@@ -29,6 +29,10 @@ static RConsContext *getctx(void) {
 	return r_cons_instance->context;
 }
 
+R_API bool r_cons_is_initialized(void) {
+	return r_cons_instance != NULL;
+}
+
 //this structure goes into cons_stack when r_cons_push/pop
 typedef struct {
 	char *buf;
@@ -1468,11 +1472,11 @@ R_API void r_cons_memset(char ch, int len) {
 }
 
 R_API void r_cons_strcat(const char *str) {
-	int len;
-	if (!str || I->null) {
+	r_return_if_fail (str);
+	if (!I || I->null) {
 		return;
 	}
-	len = strlen (str);
+	size_t len = strlen (str);
 	if (len > 0) {
 		r_cons_write (str, len);
 	}
@@ -2202,10 +2206,10 @@ R_API void r_cons_clear_buffer(void) {
 
 R_API void r_cons_thready(void) {
 	r_th_lock_enter (&r_cons_lock);
+	C->unbreakable = true;
+	r_sys_signable (false); // disable signal handling
 	if (!r_cons_instance) {
 		r_cons_new ();
 	}
-	C->unbreakable = true;
-	r_sys_signable (false); // disable signal handling
 	r_th_lock_leave (&r_cons_lock);
 }
