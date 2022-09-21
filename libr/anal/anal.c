@@ -88,6 +88,9 @@ R_API RAnal *r_anal_new(void) {
 		free (anal);
 		return NULL;
 	}
+	anal->cmpval = UT64_MAX;
+	anal->cache_addr = UT64_MAX;
+	anal->lea_jmptbl_ip = UT64_MAX;
 	anal->bb_tree = NULL;
 	anal->ht_addr_fun = ht_up_new0 ();
 	anal->ht_name_fun = ht_pp_new0 ();
@@ -237,7 +240,7 @@ R_API bool r_anal_use(RAnal *anal, const char *name) {
 			}
 #endif
 			anal->cur = h;
-			r_arch_use (anal->config, h->arch);
+			r_arch_config_use (anal->config, h->arch);
 			r_anal_set_reg_profile (anal, NULL);
 			return true;
 		}
