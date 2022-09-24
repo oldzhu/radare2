@@ -78,10 +78,12 @@ static void free_item_name(RFlagItem *item) {
 	}
 }
 
-/* return the list of flag at the nearest position.
-   dir == -1 -> result <= off
-   dir == 0 ->  result == off
-   dir == 1 ->  result >= off*/
+#if 0
+return the list of flag at the nearest position:
+dir == -1 -> result <= off
+dir == 0 ->  result == off
+dir == 1 ->  result >= off
+#endif
 static RFlagsAtOffset *r_flag_get_nearest_list(RFlag *f, ut64 off, int dir) {
 	RFlagsAtOffset key = { .off = off };
 	RFlagsAtOffset *flags = (dir >= 0)
@@ -235,6 +237,7 @@ R_API RFlag *r_flag_new(void) {
 		r_flag_free (f);
 		return NULL;
 	}
+	f->lock = r_th_lock_new (true);
 	f->base = 0;
 	f->cb_printf = (PrintfCallback)printf;
 	f->zones = r_list_newf (r_flag_zone_item_free);
@@ -279,6 +282,8 @@ R_API void r_flag_item_free(RFlagItem *item) {
 
 R_API RFlag *r_flag_free(RFlag *f) {
 	r_return_val_if_fail (f, NULL);
+	r_th_lock_free (f->lock);
+	f->lock = NULL;
 	r_skiplist_free (f->by_off);
 	ht_pp_free (f->ht_name);
 	sdb_free (f->tags);

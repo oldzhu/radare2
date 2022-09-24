@@ -220,7 +220,7 @@ R_API ut64 r_core_anal_address(RCore *core, ut64 addr) {
 		RListIter *iter;
 		r_list_foreach (rs->regs, iter, r) {
 			if (r->type == R_REG_TYPE_GPR) {
-				ut64 val = r_reg_getv(core->dbg->reg, r->name);
+                               ut64 val = r_reg_getv (core->dbg->reg, r->name);
 				if (addr == val) {
 					types |= R_ANAL_ADDR_TYPE_REG;
 					break;
@@ -772,7 +772,6 @@ static bool __core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int de
 	if (!fcn->name) {
 		fcn->name = r_str_newf ("%s.%08"PFMT64x, fcnpfx, at);
 	}
-	r_anal_function_invalidate_read_ahead_cache (core->anal);
 	do {
 		RFlagItem *f;
 		ut64 delta = r_anal_function_linear_size (fcn);
@@ -4850,6 +4849,9 @@ static ut64 delta_for_access(RAnalOp *op, RAnalVarAccessType type) {
 }
 
 static void handle_var_stack_access(RAnalEsil *esil, ut64 addr, RAnalVarAccessType type, int len) {
+       if (!esil || !esil->user) {
+               return;
+       }
 	EsilBreakCtx *ctx = esil->user;
 	const char *regname = reg_name_for_access (ctx->op, type);
 	if (ctx->fcn && regname) {
@@ -4960,7 +4962,7 @@ static bool esilbreak_mem_read(RAnalEsil *esil, ut64 addr, ut8 *buf, int len) {
 }
 
 static bool esilbreak_reg_write(RAnalEsil *esil, const char *name, ut64 *val) {
-	if (!esil) {
+       if (!esil || !esil->anal || !esil->user) {
 		return false;
 	}
 	RAnal *anal = esil->anal;

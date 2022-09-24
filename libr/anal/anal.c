@@ -89,7 +89,6 @@ R_API RAnal *r_anal_new(void) {
 		return NULL;
 	}
 	anal->cmpval = UT64_MAX;
-	anal->cache_addr = UT64_MAX;
 	anal->lea_jmptbl_ip = UT64_MAX;
 	anal->bb_tree = NULL;
 	anal->ht_addr_fun = ht_up_new0 ();
@@ -103,6 +102,7 @@ R_API RAnal *r_anal_new(void) {
 	anal->cxxabi = R_ANAL_CPP_ABI_ITANIUM;
 	anal->opt.depth = 32;
 	anal->opt.noncode = false; // do not analyze data by default
+	anal->lock = r_th_lock_new (true);
 	r_spaces_init (&anal->meta_spaces, "CS");
 	r_event_hook (anal->meta_spaces.event, R_SPACE_EVENT_UNSET, meta_unset_for, NULL);
 	r_event_hook (anal->meta_spaces.event, R_SPACE_EVENT_COUNT, meta_count_for, NULL);
@@ -166,6 +166,7 @@ R_API void r_anal_free(RAnal *a) {
 	ht_pp_free (a->ht_name_fun);
 	set_u_free (a->visited);
 	r_anal_hint_storage_fini (a);
+       r_th_lock_free (a->lock);
 	r_interval_tree_fini (&a->meta);
 	r_unref (a->config);
 	free (a->zign_path);

@@ -2697,18 +2697,22 @@ static bool r_core_anal_read_at(struct r_anal_t *anal, ut64 addr, ut8 *buf, int 
 }
 
 static void *r_core_sleep_begin(RCore *core) {
+	R_CRITICAL_ENTER (core);
 	RCoreTask *task = r_core_task_self (&core->tasks);
 	if (task) {
 		r_core_task_sleep_begin (task);
 	}
+	R_CRITICAL_LEAVE (core);
 	return task;
 }
 
 static void r_core_sleep_end(RCore *core, void *user) {
+	R_CRITICAL_ENTER (core);
 	RCoreTask *task = (RCoreTask *)user;
 	if (task) {
 		r_core_task_sleep_end (task);
 	}
+	R_CRITICAL_LEAVE (core);
 }
 
 static void __foreach(RCore *core, const char **cmds, int type) {
@@ -2960,7 +2964,7 @@ static RThreadFunctionRet thchan_handler(RThread *th) {
 			// eprintf ("thchan_handler no message\n");
 		//	r_th_sem_post (cm->sem);
 		//	r_th_channel_write (core->chan, NULL);
-		//r_th_lock_leave (cm->lock);
+		// r_th_lock_leave (cm->lock);
 			continue;
 		}
 		char *res = r_core_cmd_str (core, (const char *)cm->msg);
@@ -2984,11 +2988,13 @@ R_API bool r_core_init(RCore *core) {
 	}
 	core->chan = NULL;
 	r_core_setenv (core);
+       core->lock = r_th_lock_new (true);
 	core->in_log_process = false;
 	core->rfs = r_fs_shell_new ();
 	core->ev = r_event_new (core);
 	r_event_hook (core->ev, R_EVENT_ALL, cb_event_handler, NULL);
 	core->max_cmd_depth = R_CONS_CMD_DEPTH + 1;
+	core->lock = r_th_lock_new (true);
 	core->sdb = sdb_new (NULL, "r2kv.sdb", 0); // XXX: path must be in home?
 	core->lastsearch = NULL;
 	core->cmdfilter = NULL;
@@ -3553,6 +3559,7 @@ R_API int r_core_seek_size(RCore *core, ut64 addr, int bsize) {
 		r_cons_eprintf ("Block size %d is too big\n", bsize);
 		return false;
 	}
+	R_CRITICAL_ENTER (core);
 	core->offset = addr;
 	if (bsize < 1) {
 		bsize = 1;
@@ -3572,6 +3579,7 @@ R_API int r_core_seek_size(RCore *core, ut64 addr, int bsize) {
 		memset (core->block, 0xff, core->blocksize);
 		r_core_block_read (core);
 	}
+	R_CRITICAL_LEAVE (core);
 	return ret;
 }
 
