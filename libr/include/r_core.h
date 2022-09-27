@@ -26,6 +26,7 @@
 #include <r_bin.h>
 #include <r_hash.h>
 #include <r_util.h>
+#include <rvc.h>
 #include <r_util/r_print.h>
 #include <r_crypto.h>
 #include <r_bind.h>
@@ -244,21 +245,10 @@ typedef struct r_core_tasks_t {
 	bool oneshot_running;
 } RCoreTaskScheduler;
 
-typedef enum {
-	VC_RVC,
-	VC_GIT
-} VcType;
-
-typedef struct {
-	char *path;
-	VcType type;
-	Sdb *db;
-} Rvc;
-
 typedef struct r_core_project_t {
 	char *name;
 	char *path;
-	Rvc *rvc;
+	struct r_vc_t *rvc; // Rvc *rvc;
 } RProject;
 
 R_API RProject *r_project_new(void);
