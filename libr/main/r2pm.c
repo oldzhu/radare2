@@ -3,6 +3,7 @@
 #define R_LOG_ORIGIN "r2pm"
 
 #include <r_main.h>
+#include <r_lib.h>
 
 #define R2PM_GITURL "https://github.com/radareorg/radare2-pm"
 
@@ -319,13 +320,15 @@ static void r2pm_setenv(void) {
 		r_sys_setenv ("MAKE", "make");
 	}
 	free (gmake);
-	char *r2_plugdir = r_str_home (R2_HOME_PLUGINS);
+	char *r2_plugdir = r_xdg_datadir ("plugins");
 	r_sys_setenv ("R2PM_PLUGDIR", r2_plugdir);
 	free (r2_plugdir);
 
 	char *dbdir = r2pm_dbdir ();
 	r_sys_setenv ("R2PM_DBDIR", dbdir);
 	free (dbdir);
+
+	r_sys_setenv ("R2_LIBEXT", R_LIB_EXT);
 
 	char *gdir = r2pm_gitdir ();
 	r_sys_setenv ("R2PM_GITDIR", gdir);
@@ -336,7 +339,7 @@ static void r2pm_setenv(void) {
 	r_sys_setenv ("R2_USER_PLUGINS", pd);
 	free (pd);
 
-	char *r2_prefix = r_str_home (R2_HOME_DATADIR "/prefix");
+	char *r2_prefix = r_xdg_datadir ("prefix");
 	r_sys_setenv ("R2PM_PREFIX", r2_prefix);
 
 	char *r2pm_bindir = r_str_newf ("%s/bin", r2_prefix);
