@@ -30,6 +30,10 @@ R_API bool r_arch_load_decoder(RArch *arch, const char *dname) {
 				decoder->refctr = 1;
 				if (!arch->current) {
 					arch->current = decoder;
+					if (arch->cfg) {
+						R_FREE (arch->cfg->decoder);
+						arch->cfg->decoder = strdup (dname);
+					}
 				}
 				return true;
 			}
@@ -60,9 +64,17 @@ R_API bool r_arch_use_decoder(RArch *arch, const char *dname) {
 			arch->current = decoder;
 			return false;
 		}
+		if (arch->cfg) {
+			R_FREE (arch->cfg->decoder);
+			arch->cfg->decoder = strdup (dname);
+		}
 		return true;
 	}
 	arch->current = decoder;
+	if (arch->cfg) {
+		R_FREE (arch->cfg->decoder);
+		arch->cfg->decoder = strdup (dname);
+	}
 	return true;
 }
 
@@ -91,6 +103,9 @@ R_API bool r_arch_unload_decoder(RArch *arch, const char *dname) {
 	if (arch->current == decoder) {
 		arch->current = NULL;
 		ht_pp_foreach (arch->decoders, (HtPPForeachCallback)_pick_any_decoder_as_current, arch);
+		if (arch->cfg && arch->cfg->decoder) {
+			R_FREE (arch->cfg->decoder);
+		}
 	}
 	return true;
 }
@@ -120,5 +135,5 @@ R_API int r_arch_decode(RArch *arch, const char *dname, RArchOp *op, ut64 addr, 
 	if (!decoder || !decoder->p->decode) {
 		return -1;
 	}
-	return decoder->p->decode (decoder->user, arch->cfg, op, addr, data, len, mask);
+	return decoder->p->decode (arch->cfg, op, addr, data, len, mask, decoder->user);
 }

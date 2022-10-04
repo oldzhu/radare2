@@ -49,6 +49,8 @@ typedef struct r_arch_config_t {
 	R_REF_TYPE;
 } RArchConfig;
 
+#define	R_ARCH_CONFIG_IS_BIG_ENDIAN(cfg_)	(((cfg_)->endian & R_SYS_ENDIAN_BIG) == R_SYS_ENDIAN_BIG)
+
 // XXX: this definition is plain wrong. use enum or empower bits
 #define R_ARCH_OP_TYPE_MASK 0x8000ffff
 #define R_ARCH_OP_HINT_MASK 0xf0000000
@@ -334,6 +336,7 @@ typedef struct r_arch_t {
 	RArchDecoder *current;	//currently used decoder
 	HtPP *decoders;	//as decoders instantiated plugins
 	RArchConfig *cfg;	//config
+	bool autoselect;
 } RArch;
 
 typedef struct r_arch_plugin_t {
@@ -351,7 +354,7 @@ typedef struct r_arch_plugin_t {
 	bool (*init)(void **user);
 	void (*fini)(void *user);
 	int (*info)(RArchConfig *cfg, ut32 query);
-	int (*decode)(void *user, RArchConfig *cfg, RArchOp *op, ut64 addr, const ut8 *data, int len, ut32 mask);
+	int (*decode)(RArchConfig *cfg, RArchOp *op, ut64 addr, const ut8 *data, int len, ut32 mask, void *user);
 	bool (*set_reg_profile)(RArchConfig *cfg, struct r_reg_t *reg);
 //TODO: reenable this later
 //	bool (*esil_init)(RAnalEsil *esil);
@@ -372,6 +375,9 @@ R_API bool r_arch_set_reg_profile(RArch *arch, const char *dname, struct r_reg_t
 // arch.c
 R_API RArch *r_arch_new(void);
 R_API bool r_arch_use(RArch *arch, RArchConfig *config);
+R_API bool r_arch_set_bits(RArch *arch, ut32 bits);
+R_API bool r_arch_set_endian(RArch *arch, ut32 endian);
+R_API bool r_arch_set_arch(RArch *arch, char *archname);
 R_API bool r_arch_add(RArch *arch, RArchPlugin *ap);
 R_API bool r_arch_del(RArch *arch, const char *name);
 R_API void r_arch_free(RArch *arch);
@@ -414,6 +420,7 @@ R_API const char *r_arch_cond_to_string(RArchCond cc);
 
 extern RArchPlugin r_arch_plugin_null;
 extern RArchPlugin r_arch_plugin_i4004;
+extern RArchPlugin r_arch_plugin_amd29k;
 
 #ifdef __cplusplus
 }

@@ -493,6 +493,101 @@ static bool cb_analarch(void *user, void *data) {
 	return false;
 }
 
+static void update_archdecoder_options(RCore *core, RConfigNode *node) {
+	r_return_if_fail (core && core->anal && core->anal->arch && node);
+	r_config_node_purge_options (node);
+	RListIter *it;
+	RArchPlugin *p;
+	r_list_foreach (core->anal->arch->plugins, it, p) {
+		if (p->name) {
+			SETOPTIONS (node, p->name, NULL);
+		}
+	}
+}
+
+static bool cb_archdecoder(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	if (*node->value == '?') {
+		update_archdecoder_options (core, node);
+		print_node_options (node);
+		return false;
+	}
+	if (*node->value) {
+		if (r_arch_use_decoder (core->anal->arch, node->value)) {
+			return true;
+		}
+		R_LOG_ERROR ("arch.decoder: cannot find '%s'", node->value);
+	}
+	return false;
+}
+
+static bool cb_archdecoder_getter(RCore *core, RConfigNode *node) {
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	free (node->value);
+	if (core->anal->arch->cfg && core->anal->arch->cfg->decoder) {
+		node->value = strdup (core->anal->arch->cfg->decoder);
+		return true;
+	}
+	node->value = strdup ("null");
+	return true;
+}
+
+static bool cb_archbits(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	r_arch_set_bits (core->anal->arch, node->i_value);
+	return true;
+}
+
+static bool cb_archbits_getter(RCore *core, RConfigNode *node) {
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	if (core->anal->arch->cfg) {
+		node->i_value = core->anal->arch->cfg->bits;
+	}
+	return true;
+}
+
+static bool cb_archendian(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	if (!strcmp (node->value, "big") || !strcmp (node->value, "bigswap")) {
+		r_arch_set_endian (core->anal->arch, R_SYS_ENDIAN_BIG);
+		return true;
+	}
+	if (!strcmp (node->value, "little") || !strcmp (node->value, "littleswap")) {
+		r_arch_set_endian (core->anal->arch, R_SYS_ENDIAN_LITTLE);
+		return true;
+	}
+	return false;
+}
+
+static bool cb_archarch(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	return core->anal->arch? r_arch_set_arch (core->anal->arch, node->value): true;
+}
+
+static bool cb_archarch_getter(RCore *core, RConfigNode *node) {
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	if (core->anal->arch->cfg && core->anal->arch->cfg->arch) {
+		node->value = strdup (core->anal->arch->cfg->arch);
+	}
+	return true;
+}
+
+static bool cb_archautoselect(void *user, void *data) {
+	RCore *core = (RCore *)user;
+	RConfigNode *node = (RConfigNode *)data;
+	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	core->anal->arch->autoselect = node->i_value;
+	return true;
+}
+
 #if 0
 static bool cb_analcpu(void *user, void *data) {
 	RCore *core = (RCore *) user;
@@ -1281,14 +1376,14 @@ static bool cb_dirzigns(void *user, void *data) {
 static bool cb_bigendian(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->rasm->config->big_endian = node->i_value;
+	core->rasm->config->endian = node->i_value ? R_SYS_ENDIAN_BIG: R_SYS_ENDIAN_NONE;
 	// Try to set endian based on preference, restrict by RAsmPlugin
 	bool isbig = r_asm_set_big_endian (core->rasm, node->i_value);
 	// the big endian should also be assigned to dbg->bp->endian
 	if (core->dbg && core->dbg->bp) {
 		core->dbg->bp->endian = isbig;
 	}
-	core->rasm->config->big_endian = node->i_value;
+	// core->rasm->config->endian = node->i_value ? R_SYS_ENDIAN_BIG: R_SYS_ENDIAN_NONE;
 	return true;
 }
 
@@ -3395,6 +3490,23 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("anal.recont", "false", &cb_analrecont, "end block after splitting a basic block instead of error"); // testing
 	SETCB ("anal.jmp.indir", "false", &cb_analijmp, "follow the indirect jumps in function analysis"); // testing
 	SETI ("anal.ptrdepth", 3, "maximum number of nested pointers to follow in analysis");
+	n = NODECB ("arch.decoder", "null", &cb_archdecoder);
+	SETDESC (n, "select the instruction decoder to use");
+	update_archdecoder_options (core, n);
+	r_config_set_getter (cfg, "arch.decoder", (RConfigCallback)cb_archdecoder_getter);
+#if R_SYS_BITS == R_SYS_BITS_64
+	SETICB ("arch.bits", 64, &cb_archbits, "word size in bits at arch decoder");
+#else
+	SETICB ("arch.bits", 32, &cb_archbits, "word size in bits at arch decoder");
+#endif
+	r_config_set_getter (cfg, "arch.bits", (RConfigCallback)cb_archbits_getter);
+	n = NODECB ("arch.endian", R_SYS_ENDIAN? "big": "little", &cb_archendian);
+	SETDESC (n, "set arch endianess");
+	SETOPTIONS (n, "big", "little", "bigswap", "littleswap", NULL);
+	n = NODECB ("arch.arch", "none", &cb_archarch);
+	SETDESC (n, "select the architecture to use");
+	r_config_set_getter (cfg, "arch.arch", (RConfigCallback)cb_archarch_getter);
+	SETCB ("arch.autoselect", "false", &cb_archautoselect, "automagically select matching decoder on arch related config changes (has no effect atm)");
 	SETICB ("asm.lines.maxref", 0, &cb_analmaxrefs, "maximum number of reflines to be analyzed and displayed in asm.lines with pd");
 
 	SETCB ("anal.jmp.tbl", "true", &cb_anal_jmptbl, "analyze jump tables in switch statements");

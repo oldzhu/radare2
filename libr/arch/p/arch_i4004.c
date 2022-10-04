@@ -97,7 +97,7 @@ static int i4004_get_ins_len(ut8 hex) {
 	return ret;
 }
 
-static int i4004_decode(void *user, RArchConfig *cfg, RArchOp *op, ut64 addr, const ut8 *buf, int len, ut32 mask) {
+static int i4004_decode(RArchConfig *cfg, RArchOp *op, ut64 addr, const ut8 *buf, int len, ut32 mask, void *user) {
 	char basm[64];
 	const size_t basz = sizeof (basm);
 	int rlen = i4004_get_ins_len (*buf);
@@ -255,9 +255,10 @@ RArchPlugin r_arch_plugin_i4004 = {
 	.desc = "i4004 decoder plugin",
 	.license = "LGPL3",
 	.arch = "i4004",
-	.esil = false,
+	.endian = R_SYS_ENDIAN_BIG,
 	.bits = R_SYS_BITS_4,
 	.addr_bits = R_SYS_BITS_12,
+	.esil = false,
 	.author = "pancake, condret",
 	.decode = &i4004_decode,
 	.set_reg_profile = &set_reg_profile
