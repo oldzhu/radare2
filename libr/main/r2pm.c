@@ -7,7 +7,7 @@
 
 #define R2PM_GITURL "https://github.com/radareorg/radare2-pm"
 
-static int r2pm_install(RList *targets, bool uninstall, bool clean, bool global);
+static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, bool global);
 
 static int r_main_r2pm_sh(int argc, const char **argv) {
 #if __WINDOWS__
@@ -40,7 +40,7 @@ static const char *helpmsg = \
 " -ci <pkgname>     clean + install\n"\
 " -cp               clean the user's home plugin directory\n"\
 " -d,doc [pkgname]  show documentation and source for given package\n"\
-" -f                force operation (install, uninstall, ..)\n"\
+" -f                force operation (Use in combination of -U, -i, -u, ..)\n"\
 " -gi <pkg>         global install (system-wide)\n"\
 " -h                display this help message\n"\
 " -H variable       show the value of given internal environment variable\n"\
@@ -75,7 +75,12 @@ typedef struct r_r2pm_t {
 	bool uninstall;
 } R2Pm;
 
-static int git_pull(const char *dir) {
+static int git_pull(const char *dir, bool reset) {
+	if (reset) {
+		char *s = r_str_newf ("cd %s && git clean -xdf && git reset --hard @~2 && git checkout", dir);
+		R_UNUSED_RESULT (r_sandbox_system (s, 1));
+		free (s);
+	}
 	char *s = r_str_newf ("cd %s && git pull ; git diff", dir);
 	int rc = r_sandbox_system (s, 1);
 	free (s);
@@ -84,6 +89,7 @@ static int git_pull(const char *dir) {
 
 static int git_clone(const char *dir, const char *url) {
 	char *cmd = r_str_newf ("git clone --depth=10 --recursive %s %s", url, dir);
+	R_LOG_DEBUG ("%s", cmd);
 	int rc = r_sandbox_system (cmd, 1);
 	free (cmd);
 	return rc;
@@ -118,7 +124,16 @@ static char *r2pm_gitdir(void) {
 }
 
 static char *r2pm_dbdir(void) {
-	return r_xdg_datadir ("r2pm/db");
+	char *e = r_sys_getenv ("R2PM_DBDIR");
+	if (R_STR_ISNOTEMPTY (e)) {
+		return e;
+	}
+	free (e);
+	// return r_xdg_datadir ("r2pm/db");
+	char *gitdir = r2pm_gitdir ();
+	char *res = r_str_newf ("%s/radare2-pm/db", gitdir);
+	free (gitdir);
+	return res;
 }
 
 static char *r2pm_pkgdir(void) {
@@ -231,7 +246,8 @@ static void striptrim(RList *list) {
 	}
 }
 
-static void r2pm_upgrade(void) {
+static void r2pm_upgrade(bool force) {
+#if __UNIX__
 	char *s = r_sys_cmd_str ("radare2 -qcq -- 2>&1 | grep r2pm | sed -e 's,$,;,g'", NULL, 0);
 	r_str_trim (s);
 	RList *list = r_str_split_list (s, "\n", -1);
@@ -239,9 +255,12 @@ static void r2pm_upgrade(void) {
 	if (r_list_length (list) < 1) {
 		R_LOG_INFO ("Nothing to upgrade");
 	} else {
-		r2pm_install (list, false, true, false);
+		r2pm_install (list, false, true, force, false);
 	}
 	free (s);
+#else
+	// R_LOG_INFO ("Auto upgrade feature is not supported on windows");
+#endif
 }
 
 static char *r2pm_desc(const char *file) {
@@ -267,12 +286,15 @@ static char *r2pm_list(void) {
 	return r_strbuf_drain (sb);
 }
 
-static int r2pm_update(void) {
+static int r2pm_update(bool force) {
 	char *gpath = r2pm_gitdir ();
 	char *pmpath = r_str_newf ("%s/%s", gpath, "radare2-pm");
 	r_sys_mkdirp (gpath);
+	if (force) {
+		r_file_rm_rf (pmpath);
+	}
 	if (r_file_is_directory (pmpath)) {
-		if (git_pull (pmpath) != 0) {
+		if (git_pull (pmpath, force) != 0) {
 			R_LOG_ERROR ("git pull");
 			free (pmpath);
 			free (gpath);
@@ -281,34 +303,8 @@ static int r2pm_update(void) {
 	} else {
 		git_clone (pmpath, R2PM_GITURL);
 	}
-	char *dbpath = r2pm_dbdir ();
-
-	// copy files from git into db
-	r_sys_mkdirp (dbpath);
-	char *pmdbpath = r_str_newf ("%s/db", pmpath);
-	RList *files = r_sys_dir (pmdbpath);
-	if (files) {
-		RListIter *iter;
-		const char *file;
-		r_list_foreach (files, iter, file) {
-			if (*file != '.') {
-				char *src = r_str_newf ("%s/%s", pmdbpath, file);
-				char *dst = r_str_newf ("%s/%s", dbpath, file);
-				if (r_file_copy (src, dst)) {
-					R_LOG_DEBUG ("Copying '%s' into '%s'", src, dst);
-				} else {
-					R_LOG_WARN ("Cannot copy '%s' into '%s'", file, dbpath);
-				}
-				free (src);
-				free (dst);
-			}
-		}
-		r_list_free (files);
-	}
-	free (pmdbpath);
-	free (pmpath);
 	free (gpath);
-	free (dbpath);
+	free (pmpath);
 	return 0;
 }
 
@@ -515,7 +511,7 @@ static int r2pm_clone(const char *pkg) {
 	char *srcdir = r_file_new (pkgdir, pkg, NULL);
 	free (pkgdir);
 	if (r_file_is_directory (srcdir)) {
-		git_pull (srcdir);
+		git_pull (srcdir, 0);
 	} else {
 		char *url = r2pm_get (pkg, "\nR2PM_GIT ", TT_TEXTLINE);
 		if (url) {
@@ -545,7 +541,7 @@ static int r2pm_clone(const char *pkg) {
 	return 0;
 }
 
-static int r2pm_install(RList *targets, bool uninstall, bool clean, bool global) {
+static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, bool global) {
 	RListIter *iter;
 	const char *t;
 	int rc = 0;
@@ -786,7 +782,6 @@ static int r_main_r2pm_c(int argc, const char **argv) {
 			break;
 		case 'U':
 			r2pm.init = true;
-			r2pm_upgrade ();
 			break;
 		case 'l':
 			r2pm.list = true;
@@ -815,6 +810,9 @@ static int r_main_r2pm_c(int argc, const char **argv) {
 			break;
 		}
 	}
+	if (r2pm.init) {
+		r2pm_upgrade (r2pm.force);
+	}
 	if (r2pm.version) {
 		if (r2pm.quiet) {
 			printf ("%s\n", R2_VERSION);
@@ -831,7 +829,7 @@ static int r_main_r2pm_c(int argc, const char **argv) {
 		return 0;
 	}
 	if (r2pm.init) {
-		return r2pm_update ();
+		r2pm_update (r2pm.force);
 	}
 	if (r2pm.run) {
 		int i;
@@ -877,7 +875,7 @@ static int r_main_r2pm_c(int argc, const char **argv) {
 	} else if (r2pm.doc) {
 		res = r2pm_doc (targets);
 	} else if (r2pm.install) {
-		res = r2pm_install (targets, r2pm.uninstall, r2pm.clean, r2pm.global);
+		res = r2pm_install (targets, r2pm.uninstall, r2pm.clean, r2pm.force, r2pm.global);
 	} else if (r2pm.uninstall) {
 		res = r2pm_uninstall (targets);
 	} else if (r2pm.clean) {
