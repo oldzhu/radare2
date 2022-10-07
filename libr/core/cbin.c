@@ -27,10 +27,9 @@
 #define PAIR_WIDTH "9"
 
 static void pair(const char *key, const char *val) {
-	if (!val || !*val) {
-		return;
+	if (R_STR_ISNOTEMPTY (val)) {
+		r_cons_printf ("%-"PAIR_WIDTH"s%s\n", key, val);
 	}
-	r_cons_printf ("%-"PAIR_WIDTH"s%s\n", key, val);
 }
 
 static void pair_bool(PJ *pj, const char *key, bool val) {
@@ -997,7 +996,9 @@ static int bin_info(RCore *r, PJ *pj, int mode, ut64 laddr) {
 		pair_str (pj, "guid", info->guid);
 		pair_str (pj, "intrp", info->intrp);
 		pair_ut64x (pj, "laddr", laddr);
-		pair_str (pj, "lang", info->lang);
+		if (info->lang && *info->lang != '?') {
+			pair_str (pj, "lang", info->lang);
+		}
 		pair_bool (pj, "linenum", R_BIN_DBG_LINENUMS & info->dbg_info);
 		pair_bool (pj, "lsyms", R_BIN_DBG_SYMS & info->dbg_info);
 		pair_str (pj, "machine", info->machine);
@@ -3493,7 +3494,7 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 	if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
 	} else if (IS_MODE_SET (mode)) {
-		if (!r_config_get_i (r->config, "bin.classes")) {
+		if (!r_config_get_b (r->config, "bin.classes")) {
 			return false;
 		}
 		r_flag_space_set (r->flags, R_FLAGS_FS_CLASSES);
@@ -3535,7 +3536,7 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 				r_name_filter (method, -1);
 				r_flag_set (r->flags, method, sym->vaddr, 1);
 			}
-#if 0
+#if 1
 			r_list_foreach (c->fields, iter2, f) {
 				char *fn = r_str_newf ("field.%s.%s", classname, f->name);
 				ut64 at = f->vaddr; //  sym->vaddr + (f->vaddr &  0xffff);
@@ -3546,8 +3547,8 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 		} else if (IS_MODE_SIMPLEST (mode)) {
 			r_cons_printf ("%s\n", c->name);
 		} else if (IS_MODE_SIMPLE (mode)) {
-			r_cons_printf ("0x%08"PFMT64x" [0x%08"PFMT64x" - 0x%08"PFMT64x"] %s%s%s\n",
-				c->addr, at_min, at_max, c->name, c->super ? " " : "",
+			r_cons_printf ("0x%08"PFMT64x" [0x%08"PFMT64x" - 0x%08"PFMT64x"] %s %s%s%s\n",
+				c->addr, at_min, at_max, r_bin_lang_tostring (c->lang), c->name, c->super ? " " : "",
 				r_str_get (c->super));
 		} else if (IS_MODE_CLASSDUMP (mode)) {
 			if (c) {
@@ -3555,7 +3556,7 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 				if (bf && bf->o) {
 					if (IS_MODE_RAD (mode)) {
 						classdump_c (r, c);
-					} else if (bf->o->lang == R_BIN_NM_JAVA || (bf->o->info && bf->o->info->lang && strstr (bf->o->info->lang, "dalvik"))) {
+					} else if (bf->o->lang == R_BIN_LANG_JAVA || (bf->o->info && bf->o->info->lang && strstr (bf->o->info->lang, "dalvik"))) {
 						classdump_java (r, c);
 					} else {
 						classdump_objc (r, c);
@@ -3626,6 +3627,10 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 			pj_o (pj);
 			pj_ks (pj, "classname", c->name);
 			pj_kN (pj, "addr", c->addr);
+			const char *lang = r_bin_lang_tostring (c->lang);
+			if (lang && *lang != '?') {
+				pj_ks (pj, "lang", lang);
+			}
 			pj_ki (pj, "index", c->index);
 			if (c->super) {
 				pj_ks (pj, "visibility", r_str_get (c->visibility_str));
@@ -3672,8 +3677,9 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 			pj_end (pj);
 		} else {
 			int m = 0;
-			r_cons_printf ("0x%08"PFMT64x" [0x%08"PFMT64x" - 0x%08"PFMT64x"] %6"PFMT64d" class %d %s",
-				c->addr, at_min, at_max, (at_max - at_min), c->index, c->name);
+			const char *cl = r_bin_lang_tostring (c->lang);
+			r_cons_printf ("0x%08"PFMT64x" [0x%08"PFMT64x" - 0x%08"PFMT64x"] %6"PFMT64d" %s class %d %s",
+				c->addr, at_min, at_max, (at_max - at_min), cl, c->index, c->name);
 			if (c->super) {
 				r_cons_printf (" :: %s\n", c->super);
 			} else {
@@ -3681,9 +3687,18 @@ static int bin_classes(RCore *r, PJ *pj, int mode) {
 			}
 			r_list_foreach (c->methods, iter2, sym) {
 				char *mflags = r_core_bin_method_flags_str (sym->method_flags, mode);
-				r_cons_printf ("0x%08"PFMT64x" method %d %s %s\n",
-					sym->vaddr, m, mflags, sym->dname? sym->dname: sym->name);
+				const char *ls = r_bin_lang_tostring (sym->lang);
+				r_cons_printf ("0x%08"PFMT64x" %s method %d %s %s\n",
+					sym->vaddr, ls?ls:"?", m, mflags, sym->dname? sym->dname: sym->name);
 				R_FREE (mflags);
+				m++;
+			}
+			m = 0;
+			const char *ls = r_bin_lang_tostring (c->lang);
+			r_list_foreach (c->fields, iter3, f) {
+				char *mflags = r_core_bin_method_flags_str (f->flags, mode);
+				r_cons_printf ("0x%08"PFMT64x" %s field %d %s %s\n",
+					f->vaddr, ls, m, mflags, f->name);
 				m++;
 			}
 		}
@@ -4143,7 +4158,9 @@ static void bin_pe_resources(RCore *r, PJ *pj, int mode) {
 			pj_ks (pj, "type", type);
 			pj_kn (pj, "vaddr", vaddr);
 			pj_ki (pj, "size", size);
-			pj_ks (pj, "lang", lang);
+			if (lang && *lang != '?') {
+				pj_ks (pj, "lang", lang);
+			}
 			pj_ks (pj, "timestamp", timestr);
 			pj_end (pj);
 		} else {
