@@ -1738,6 +1738,63 @@ char *getcommapath(RCore *core) {
 	return cwd;
 }
 
+static void visual_textlogs(RCore *core) {
+	int index = 1;
+	while (true) {
+		int log_level = r_log_get_level ();
+		r_cons_clear00 ();
+		const char *title = "[q] [visual-text-logs] Move with [jk] `i` to insert `-` trim logs [+-] log.level =";
+		if (r_config_get_i (core->config, "scr.color") > 0) {
+			r_cons_printf (Color_YELLOW"%s %d\n"Color_RESET, title, log_level);
+		} else {
+			r_cons_printf ("%s %d\n", title, log_level);
+		}
+		r_core_cmdf (core, "Tv %d", index);
+		r_cons_printf ("--\n");
+		char *s = r_core_cmd_strf (core, "Tm %d~{}", index);
+		r_str_trim (s);
+		if (R_STR_ISEMPTY (s)) {
+			free (s);
+			s = r_core_cmd_strf (core, "Tm %d", index);
+		}
+		int w = r_cons_get_size (NULL);
+		s = r_str_wrap (s, w);
+		r_cons_printf ("%s\n", s);
+		free (s);
+		r_cons_visual_flush ();
+		char ch = (ut8)r_cons_readchar ();
+		switch (ch) {
+		case 'q':
+			return;
+		case 'i':
+			r_core_cmdf (core, "T `?ie message`");
+			break;
+		case 'j':
+			index++;
+			break;
+		case '+':
+			r_log_set_level (log_level + 1);
+			break;
+		case '-':
+			r_log_set_level (log_level - 1);
+			break;
+		case '!':
+			r_core_cmdf (core, "T-%d", index);
+			break;
+		case 'k':
+			if (index > 1) {
+				index--;
+			} else {
+				index = 1;
+			}
+			break;
+		case ':':
+			r_core_visual_prompt_input (core);
+			break;
+		}
+	}
+}
+
 static void visual_comma(RCore *core) {
 	bool mouse_state = __holdMouseState (core);
 	ut64 addr = core->offset + (core->print->cur_enabled? core->print->cur: 0);
@@ -2911,7 +2968,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			}
 			break;
 		case 'T':
-			visual_closetab (core);
+			visual_textlogs (core);
 			break;
 		case 'n':
 			r_core_seek_next (core, r_config_get (core->config, "scr.nkey"));

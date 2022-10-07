@@ -3288,9 +3288,19 @@ R_API char *r_str_wrap(const char *str, int w) {
 	}
 	size_t r_size = 8 * strlen (str);
 	r = ret = malloc (r_size);
+	if (!r) {
+		return NULL;
+	}
 	char *end = r + r_size;
 	int cw = 0;
 	while (*str && r + 1 < end) {
+		size_t ansilen = __str_ansi_length (str);
+		if (ansilen > 1) {
+			memcpy (r, str, ansilen);
+			str += ansilen;
+			r += ansilen;
+			continue;
+		}
 		if (*str == '\t') {
 			// skip
 		} else if (*str == '\r') {
@@ -4016,5 +4026,25 @@ R_API bool r_str_startswith(const char *str, const char *needle) {
 		return true;
 	}
 	return !strncmp (str, needle, strlen (needle));
+}
+
+R_API void r_str_fixspaces(char *str) {
+	// add space after commas
+	char *os = strdup (str);
+	int i, j;
+	for (i = j = 0; os[i]; i++,j++) {
+		char ch = os[i];
+		str[j] = ch;
+		if (ch == ',') {
+			j++;
+			str[j] = ' ';
+			while (os[i + 1] == ' ') {
+				i++;
+			}
+		}
+	}
+	str[j] = 0;
+	free (os);
+	r_str_trim_tail (str);
 }
 

@@ -143,7 +143,6 @@ anal_plugins += [
   'bpf_cs',
   'chip8',
   'cr16',
-  'bpf',
   'cris',
   'dalvik',
   'ebc',
@@ -412,6 +411,8 @@ endif
 
 parse_plugins += [
   '6502_pseudo',
+  'bpf_pseudo',
+  'evm_pseudo',
   'arm_pseudo',
   'avr_pseudo',
   'chip8_pseudo',

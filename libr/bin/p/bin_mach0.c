@@ -642,16 +642,23 @@ static RList* patch_relocs(RBin *b) {
 		}
 		r_list_append (ext_relocs, reloc);
 	}
-	RBinReloc *r;
-	RListIter *iter2;
+	if (mo->reloc_fixups && r_list_length (mo->reloc_fixups) > 0) {
+		if (!io->cached) {
+			R_LOG_WARN ("run r2 with -e bin.cache=true to fix relocations in disassembly");
+			goto beach;
+		} else {
+			RBinReloc *r;
+			RListIter *iter2;
 
-	r_list_foreach (mo->reloc_fixups, iter2, r) {
-		ut64 paddr = r->paddr + mo->baddr;
-		ut8 buf[8], obuf[8];
-		r_write_ble64 (buf, r->vaddr, false);
-		r_io_read_at (io, paddr, obuf, 8);
-		if (memcmp (buf, obuf, 8)) {
-			r_io_write_at (io, paddr, buf, 8);
+			r_list_foreach (mo->reloc_fixups, iter2, r) {
+				ut64 paddr = r->paddr + mo->baddr;
+				ut8 buf[8], obuf[8];
+				r_write_ble64 (buf, r->vaddr, false);
+				r_io_read_at (io, paddr, obuf, 8);
+				if (memcmp (buf, obuf, 8)) {
+					r_io_write_at (io, paddr, buf, 8);
+				}
+			}
 		}
 	}
 	ut64 num_ext_relocs = r_list_length (ext_relocs);
@@ -782,9 +789,9 @@ static bool rebase_buffer_callback2(void *context, RFixupEventDetails * event_de
 	switch (event_details->type) {
 	case R_FIXUP_EVENT_BIND:
 	case R_FIXUP_EVENT_BIND_AUTH:
-		r_buf_write_at (ctx->obj->b, in_buf, (const ut8*)"\x00\x00\x00\x00\x00\x00\x00", 8);
+		r_buf_write_at (ctx->obj->b, in_buf, (const ut8*)"\x00\x00\x00\x00\x00\x00\x00", event_details->ptr_size);
 		ut8 data[8] = {0};
-		r_buf_read_at (ctx->obj->b, in_buf, data, 8);
+		r_buf_read_at (ctx->obj->b, in_buf, data, event_details->ptr_size);
 		add_fixup (rflist, in_buf, 0);
 		if (data[0]) {
 			eprintf ("DATA0 write has failed\n");
@@ -796,8 +803,8 @@ static bool rebase_buffer_callback2(void *context, RFixupEventDetails * event_de
 			ut8 data[8] = {0};
 			ut64 v = ((RFixupRebaseEventDetails *) event_details)->ptr_value;
 			add_fixup (rflist, in_buf, v);
-			memcpy (&data, &v, sizeof (data));
-			r_buf_write_at (ctx->obj->b, in_buf, data, 8);
+			memcpy (&data, &v, event_details->ptr_size);
+			r_buf_write_at (ctx->obj->b, in_buf, data, event_details->ptr_size);
 		}
 		break;
 	default:

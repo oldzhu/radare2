@@ -212,8 +212,42 @@ static int log_callback_r2(RCore *core, int count, const char *line) {
 }
 
 static int log_callback_all(RCore *log, int count, const char *line) {
-	r_cons_printf ("%d %s\n", count, line);
+	r_cons_printf ("%.2d %s\n", count, line);
 	return 0;
+}
+
+R_API void r_core_log_view(RCore *core, int num) {
+	if (num < 1) {
+		num = 1;
+	}
+	int i;
+	for (i = num - 3; i < num + 3; i++) {
+		r_cons_printf ("%s", (num == i)? "* ": "  ");
+		if (i < 1) {
+			r_cons_printf ("   ^\n");
+			continue;
+		}
+		if (i >= core->log->last) {
+			r_cons_printf ("   $\n");
+			continue;
+		}
+		if (i < core->log->first) {
+			r_cons_printf ("   ^\n");
+			continue;
+		}
+		const char *msg = r_strpool_get_i (core->log->sp, i);
+		if (msg) {
+			char *m = r_str_ndup (msg, 60);
+			char *nl = strchr (m, '\n');
+			if (nl) {
+				*nl = 0;
+			}
+			r_cons_printf ("%.2d %s\n", i, m);
+			free (m);
+		} else {
+			r_cons_printf ("%.2d ..\n", i);
+		}
+	}
 }
 
 static int cmd_log(void *data, const char *input) {
@@ -247,8 +281,11 @@ static int cmd_log(void *data, const char *input) {
 			}
 		}
 		break;
+	case 'v': // "Tv"
+		r_core_log_view (core, (int)r_num_math (core->num, input + 2));
+		break;
 	case 'l': // "Tl"
-		r_cons_printf ("%d\n", core->log->last - 1);
+		r_cons_printf ("%.2d\n", core->log->last - 1);
 		break;
 	case '-': //  "T-"
 		r_core_log_del (core, n);
@@ -304,7 +341,14 @@ static int cmd_log(void *data, const char *input) {
 		if (n > 0 || *input == '0') {
 			r_core_log_list (core, n, n2, *input);
 		} else {
-			r_core_log_add (core, input + 1);
+			const char *arg = input + 1;
+			if (r_str_startswith (arg, "base64:")) {
+				ut8 *s = r_base64_decode_dyn (arg + 7, -1);
+				r_core_log_add (core, (const char *)s);
+				free (s);
+			} else {
+				r_core_log_add (core, arg);
+			}
 		}
 		break;
 	case 'm': // "Tm"

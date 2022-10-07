@@ -274,6 +274,7 @@ static int parse(RParse *p, const char *data, char *str) {
 		free (s);
 	}
 	free (buf);
+	r_str_fixspaces (str);
 	return true;
 }
 
