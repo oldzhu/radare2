@@ -2249,7 +2249,7 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 					r_cons_printf ("%s: %s\n", opname, d);
 					free (d);
 				} else {
-					R_LOG_ERROR ("Unknown opcode");
+					R_LOG_ERROR ("Unknown opcode at 0x%08"PFMT64x, addr);
 				}
 				free (opname);
 			}
@@ -11729,7 +11729,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 				}
 
 				if (input[1] == 'a') { // "aaaa"
-					r_core_cmd0 (core, "/azq > /dev/null");
+					r_core_cmd0 (core, "/azq");
 					if (!didAap) {
 						didAap = true;
 						R_LOG_INFO ("Finding function preludes");
