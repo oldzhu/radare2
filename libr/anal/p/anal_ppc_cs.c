@@ -521,10 +521,10 @@ static int parse_reg_name(RRegItem *reg, csh handle, cs_insn *insn, int reg_num)
 static RRegItem base_regs[4];
 
 static void create_src_dst(RAnalOp *op) {
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->dsts, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->dsts, NULL);
 	ZERO_FILL (base_regs[0]);
 	ZERO_FILL (base_regs[1]);
 	ZERO_FILL (base_regs[2]);
@@ -551,10 +551,10 @@ static void set_src_dst(RAnalValue *val, csh *handle, cs_insn *insn, int x) {
 
 static void op_fillval(RAnalOp *op, csh handle, cs_insn *insn) {
 	create_src_dst (op);
-	RAnalValue *src0 = r_vector_index_ptr (op->srcs, 0);
-	RAnalValue *src1 = r_vector_index_ptr (op->srcs, 1);
-	RAnalValue *src2 = r_vector_index_ptr (op->srcs, 2);
-	RAnalValue *dst = r_vector_index_ptr (op->dsts, 0);
+	RAnalValue *src0 = r_vector_index_ptr (&op->srcs, 0);
+	RAnalValue *src1 = r_vector_index_ptr (&op->srcs, 1);
+	RAnalValue *src2 = r_vector_index_ptr (&op->srcs, 2);
+	RAnalValue *dst = r_vector_index_ptr (&op->dsts, 0);
 	switch (op->type & R_ANAL_OP_TYPE_MASK) {
 	case R_ANAL_OP_TYPE_MOV:
 	case R_ANAL_OP_TYPE_CMP:
@@ -658,7 +658,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	const char *cpu = a->config->cpu;
 	// capstone-next
 	int n = cs_disasm (handle, (const ut8*)buf, len, addr, 1, &insn);
-	if (mask & R_ANAL_OP_MASK_DISASM) {
+	if (mask & R_ARCH_OP_MASK_DISASM) {
 		ret = -1;
 		if (cpu && !strcmp (cpu, "vle")) {
 			if (!R_ARCH_CONFIG_IS_BIG_ENDIAN (a->config)) {
@@ -700,7 +700,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	if (n < 1) {
 		op->type = R_ANAL_OP_TYPE_ILL;
 	} else {
-		if (mask & R_ANAL_OP_MASK_OPEX) {
+		if (mask & R_ARCH_OP_MASK_OPEX) {
 			opex (&op->opex, handle, insn);
 		}
 		struct Getarg gop = {
@@ -1385,10 +1385,10 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 			esilprintf (op, "%s,%s,<<<,%s,&,%s,=", ARG (2), ARG (1), cmask64 (cmaskbuf, 0, ARG (3)), ARG (0));
 			break;
 		}
-		if (mask & R_ANAL_OP_MASK_VAL) {
+		if (mask & R_ARCH_OP_MASK_VAL) {
 			op_fillval (op, handle, insn);
 		}
-		if (!(mask & R_ANAL_OP_MASK_ESIL)) {
+		if (!(mask & R_ARCH_OP_MASK_ESIL)) {
 			r_strbuf_fini (&op->esil);
 		}
 		cs_free (insn, n);

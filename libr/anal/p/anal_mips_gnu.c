@@ -1198,7 +1198,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len, R
 	if (!op) {
 		return oplen;
 	}
-	if (mask & R_ANAL_OP_MASK_DISASM) {
+	if (mask & R_ARCH_OP_MASK_DISASM) {
 		op->addr = addr;
 		disassemble (anal, op, b, len);
 	}
@@ -1588,7 +1588,7 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len, R
 		case 15: // lui
 			insn.id = MIPS_INS_LUI;
 			snprintf ((char *)insn.i_reg.imm, REG_BUF_MAX, "0x%" PFMT32x, imm);
-			dst = r_vector_push (op->dsts, NULL);
+			dst = r_vector_push (&op->dsts, NULL);
 			dst->reg = r_reg_get (anal->reg, mips_reg_decode (rt), R_REG_TYPE_GPR);
 			// TODO: currently there is no way for the macro to get access to this register
 			op->val = imm;
@@ -1596,10 +1596,10 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len, R
 		case 9: // addiu
 			insn.id = MIPS_INS_ADDIU;
 			op->type = R_ANAL_OP_TYPE_ADD;
-			dst = r_vector_push (op->dsts, NULL);
+			dst = r_vector_push (&op->dsts, NULL);
 			dst->reg = r_reg_get (anal->reg, mips_reg_decode (rt), R_REG_TYPE_GPR);
 			// TODO: currently there is no way for the macro to get access to this register
-			src = r_vector_push (op->srcs, NULL);
+			src = r_vector_push (&op->srcs, NULL);
 			src->reg = r_reg_get (anal->reg, mips_reg_decode (rs), R_REG_TYPE_GPR);
 			op->val = imm; // Beware: this one is signed... use `?vi $v`
 			if (rs == 0) {
@@ -1713,12 +1713,12 @@ static int mips_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *b, int len, R
 		// family = 'I';
 	}
 
-	if (mask & R_ANAL_OP_MASK_ESIL) {
+	if (mask & R_ARCH_OP_MASK_ESIL) {
 		if (analop_esil (anal, op, addr, &insn)) {
 			r_strbuf_fini (&op->esil);
 		}
 	}
-	if (mask & R_ANAL_OP_MASK_VAL) {
+	if (mask & R_ARCH_OP_MASK_VAL) {
 		// TODO: add op_fillval (anal, op, &insn);
 	}
 	return oplen;

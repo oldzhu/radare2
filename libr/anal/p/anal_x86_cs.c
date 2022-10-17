@@ -1501,7 +1501,7 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 		case X86_OP_REG:
 			{
 			src = getarg (&gop, 0, 0, NULL, NULL);
-			val = r_vector_push (op->srcs, NULL);
+			val = r_vector_push (&op->srcs, NULL);
 			val->reg = r_reg_get (a->reg, src, R_REG_TYPE_GPR);
 			//XXX fallthrough
 			free (src);
@@ -1693,6 +1693,8 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 			src = getarg (&gop, 1, 0, NULL, NULL);
 			dst = getarg (&gop, 0, 1, "-", NULL);
 			esilprintf (op, "%s,%s", src, dst);
+			free (src);
+			free (dst);
 		}
 		break;
 	case X86_INS_SUB:
@@ -1710,6 +1712,8 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 			// represents a "borrow"
 			esilprintf (op, "%s,%s,%s,0x%"PFMT64x",-,!,%u,$o,^,of,:=,%u,$s,sf,:=,$z,zf,:=,$p,pf,:=,%u,$b,cf,:=,3,$b,af,:=",
 				src, dst, src, (uint64_t)(1ULL) << (bitsize - 1), bitsize - 1, bitsize - 1, bitsize);
+			free (src);
+			free (dst);
 		}
 		break;
 	case X86_INS_SBB:
@@ -1720,6 +1724,8 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 			dst = getarg (&gop, 0, 0, NULL, &bitsize);
 			esilprintf (op, "cf,%s,+,%s,-=,%d,$o,of,:=,%d,$s,sf,:=,$z,zf,:=,$p,pf,:=,%d,$b,cf,:=",
 				src, dst, bitsize - 1, bitsize - 1, bitsize);
+			free (src);
+			free (dst);
 		}
 		break;
 	case X86_INS_LIDT:
@@ -2250,6 +2256,8 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 			esilprintf (op, "%s,I2D,%s", src, dst);
 			break;
 		}
+		free (src);
+		free (dst);
 		break;
 	}
 	case X86_INS_BT:
@@ -2547,10 +2555,10 @@ static void set_access_info(RReg *reg, RAnalOp *op, csh *handle, cs_insn *insn, 
 }
 
 #define CREATE_SRC_DST(op) \
-	src0 = r_vector_push ((op)->srcs, NULL); \
-	src1 = r_vector_push ((op)->srcs, NULL); \
-	src2 = r_vector_push ((op)->srcs, NULL); \
-	dst = r_vector_push ((op)->dsts, NULL);
+	src0 = r_vector_push (&(op)->srcs, NULL); \
+	src1 = r_vector_push (&(op)->srcs, NULL); \
+	src2 = r_vector_push (&(op)->srcs, NULL); \
+	dst = r_vector_push (&(op)->dsts, NULL);
 
 static void set_src_dst(RReg *reg, RAnalValue *val, csh *handle, cs_insn *insn, int x) {
 	if (!val) {
@@ -3721,11 +3729,11 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	}
 	if (n < 1) {
 		op->type = R_ANAL_OP_TYPE_ILL;
-		if (mask & R_ANAL_OP_MASK_DISASM) {
+		if (mask & R_ARCH_OP_MASK_DISASM) {
 			op->mnemonic = strdup ("invalid");
 		}
 	} else {
-		if (mask & R_ANAL_OP_MASK_DISASM) {
+		if (mask & R_ARCH_OP_MASK_DISASM) {
 			op->mnemonic = r_str_newf ("%s%s%s",
 				insn->mnemonic,
 				insn->op_str[0]?" ":"",
@@ -3764,13 +3772,13 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 		}
 		anop (a, op, addr, buf, len, &handle, insn);
 		set_opdir (op, insn);
-		if (mask & R_ANAL_OP_MASK_ESIL) {
+		if (mask & R_ARCH_OP_MASK_ESIL) {
 			anop_esil (a, op, addr, buf, len, &handle, insn);
 		}
-		if (mask & R_ANAL_OP_MASK_OPEX) {
+		if (mask & R_ARCH_OP_MASK_OPEX) {
 			opex (a, &op->opex, insn, mode);
 		}
-		if (mask & R_ANAL_OP_MASK_VAL) {
+		if (mask & R_ARCH_OP_MASK_VAL) {
 			op_fillval (a, op, &handle, insn, mode);
 		}
 	}

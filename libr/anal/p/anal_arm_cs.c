@@ -2089,7 +2089,7 @@ static int analop64_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int l
 		if (ISPREINDEX64 ()) {
 			// "stp x2, x3, [x8, 0x20]!
 			// "32,x8,+=,x2,x8,=[8],x3,x8,8,+,=[8]",
-			r_strbuf_setf(&op->esil,
+			r_strbuf_setf (&op->esil,
 					"%" PFMT64d ",%s,%c=,%s,%s,=[%d],%s,%s,%d,+,=[%d]",
 					abs, MEMBASE64 (2), sign,
 					REG64 (0), MEMBASE64 (2), size,
@@ -4323,6 +4323,9 @@ static void set_opdir(RAnalOp *op) {
 }
 
 static void set_src_dst(RAnalValue *val, RReg *reg, csh *handle, cs_insn *insn, int x, int bits) {
+	if (!val) {
+		return;
+	}
 	cs_arm_op armop = INSOP (x);
 	cs_arm64_op arm64op = INSOP64 (x);
 	if (bits == 64) {
@@ -4361,10 +4364,10 @@ static void set_src_dst(RAnalValue *val, RReg *reg, csh *handle, cs_insn *insn, 
 }
 
 static void create_src_dst(RAnalOp *op) {
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->srcs, NULL);
-	r_vector_push (op->dsts, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->srcs, NULL);
+	r_vector_push (&op->dsts, NULL);
 }
 
 static void op_fillval(RAnal *anal, RAnalOp *op, csh handle, cs_insn *insn, int bits) {
@@ -4410,9 +4413,9 @@ static void op_fillval(RAnal *anal, RAnalOp *op, csh handle, cs_insn *insn, int 
 			break;
 		}
 		for (j = 0; j < 3; j++, i++) {
-			set_src_dst (r_vector_index_ptr (op->srcs, j), anal->reg, &handle, insn, i, bits);
+			set_src_dst (r_vector_at (&op->srcs, j), anal->reg, &handle, insn, i, bits);
 		}
-		set_src_dst (r_vector_index_ptr (op->dsts, 0), anal->reg, &handle, insn, 0, bits);
+		set_src_dst (r_vector_at (&op->dsts, 0), anal->reg, &handle, insn, 0, bits);
 		break;
 	case R_ANAL_OP_TYPE_STORE:
 		if (count > 2) {
@@ -4428,9 +4431,9 @@ static void op_fillval(RAnal *anal, RAnalOp *op, csh handle, cs_insn *insn, int 
 				}
 			}
 		}
-		set_src_dst (r_vector_index_ptr (op->dsts, 0), anal->reg, &handle, insn, --count, bits);
+		set_src_dst (r_vector_at (&op->dsts, 0), anal->reg, &handle, insn, --count, bits);
 		for (j = 0; j < 3 && j < count; j++) {
-			set_src_dst (r_vector_index_ptr (op->srcs, j), anal->reg, &handle, insn, j, bits);
+			set_src_dst (r_vector_at (&op->srcs, j), anal->reg, &handle, insn, j, bits);
 		}
 		break;
 	default:
@@ -4487,7 +4490,7 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 	}
 	n = cs_disasm (a->cs_handle, (ut8*)buf, len, addr, 1, &insn);
 	if (n > 0 && is_valid_mnemonic (insn->mnemonic)) {
-		if (mask & R_ANAL_OP_MASK_DISASM) {
+		if (mask & R_ARCH_OP_MASK_DISASM) {
 			op->mnemonic = r_str_newf ("%s%s%s",
 				insn->mnemonic,
 				insn->op_str[0]? " ": "",
@@ -4500,38 +4503,39 @@ static int analop(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAn
 		op->id = insn->id;
 		if (a->config->bits == 64) {
 			anop64 (a->cs_handle, op, insn);
-			if (mask & R_ANAL_OP_MASK_OPEX) {
+			if (mask & R_ARCH_OP_MASK_OPEX) {
 				opex64 (&op->opex, a->cs_handle, insn);
 			}
-			if (mask & R_ANAL_OP_MASK_ESIL) {
+			if (mask & R_ARCH_OP_MASK_ESIL) {
 				analop64_esil (a, op, addr, buf, len, &a->cs_handle, insn);
 			}
 		} else {
 			anop32 (a, a->cs_handle, op, insn, thumb, (ut8*)buf, len);
-			if (mask & R_ANAL_OP_MASK_OPEX) {
+			if (mask & R_ARCH_OP_MASK_OPEX) {
 				opex (&op->opex, a->cs_handle, insn);
 			}
-			if (mask & R_ANAL_OP_MASK_ESIL) {
+			if (mask & R_ARCH_OP_MASK_ESIL) {
 				analop_esil (a, op, addr, buf, len, &a->cs_handle, insn, thumb);
 			}
 		}
 		set_opdir (op);
-		if (mask & R_ANAL_OP_MASK_VAL) {
+		if (mask & R_ARCH_OP_MASK_VAL) {
 			op_fillval (a, op, a->cs_handle, insn, a->config->bits);
 		}
 		cs_free (insn, n);
 	} else {
+		cs_free (insn, n);
 		op->size = 4;
 		op->type = R_ANAL_OP_TYPE_ILL;
 		if (len < 4) {
-			if (mask & R_ANAL_OP_MASK_DISASM) {
+			if (mask & R_ARCH_OP_MASK_DISASM) {
 				op->mnemonic = strdup ("invalid");
 			}
 			R_CRITICAL_LEAVE (a);
 			return -1;
 		}
 		hackyArmAnal (a, op, buf, len);
-		if (mask & R_ANAL_OP_MASK_DISASM) {
+		if (mask & R_ARCH_OP_MASK_DISASM) {
 			if (hackyArmAsm (a, op, buf, len) < 1) {
 				op->mnemonic = strdup ("invalid");
 			} else if (op->type == R_ANAL_OP_TYPE_ILL) {
@@ -4673,7 +4677,7 @@ static ut8 *anal_mask(RAnal *anal, int size, const ut8 *data, ut64 at) {
 			free (hint);
 		}
 
-		if ((oplen = analop (anal, op, at + idx, data + idx, size - idx, R_ANAL_OP_MASK_BASIC)) < 1) {
+		if ((oplen = analop (anal, op, at + idx, data + idx, size - idx, R_ARCH_OP_MASK_BASIC)) < 1) {
 			break;
 		}
 		if (op->ptr != UT64_MAX || op->jump != UT64_MAX) {

@@ -419,13 +419,13 @@ R_API void r_debug_free(RDebug *dbg) {
 		r_list_free (dbg->maps_user);
 		r_list_free (dbg->threads);
 		r_num_free (dbg->num);
-		sdb_free (dbg->sgnls);
 		r_tree_free (dbg->tree);
 		sdb_foreach (dbg->tracenodes, (SdbForeachCallback)free_tracenodes_entry, dbg);
 		sdb_free (dbg->tracenodes);
 		r_list_free (dbg->plugins);
 		r_list_free (dbg->call_frames);
 		free (dbg->btalgo);
+		r_debug_signal_fini (dbg);
 		r_debug_trace_free (dbg->trace);
 		r_debug_session_free (dbg->session);
 		r_anal_op_free (dbg->cur_op);
@@ -860,7 +860,7 @@ R_API int r_debug_step_soft(RDebug *dbg) {
 	if (!dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf))) {
 		return false;
 	}
-	if (!r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf), R_ANAL_OP_MASK_BASIC)) {
+	if (!r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf), R_ARCH_OP_MASK_BASIC)) {
 		return false;
 	}
 	if (op.type == R_ANAL_OP_TYPE_ILL) {
@@ -1107,7 +1107,7 @@ R_API int r_debug_step_over(RDebug *dbg, int steps) {
 			dbg->iob.read_at (dbg->iob.io, buf_pc, buf, sizeof (buf));
 		}
 		// Analyze the opcode
-		if (!r_anal_op (dbg->anal, &op, pc, buf + (pc - buf_pc), sizeof (buf) - (pc - buf_pc), R_ANAL_OP_MASK_BASIC)) {
+		if (!r_anal_op (dbg->anal, &op, pc, buf + (pc - buf_pc), sizeof (buf) - (pc - buf_pc), R_ARCH_OP_MASK_BASIC)) {
 			R_LOG_ERROR ("debug-step-over: Decode error at %"PFMT64x, pc);
 			return steps_taken;
 		}
@@ -1328,7 +1328,7 @@ repeat:
 			RAnalOp op = {0};
 			ut64 pc = r_debug_reg_get (dbg, "PC");
 			dbg->iob.read_at (dbg->iob.io, pc, buf, sizeof (buf));
-			r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf), R_ANAL_OP_MASK_BASIC);
+			r_anal_op (dbg->anal, &op, pc, buf, sizeof (buf), R_ARCH_OP_MASK_BASIC);
 			if (op.size > 0) {
 				const char *signame = r_signal_to_string (dbg->reason.signum);
 				r_debug_reg_set (dbg, "PC", pc+op.size);
@@ -1413,7 +1413,7 @@ R_API int r_debug_continue_until_optype(RDebug *dbg, int type, int over) {
 			dbg->iob.read_at (dbg->iob.io, buf_pc, buf, sizeof (buf));
 		}
 		// Analyze the opcode
-		if (!r_anal_op (dbg->anal, &op, pc, buf + (pc - buf_pc), sizeof (buf) - (pc - buf_pc), R_ANAL_OP_MASK_BASIC)) {
+		if (!r_anal_op (dbg->anal, &op, pc, buf + (pc - buf_pc), sizeof (buf) - (pc - buf_pc), R_ARCH_OP_MASK_BASIC)) {
 			R_LOG_ERROR ("Decode error at %"PFMT64x, pc);
 			return false;
 		}
