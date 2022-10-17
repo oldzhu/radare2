@@ -214,7 +214,6 @@ R_API bool r_arch_set_arch(RArch *arch, char *archname) {
 		cfg->arch =_arch;
 		if (!r_arch_use (arch, cfg)) {
 			r_unref (cfg);
-			arch->cfg = NULL;
 			return false;
 		}
 		return true;
@@ -286,8 +285,6 @@ R_API void r_arch_free(RArch *arch) {
 	r_return_if_fail (arch);
 	ht_pp_free (arch->decoders);
 	r_list_free (arch->plugins);
-	if (arch->cfg) {
-		r_unref (arch->cfg);
-	}
+	r_unref (arch->cfg);
 	free (arch);
 }

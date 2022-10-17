@@ -1503,7 +1503,6 @@ static void anop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf, int len,
 			src = getarg (&gop, 0, 0, NULL, NULL);
 			val = r_vector_push (&op->srcs, NULL);
 			val->reg = r_reg_get (a->reg, src, R_REG_TYPE_GPR);
-			//XXX fallthrough
 			free (src);
 			}
 		//case X86_OP_FP:
@@ -2360,7 +2359,9 @@ static RRegItem *cs_reg2reg(RReg *reg, csh *h, int id) {
 	if (id == X86_REG_INVALID) {
 		return NULL;
 	}
-	return r_reg_get (reg, (char *)cs_reg_name (*h, id), -1);
+	RRegItem *ri = r_reg_get (reg, (char *)cs_reg_name (*h, id), -1);
+	// r_unref (ri); // XXX this fixes the refleak but its not correct
+	return ri;
 }
 
 static void set_access_info(RReg *reg, RAnalOp *op, csh *handle, cs_insn *insn, int mode) {
@@ -2543,8 +2544,11 @@ static void set_access_info(RReg *reg, RAnalOp *op, csh *handle, cs_insn *insn, 
 					val->delta += insn->size;
 				}
 				val->memref = INSOP (i).size;
+				r_unref (val->seg);
 				val->seg = cs_reg2reg (reg, handle, INSOP (i).mem.segment);
+				r_unref (val->reg);
 				val->reg = cs_reg2reg (reg, handle, INSOP (i).mem.base);
+				r_unref (val->regdelta);
 				val->regdelta = cs_reg2reg (reg, handle, INSOP (i).mem.index);
 				r_list_append (ret, val);
 			}
@@ -2569,11 +2573,15 @@ static void set_src_dst(RReg *reg, RAnalValue *val, csh *handle, cs_insn *insn, 
 		val->mul = INSOP (x).mem.scale;
 		val->delta = INSOP (x).mem.disp;
 		val->memref = INSOP (x).size;
+		r_unref (val->seg);
 		val->seg = cs_reg2reg (reg, handle, INSOP (x).mem.segment);
+		r_unref (val->reg);
 		val->reg = cs_reg2reg (reg, handle, INSOP (x).mem.base);
+		r_unref (val->regdelta);
 		val->regdelta = cs_reg2reg (reg, handle, INSOP (x).mem.index);
 		break;
 	case X86_OP_REG:
+		r_unref (val->reg);
 		val->reg = cs_reg2reg (reg, handle, INSOP (x).reg);
 		break;
 	case X86_OP_IMM:
@@ -2626,10 +2634,10 @@ static void op_fillval(RAnal *a, RAnalOp *op, csh *handle, cs_insn *insn, int mo
 
 static void op0_memimmhandle(RAnalOp *op, cs_insn *insn, ut64 addr, int regsz) {
 	op->ptr = UT64_MAX;
-	switch (INSOP(0).type) {
+	switch (INSOP (0).type) {
 	case X86_OP_MEM:
 		op->cycles = CYCLE_MEM;
-		op->disp = INSOP(0).mem.disp;
+		op->disp = INSOP (0).mem.disp;
 		if (!op->disp) {
 			op->disp = UT64_MAX;
 		}
