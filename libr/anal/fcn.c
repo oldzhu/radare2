@@ -184,9 +184,11 @@ static bool is_delta_pointer_table(ReadAhead *ra, RAnal *anal, RAnalFunction *fc
 		}
 		if (aop->type == R_ANAL_OP_TYPE_UJMP || aop->type == R_ANAL_OP_TYPE_RJMP) {
 			isValid = true;
+			r_anal_op_fini (aop);
 			break;
 		}
 		if (aop->type == R_ANAL_OP_TYPE_JMP || aop->type == R_ANAL_OP_TYPE_CJMP) {
+			r_anal_op_fini (aop);
 			break;
 		}
 		if (aop->type == R_ANAL_OP_TYPE_MOV) {
@@ -728,6 +730,7 @@ repeat:
 					if (r_anal_block_relocate (bb, bb->addr + oplen, bb->size - oplen)) {
 						fcn->addr += oplen;
 						idx = delay.un_idx;
+						r_anal_op_fini (op);
 						goto repeat;
 					}
 				}
@@ -741,6 +744,7 @@ repeat:
 					gotoBeach (R_ANAL_RET_ERROR);
 				}
 				if (r_anal_block_relocate (bb, at + op->size, bb->size)) {
+					r_anal_op_fini (op);
 					addr = at + op->size;
 					fcn->addr = addr;
 					goto repeat;
@@ -815,6 +819,7 @@ repeat:
 			delay.cnt = op->delay;
 			delay.pending = 1; // we need this in case the actual idx is zero...
 			delay.adjust = !overlapped; // adjustment is required later to avoid double count
+			r_anal_op_fini (op);
 			continue;
 		}
 
@@ -932,6 +937,7 @@ repeat:
 			if (anal->opt.hpskip && regs_exist (src0, dst) && !strcmp (src0->reg->name, dst->reg->name)) {
 				skip_ret = skip_hp (anal, fcn, op, bb, addr, oplen, delay.un_idx, &idx);
 				if (skip_ret == 1) {
+					r_anal_op_fini (op);
 					goto repeat;
 				}
 				if (skip_ret == 2) {
@@ -1000,6 +1006,7 @@ repeat:
 			&& !strcmp (src0->reg->name, dst->reg->name)) {
 				skip_ret = skip_hp (anal, fcn, op, bb, at, oplen, delay.un_idx, &idx);
 				if (skip_ret == 1) {
+					r_anal_op_fini (op);
 					goto repeat;
 				}
 				if (skip_ret == 2) {
