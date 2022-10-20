@@ -367,11 +367,10 @@ static int cmd_tail(void *data, const char *_input) { // "tail"
 	char *input = strdup (_input);
 	RCore *core = (RCore *)data;
 	int lines = 5;
-	char *arg = strchr (input, ' ');
-	char *tmp, *count;
+	char *tmp, *arg = strchr (input, ' ');
 	if (arg) {
 		arg = (char *)r_str_trim_head_ro (arg + 1); 	// contains "count filename"
-		count = strchr (arg, ' ');
+		char *count = strchr (arg, ' ');
 		if (count) {
 			*count = 0;	// split the count and file name
 			tmp = (char *)r_str_trim_head_ro (count + 1);
@@ -667,7 +666,7 @@ static void printFunctionType(RCore *core, const char *input) {
 	}
 	pj_o (pj);
 	r_strf_buffer (64);
-	char *res = sdb_querys (TDB, NULL, -1, r_strf ("func.%s.args", input));
+	char *res = sdb_get (TDB, r_strf ("func.%s.args", input), NULL);
 	const char *name = r_str_trim_head_ro (input);
 	int i, args = sdb_num_get (TDB, r_strf ("func.%s.args", name), 0);
 	pj_ks (pj, "name", name);
@@ -692,11 +691,17 @@ static void printFunctionType(RCore *core, const char *input) {
 			pj_ks (pj, "name", "(null)");
 		}
 		pj_end (pj);
+		free (type);
 	}
 	pj_end (pj);
 	pj_end (pj);
-	r_cons_printf ("%s", pj_string (pj));
-	pj_free (pj);
+	char *s = pj_drain (pj);
+	if (R_STR_ISEMPTY (s)) {
+		r_cons_printf ("{}");
+	} else {
+		r_cons_printf ("%s,", s);
+	}
+	free (s);
 	free (res);
 }
 
@@ -777,24 +782,32 @@ static bool print_typelist_r_cb(void *p, const char *k, const char *v) {
 }
 
 static bool print_typelist_json_cb(void *p, const char *k, const char *v) {
+	r_return_val_if_fail (p && k, false);
 	RCore *core = (RCore *)p;
+	if (!v) {
+		v = "";
+	}
 	PJ *pj = pj_new ();
 	pj_o (pj);
 	Sdb *sdb = core->anal->sdb_types;
 	char *sizecmd = r_str_newf ("type.%s.size", k);
-	char *size_s = sdb_querys (sdb, NULL, -1, sizecmd);
+	char *size_s = sdb_get (sdb, sizecmd, NULL);
 	char *formatcmd = r_str_newf ("type.%s", k);
-	char *format_s = sdb_querys (sdb, NULL, -1, formatcmd);
-	r_str_trim (format_s);
-	pj_ks (pj, "type", k);
-	pj_ki (pj, "size", size_s ? atoi (size_s) : -1);
-	pj_ks (pj, "format", format_s);
-	pj_end (pj);
-	r_cons_printf ("%s", pj_string (pj));
+	char *format_s = sdb_get (sdb, formatcmd, NULL);
+	if (size_s && format_s) {
+		r_str_trim (format_s);
+		pj_ks (pj, "type", k);
+		pj_ki (pj, "size", size_s ? atoi (size_s) : -1);
+		pj_ks (pj, "format", format_s);
+		pj_end (pj);
+		r_cons_printf ("%s,", pj_string (pj));
+	} else {
+		R_LOG_DEBUG ("Internal sdb inconsistency for %s", sizecmd);
+	}
 	pj_free (pj);
 	free (size_s);
-	free (format_s);
 	free (sizecmd);
+	free (format_s);
 	free (formatcmd);
 	return true;
 }
@@ -803,24 +816,22 @@ static void print_keys(Sdb *TDB, RCore *core, SdbForeachCallback filter, SdbFore
 	SdbList *l = sdb_foreach_list_filter (TDB, filter, true);
 	SdbListIter *it;
 	SdbKv *kv;
-	const char *comma = "";
 
 	if (json) {
-		r_cons_printf ("[");
+		r_cons_print ("{\"types\":[");
 	}
 	ls_foreach (l, it, kv) {
 		const char *k = sdbkv_key (kv);
-		if (!k || !*k) {
+		const char *v = sdbkv_value (kv);
+		if (R_STR_ISEMPTY (k)) {
 			continue;
 		}
-		if (json) {
-			r_cons_printf ("%s", comma);
-			comma = ",";
+		if (v) {
+			printfn_cb (core, k, v);
 		}
-		printfn_cb (core, sdbkv_key (kv), sdbkv_value (kv));
 	}
 	if (json) {
-		r_cons_printf ("]\n");
+		r_cons_println ("{}]}\n");
 	}
 	ls_free (l);
 }
@@ -1822,6 +1833,9 @@ static int cmd_type(void *data, const char *input) {
 						} else {
 							char *q = r_str_newf ("typedef.%s", name);
 							const char *res = sdb_const_get (TDB, q, 0);
+							if (!res) {
+								res = "";
+							}
 							pj_ks (pj, name, res);
 							free (q);
 						}
