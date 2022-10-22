@@ -464,9 +464,11 @@ static const char *help_msg_aeC[] = {
 };
 
 static const char *help_msg_aeg[] = {
-	"Usage:", "aeg[fiv]", " [...]",
+	"Usage:", "aeg[fniv]", " [...]",
 	"aeg", "", "analyze current instruction as an esil graph",
+	"aegb", "", "data flow graph for current basic block (aeg `pieq $Fi`)",
 	"aegf", "", "analyze given expression and filter for register",
+	"aegn", "", "create data flow graph for N instructions",
 	"aegv", "", "analyse and launch the visual interactive mode",
 	NULL
 };
@@ -7020,12 +7022,12 @@ static void __anal_esil_function(RCore *core, ut64 addr) {
 #endif
 }
 
-static char *_aeg_get_title (void *data) {
+static char *_aeg_get_title(void *data) {
 	RAnalEsilDFGNode *enode = (RAnalEsilDFGNode *)data;
 	return r_str_newf ("%d", enode->idx);
 }
 
-static char *_aeg_get_body (void *data) {
+static char *_aeg_get_body(void *data) {
 	RAnalEsilDFGNode *enode = (RAnalEsilDFGNode *)data;
 	return r_str_newf ("%s%s",
 		(enode->type & R_ANAL_ESIL_DFG_TAG_GENERATIVE)? "generative:": "",
@@ -7039,42 +7041,61 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 		.get_body = _aeg_get_body
 	};
 	switch (argv[0][1]) {
-	case '\x00':	// "aeg"
-		{
-			if (argc == 1) {
-				RAnalOp *aop = r_core_anal_op (core, core->offset, R_ARCH_OP_MASK_ESIL);
-				if (!aop) {
+	case '\x00': // "aeg"
+		if (argc == 1) {
+			RAnalOp *aop = r_core_anal_op (core, core->offset, R_ARCH_OP_MASK_ESIL);
+			if (!aop) {
+				return;
+			}
+			const char *esilstr = r_strbuf_get (&aop->esil);
+			if (R_STR_ISNOTEMPTY (esilstr)) {
+				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr);
+				if (!dfg) {
+					r_anal_op_free (aop);
 					return;
 				}
-				const char *esilstr = r_strbuf_get (&aop->esil);
-				if (R_STR_ISNOTEMPTY (esilstr)) {
-					RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr);
-					if (!dfg) {
-						r_anal_op_free (aop);
-						return;
-					}
-					RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
-					r_anal_esil_dfg_free (dfg);
-					agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
-					agraph->layout = 1;
-					r_agraph_print (agraph);
-					r_agraph_free (agraph);
-				}
-				r_anal_op_free (aop);
-			} else {
-				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, argv[1]);
-				r_return_if_fail (dfg);
 				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
 				r_anal_esil_dfg_free (dfg);
 				agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
-				agraph->layout = 1;
+				agraph->layout = r_config_get_i (core->config, "graph.layout");
 				r_agraph_print (agraph);
 				r_agraph_free (agraph);
 			}
+			r_anal_op_free (aop);
+		} else {
+			RStrBuf *sb = r_strbuf_new ("");
+			int i;
+			for (i = 1; i < argc; i++) {
+				if (r_strbuf_length (sb) > 0) {
+					r_strbuf_append (sb, ",");
+				}
+				r_strbuf_append (sb, argv[i]);
+			}
+			char *esilexpr = r_strbuf_drain (sb);
+			RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilexpr);
+			if (dfg) {
+				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
+				r_anal_esil_dfg_free (dfg);
+				agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
+				agraph->layout = r_config_get_i (core->config, "graph.layout");
+				r_agraph_print (agraph);
+				r_agraph_free (agraph);
+			}
+			free (esilexpr);
 		}
 		break;
-	case 'i':	// "aegi"
-	case 'v':	// "aegv"
+	case 'b': // "aegb"
+		r_core_cmd0 (core, "aeg `pieq $Fi`");
+		break;
+	case 'n': // "aegn"
+		if (argc > 1) {
+			int n = r_num_math (core->num, argv[1]);
+			r_core_cmdf (core, "aeg `pieq %d`", n);
+		} else {
+			R_LOG_ERROR ("Usage: aegn [number-of-instructions-to-combine-its-esil-essence]");
+		}
+		break;
+	case 'v': // "aegv" - visual
 	{
 		RAGraph *agraph = NULL;
 		if (argc == 1) {
@@ -7102,9 +7123,8 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 		const ut64 osc = r_config_get_i (core->config, "scr.color");
 		r_config_set_i (core->config, "scr.color", 0);
 		ut64 oseek = core->offset;
-//		bool ov = r_cons_is_interactive ();
 		agraph->need_update_dim = true;
-		agraph->layout = 1;
+		agraph->layout = r_config_get_i (core->config, "graph.layout");
 		int update_seek = r_core_visual_graph (core, agraph, NULL, true);
 		r_cons_show_cursor (true);
 		r_cons_enable_mouse (false);
@@ -10239,8 +10259,7 @@ R_API void r_core_agraph_print(RCore *core, int use_utf, const char *input) {
 		}
 		break;
 	}
-	case 'v': // "aggv"
-	case 'i': // "aggi" - open current core->graph in interactive mode
+	case 'v': // "aggv" - open current core->graph in interactive visual mode
 	{
 		RANode *ran = r_agraph_get_first_node (core->graph);
 		if (ran) {
