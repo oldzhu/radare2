@@ -361,6 +361,7 @@ R_API RPrint* r_print_free(RPrint *p) {
 	R_FREE (p->lines_cache);
 	R_FREE (p->row_offsets);
 	r_charset_free (p->charset);
+	r_unref (p->config);
 	free (p);
 	return NULL;
 }
@@ -2549,6 +2550,9 @@ R_API char *r_print_code_tocolor(const char *o) {
 		const char *cl = strstr (p, " ()");
 		const char *st = strstr (p, " str.");
 		const char *w = r_str_trim_head_ro (p);
+		if (st > cm && st < nl) {
+			st = NULL;
+		}
 		if (w == nl) {
 			p = w;
 			continue;
