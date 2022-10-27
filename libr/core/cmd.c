@@ -3,10 +3,6 @@
 #define INTERACTIVE_MAX_REP 1024
 
 #include <r_core.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <ctype.h>
-#include <stdarg.h>
 #if __UNIX__
 #include <sys/utsname.h>
 #ifndef __wasi__
@@ -102,6 +98,7 @@ static RCoreHelpMessage help_msg_plus = {
 static RCoreHelpMessage help_msg_j = {
 	"Usage:", "j[:o]in", "run command with json facilities or join two files",
 	"j:", "?e", "run '?e' command and show the result stats in json",
+	"ji:", "[cmd]", "run command and indent it as json like (cmd~{})",
 	"join", " f1 f2", "join the contents of two files",
 	NULL
 };
@@ -1532,6 +1529,14 @@ static int cmd_l(void *data, const char *input) { // "l"
 
 static int cmd_join(void *data, const char *input) { // "join"
 	RCore *core = (RCore *)data;
+	if (r_str_startswith (input, "i:")) {
+		char *res = r_core_cmd_str (core, input + 2);
+		char *indented = r_print_json_indent (res, true, "  ", NULL);
+		r_cons_printf ("%s\n", indented);
+		free (indented);
+		free (res);
+		return R_CMD_RC_SUCCESS;
+	}
 	if (input[0] == ':') {
 		PJ *pj = r_core_pj_new (core);
 		// buffer rlog calls into a string
@@ -1549,7 +1554,7 @@ static int cmd_join(void *data, const char *input) { // "join"
 		s = pj_drain (pj);
 		r_cons_printf ("%s\n", s);
 		free (s);
-		return 0;
+		return R_CMD_RC_SUCCESS;
 	}
 	char *tmp = strdup (input);
 	const char *arg1 = strchr (tmp, ' ');
@@ -1590,11 +1595,11 @@ static int cmd_join(void *data, const char *input) { // "join"
 		break;
 	}
 	free (tmp);
-	return 0;
+	return R_CMD_RC_SUCCESS;
 beach:
 	r_core_cmd_help (core, help_msg_j);
 	free (tmp);
-	return 0;
+	return R_CMD_RC_SUCCESS;
 }
 
 static int cmd_plus(void *data, const char *input) {
@@ -1886,7 +1891,7 @@ static int cmd_table(void *data, const char *input) {
 					load_table (core, core->table, strdup (file_data_str));
 					free (file_data_str);
 				} else {
-					R_LOG_ERROR ("No such alias \"$%s\"", file+1);
+					R_LOG_ERROR ("No such alias '$%s'", file+1);
 				}
 			} else {
 				char *file_data = r_file_slurp (file, NULL);
@@ -2038,6 +2043,9 @@ static int cmd_interpret(void *data, const char *input) {
 		r_core_cmd_command (core, input + 1);
 		break;
 	case '(': // ".("
+		if (input[1] == '*') {
+			goto bypass;
+		}
 		r_cmd_macro_call (&core->rcmd->macro, input + 1);
 		break;
 	default:
@@ -2045,6 +2053,7 @@ static int cmd_interpret(void *data, const char *input) {
 			R_LOG_ERROR ("No .[0..9] to avoid infinite loops");
 			break;
 		}
+bypass:
 		inp = strdup (input);
 		filter = strchr (inp, '~');
 		if (filter) {
@@ -3340,6 +3349,9 @@ static char *parse_tmp_evals(RCore *core, const char *str) {
 }
 
 static bool is_macro_command(const char *ptr) {
+	if (!strchr (ptr, ')')) {
+		return false;
+	}
 	ptr = r_str_trim_head_ro (ptr);
 	while (IS_DIGIT (*ptr)) {
 		ptr++;
@@ -3605,7 +3617,7 @@ static char *r_core_cmd_find_subcmd_begin(char *cmd) {
 		if (*p == '`' && !quote) {
 			return p;
 		}
-		if (*p == '$' && *(p + 1) == '(' && !quote) {
+		if (*p == '$' && p[1] == '(' && !quote) {
 			return p;
 		}
 	}
@@ -3758,7 +3770,7 @@ static int r_core_cmd_subst_i(RCore *core, char *cmd, char *colon, bool *tmpseek
 		r_list_free (tmpenvs);
 		return true;
 	case '(':
-		if (cmd[1] != '*' && !strstr (cmd, ")()")) {
+		if (cmd[1] != '*' && cmd[1] != 'j' && !strstr (cmd, ")()")) {
 			r_list_free (tmpenvs);
 			return r_cmd_call (core->rcmd, cmd);
 		}
@@ -3772,8 +3784,6 @@ static int r_core_cmd_subst_i(RCore *core, char *cmd, char *colon, bool *tmpseek
 	}
 
 	/* multiple commands */
-	// TODO: must honor " and ` boundaries
-	//ptr = strrchr (cmd, ';');
 	if (*cmd != '#') {
 		ptr = (char *)(is_macro_command (cmd)
 			? find_ch_after_macro (cmd, ';')
@@ -3985,15 +3995,16 @@ escape_pipe:
 			RBuffer *cmd_out = r_core_cmd_tobuf (core, cmd);
 			int alias_len;
 			ut8 *alias_data = r_buf_read_all (cmd_out, &alias_len);
+			const char *arg = r_str_trim_head_ro (str + 1);
 			if (appendResult) {
-				if (r_cmd_alias_append_raw (core->rcmd, str+1, alias_data, alias_len)) {
-					R_LOG_INFO ("Alias \"$%s\" is a command - will not attempt to append", str + 1);
+				if (r_cmd_alias_append_raw (core->rcmd, arg, alias_data, alias_len)) {
+					R_LOG_INFO ("Alias '$%s' is a command - will not attempt to append", arg);
 				} else {
 					/* No existing alias */
-					r_cmd_alias_set_raw (core->rcmd, str+1, alias_data, alias_len);
+					r_cmd_alias_set_raw (core->rcmd, arg, alias_data, alias_len);
 				}
 			} else {
-				r_cmd_alias_set_raw (core->rcmd, str+1, alias_data, alias_len);
+				r_cmd_alias_set_raw (core->rcmd, arg, alias_data, alias_len);
 			}
 			ret = 0;
 			r_buf_free (cmd_out);
@@ -4135,7 +4146,6 @@ escape_backtick:
 	}
 
 	/* temporary seek commands */
-	// if (*cmd != '(' && *cmd != '"')
 	if (*cmd != '"') {
 		ptr = (char *)r_str_firstbut_escape (cmd, '@', "\"'");
 		if (ptr == cmd + 1 && *cmd == '?') {
