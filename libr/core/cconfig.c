@@ -3119,9 +3119,15 @@ static bool cb_anal_limits(void *user, RConfigNode *node) {
 	return 1;
 }
 
-static bool cb_anal_rnr(void *user, RConfigNode *node) {
+static bool cb_anal_noret_refs(void *user, RConfigNode *node) {
 	RCore *core = (RCore*)user;
-	core->anal->recursive_noreturn = node->i_value;
+	core->anal->opt.recursive_noreturn = node->i_value;
+	return 1;
+}
+
+static bool cb_anal_noret(void *user, RConfigNode *node) {
+	RCore *core = (RCore*)user;
+	core->anal->opt.propagate_noreturn = node->i_value;
 	return 1;
 }
 
@@ -3451,7 +3457,8 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB ("anal.gp", 0, (RConfigCallback)&cb_anal_gp, "set the value of the GP register (MIPS)");
 	SETBPREF ("anal.gpfixed", "true", "set gp register to anal.gp before emulating each instruction in aae");
 	SETCB ("anal.limits", "false", (RConfigCallback)&cb_anal_limits, "restrict analysis to address range [anal.from:anal.to]");
-	SETCB ("anal.rnr", "false", (RConfigCallback)&cb_anal_rnr, "recursive no return checks (EXPERIMENTAL)");
+	SETCB ("anal.noret.refs", "false", (RConfigCallback)&cb_anal_noret_refs, "recursive no return checks (EXPERIMENTAL)");
+	SETCB ("anal.noret", "true", (RConfigCallback)&cb_anal_noret, "propagate noreturn attributes (EXPERIMENTAL)");
 	SETCB ("anal.limits", "false", (RConfigCallback)&cb_anal_limits, "restrict analysis to address range [anal.from:anal.to]");
 	SETICB ("anal.from", -1, (RConfigCallback)&cb_anal_from, "lower limit on the address range for analysis");
 	SETICB ("anal.to", -1, (RConfigCallback)&cb_anal_from, "upper limit on the address range for analysis");
@@ -4203,7 +4210,11 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB ("scr.fix.rows", 0, &cb_fixrows, "Workaround for Linux TTY");
 	SETICB ("scr.fix.columns", 0, &cb_fixcolumns, "workaround for Prompt iOS SSH client");
 	SETCB ("scr.highlight", "", &cb_scrhighlight, "highlight that word at RCons level");
+#if __EMSCRIPTEN__ || __wasi__
+	SETCB ("scr.interactive", "false", &cb_scrint, "start in interactive mode");
+#else
 	SETCB ("scr.interactive", "true", &cb_scrint, "start in interactive mode");
+#endif
 	SETCB ("scr.bgfill", "false", &cb_scr_bgfill, "fill background for ascii art when possible");
 	SETI ("scr.feedback", 1, "set visual feedback level (1=arrow on jump, 2=every key (useful for videos))");
 	SETCB ("scr.html", "false", &cb_scrhtml, "disassembly uses HTML syntax");
@@ -4237,7 +4248,11 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("scr.demo", "false", &cb_scr_demo, "use demoscene effects if available");
 	SETCB ("scr.hist.block", "true", &cb_scr_histblock, "use blocks for histogram");
 	SETCB ("scr.hist.filter", "true", &cb_scr_histfilter, "filter history for matching lines when using up/down keys");
+#if __EMSCRIPTEN__ || __wasi__
+	SETBPREF ("scr.hist.save", "false", "always save history on exit");
+#else
 	SETBPREF ("scr.hist.save", "true", "always save history on exit");
+#endif
 	SETICB("scr.hist.size", R_LINE_HISTSIZE, &cb_scr_histsize, "set input lines history size");
 	n = NODECB ("scr.strconv", "asciiesc", &cb_scrstrconv);
 	SETDESC (n, "convert string before display");

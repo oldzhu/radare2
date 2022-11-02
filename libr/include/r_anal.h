@@ -384,6 +384,8 @@ typedef struct r_anal_options_t {
 	bool delay;
 	int tailcall;
 	bool retpoline;
+	bool propagate_noreturn;
+	bool recursive_noreturn; // anal.rnr
 } RAnalOptions;
 
 typedef enum {
@@ -435,7 +437,6 @@ typedef struct r_anal_t {
 	Sdb *sdb_zigns;
 	HtUP *dict_refs;
 	HtUP *dict_xrefs;
-	bool recursive_noreturn; // anal.rnr
 	RSpaces zign_spaces;
 	char *zign_path; // dir.zigns
 	PrintfCallback cb_printf;
@@ -455,7 +456,6 @@ typedef struct r_anal_t {
 	RAnalCallbacks cb;
 	RAnalOptions opt;
 	RList *reflines;
-	//RList *noreturn;
 	RListComparator columnSort;
 	int stackptr;
 	bool (*log)(struct r_anal_t *anal, const char *msg);
@@ -1480,6 +1480,7 @@ R_API RAnalValue *r_anal_value_copy(RAnalValue *ov);
 R_API RAnalValue *r_anal_value_new_from_string(const char *str);
 R_API st64 r_anal_value_eval(RAnalValue *value);
 R_API char *r_anal_value_tostring(RAnalValue *value);
+R_API const char *r_anal_value_type_tostring(RAnalValue *value);
 R_API ut64 r_anal_value_to_ut64(RAnal *anal, RAnalValue *val);
 R_API int r_anal_value_set_ut64(RAnal *anal, RAnalValue *val, ut64 num);
 R_API void r_anal_value_free(RAnalValue *value);

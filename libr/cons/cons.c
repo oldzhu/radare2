@@ -639,6 +639,8 @@ R_API RCons *r_cons_new(void) {
 	I->teefile = NULL;
 	I->fix_columns = 0;
 	I->fix_rows = 0;
+	I->backup_fd = -1;
+	I->backup_fdn = -1;
 	I->mouse_event = 0;
 	I->force_rows = 0;
 	I->force_columns = 0;
@@ -2140,3 +2142,16 @@ R_API void r_cons_thready(void) {
 		R_CRITICAL_LEAVE (I);
 	}
 }
+
+#if WITH_STATIC_THEMES
+#include "d_themes.inc"
+
+R_API const RConsTheme* r_cons_themes(void) {
+	return (const RConsTheme *)d_themes;
+}
+
+#else
+R_API const RConsTheme* r_cons_themes(void) {
+	return NULL;
+}
+#endif
