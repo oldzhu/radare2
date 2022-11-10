@@ -133,7 +133,7 @@ jobs:
 
   # macOS
   macos-acr-x64:
-    runs-on: macos-latest
+    runs-on: macos-11
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -165,7 +165,7 @@ jobs:
          name: macos-acr-m1
   ios-cydia32:
     if: contains(github.ref, 'master') || contains(github.ref, 'ci-')
-    runs-on: macos-latest
+    runs-on: macos-11
     steps:
     - uses: actions/checkout@v3
     - name: Install pkg-config/ldid2 with Homebrew
@@ -181,7 +181,7 @@ jobs:
 
   ios-cydia:
     if: contains(github.ref, 'master') || contains(github.ref, 'ci-')
-    runs-on: macos-latest
+    runs-on: macos-11
     steps:
     - uses: actions/checkout@v3
     - name: Install pkg-config/ldid2 with Homebrew
@@ -283,14 +283,14 @@ jobs:
     runs-on: windows-2019
     steps:
     - name: Win configure Pagefile
-      uses: al-cheb/configure-pagefile-action@v1.2
+      uses: al-cheb/configure-pagefile-action@v1.3
       with:
           minimum-size: 16GB
           maximum-size: 16GB
           disk-root: "C:"
     - name: Checkout
       uses: actions/checkout@v3
-    - uses: actions/setup-python@v2
+    - uses: actions/setup-python@v4
 #      with:
 #        python-version: '3.7'
     - name: Install dependencies
@@ -329,14 +329,14 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Win configure Pagefile
-      uses: al-cheb/configure-pagefile-action@v1.2
+      uses: al-cheb/configure-pagefile-action@v1.3
       with:
           minimum-size: 16GB
           maximum-size: 16GB
           disk-root: "C:"
     - name: Checkout
       uses: actions/checkout@v3
-    - uses: actions/setup-python@v2
+    - uses: actions/setup-python@v4
 #      with:
 #        python-version: '3.7'
     - name: Preparing nmake
@@ -373,14 +373,14 @@ jobs:
     runs-on: windows-2019
     steps:
     - name: Win configure Pagefile
-      uses: al-cheb/configure-pagefile-action@v1.2
+      uses: al-cheb/configure-pagefile-action@v1.3
       with:
           minimum-size: 16GB
           maximum-size: 16GB
           disk-root: "C:"
     - name: Checkout
       uses: actions/checkout@v3
-    - uses: actions/setup-python@v2
+    - uses: actions/setup-python@v4
 #      with:
 #        python-version: '3.7'
     - name: Preparing nmake
@@ -423,14 +423,14 @@ jobs:
     runs-on: windows-2019
     steps:
     - name: Win configure Pagefile
-      uses: al-cheb/configure-pagefile-action@v1.2
+      uses: al-cheb/configure-pagefile-action@v1.3
       with:
           minimum-size: 16GB
           maximum-size: 16GB
           disk-root: "C:"
     - name: Checkout
       uses: actions/checkout@v3
-    - uses: actions/setup-python@v2
+    - uses: actions/setup-python@v4
 #      with:
 #        python-version: '3.7'
     - name: Preparing nmake
