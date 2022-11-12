@@ -335,6 +335,7 @@ struct r_bin_t {
 	int maxsymlen;
 	ut64 maxstrbuf;
 	int rawstr;
+	bool strings_nofp; // move to options struct passed instead of min, dump raw on every getstrings call
 	Sdb *sdb;
 	RIDStorage *ids;
 	RList/*<RBinPlugin>*/ *plugins;
@@ -495,7 +496,7 @@ typedef struct r_bin_section_t {
 	ut64 vaddr;
 	ut64 paddr;
 	ut32 perm;
-	// per section platform info
+	const char *type;
 	const char *arch;
 	char *format;
 	int bits;
@@ -664,6 +665,7 @@ typedef struct r_bin_bind_t {
 } RBinBind;
 
 R_IPI RBinSection *r_bin_section_new(const char *name);
+R_API RBinSection *r_bin_section_clone(RBinSection *s);
 R_IPI void r_bin_section_free(RBinSection *bs);
 R_API void r_bin_info_free(RBinInfo *rb);
 R_API void r_bin_import_free(RBinImport *imp);

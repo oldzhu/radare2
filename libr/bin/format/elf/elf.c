@@ -349,11 +349,11 @@ static int init_phdr(ELFOBJ *bin) {
 }
 
 static int init_shdr(ELFOBJ *bin) {
+	r_return_val_if_fail (bin && !bin->shdr, false);
+
 	ut32 shdr_size;
 	ut8 shdr[sizeof (Elf_(Shdr))] = {0};
 	size_t i, j, len;
-
-	r_return_val_if_fail (bin && !bin->shdr, false);
 
 	if (!UT32_MUL (&shdr_size, bin->ehdr.e_shnum, sizeof (Elf_(Shdr)))) {
 		return false;
@@ -2743,6 +2743,7 @@ static void fix_rva_and_offset_relocable_file(ELFOBJ *bin, RBinElfReloc *r, size
 }
 
 static void fix_rva_and_offset_exec_file(ELFOBJ *bin, RBinElfReloc *r) {
+	// read target and fix patch
 	r->rva = r->offset;
 	r->offset = Elf_(r_bin_elf_v2p) (bin, r->offset);
 }
@@ -2961,7 +2962,6 @@ RBinElfReloc* Elf_(r_bin_elf_get_relocs) (ELFOBJ *bin) {
 	if (!bin) {
 		return NULL;
 	}
-
 	if (!bin->g_relocs) {
 		bin->g_relocs = populate_relocs_record (bin);
 	}
