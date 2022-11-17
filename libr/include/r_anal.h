@@ -726,10 +726,16 @@ enum {
 	R_ANAL_ESIL_DFG_TAG_PTR = 4,
 	R_ANAL_ESIL_DFG_TAG_RESULT = 8,
 	R_ANAL_ESIL_DFG_TAG_GENERATIVE = 16,
+	R_ANAL_ESIL_DFG_TAG_REG = 32,
+	R_ANAL_ESIL_DFG_TAG_MEM = 64,
+	R_ANAL_ESIL_DFG_TAG_MERGE = 128,
 };	//RAnalEsilDFGTagType
 
 typedef struct r_anal_esil_dfg_t {
 	ut32 idx;
+	int fd;
+	RIOBind iob;
+	RReg *reg;
 	Sdb *regs;		//resolves regnames to intervals
 	RRBTree *vars;		//vars represented in regs and mem
 	RQueue *todo;		//todo-queue allocated in this struct for perf
@@ -1616,7 +1622,7 @@ R_API void r_anal_class_list_vtables(RAnal *anal, const char *class_name);
 R_API void r_anal_class_list_vtable_offset_functions(RAnal *anal, const char *class_name, ut64 offset);
 R_API RGraph/*<RGraphNodeInfo>*/ *r_anal_class_get_inheritance_graph(RAnal *anal);
 
-R_IPI RAnalEsilCFG *r_anal_esil_cfg_new(void);
+R_API RAnalEsilCFG *r_anal_esil_cfg_new(void);
 R_API RAnalEsilCFG *r_anal_esil_cfg_expr(RAnalEsilCFG *cfg, RAnal *anal, const ut64 off, char *expr);
 R_API RAnalEsilCFG *r_anal_esil_cfg_op(RAnalEsilCFG *cfg, RAnal *anal, RAnalOp *op);
 R_API void r_anal_esil_cfg_merge_blocks(RAnalEsilCFG *cfg);
