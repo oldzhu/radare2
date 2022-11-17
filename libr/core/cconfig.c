@@ -179,14 +179,8 @@ bool rasm2_list(RCore *core, const char *arch, int fmt) {
 			}
 			bits = r_strbuf_drain (sb);
 			feat = "__";
-			if (h->assemble && h->disassemble) {
-				feat = "ad";
-			}
-			if (h->assemble && !h->disassemble) {
+			if (h->assemble) {
 				feat = "a_";
-			}
-			if (!h->assemble && h->disassemble) {
-				feat = "_d";
 			}
 			feat2 = has_esil (core, h->name);
 			if (fmt == 'q') {
@@ -279,19 +273,7 @@ bool ranal2_list(RCore *core, const char *arch, int fmt) {
 			}
 			bits = r_strbuf_drain (sb);
 			feat = "__";
-#if 0
-			if (h->assemble && h->disassemble) {
-				feat = "ad";
-			}
-			if (h->assemble && !h->disassemble) {
-				feat = "a_";
-			}
-			if (!h->assemble && h->disassemble) {
-				feat = "_d";
-			}
-#else
 			feat = "_d";
-#endif
 			feat2 = has_esil (core, h->name);
 			if (fmt == 'q') {
 				r_cons_println (h->name);
@@ -2174,7 +2156,7 @@ static bool cb_iopcachewrite(void *user, void *data) {
 	return true;
 }
 
-R_API bool r_core_esil_cmd(RAnalEsil *esil, const char *cmd, ut64 a1, ut64 a2) {
+R_API bool r_core_esil_cmd(REsil *esil, const char *cmd, ut64 a1, ut64 a2) {
 	if (cmd && *cmd) {
 		RCore *core = esil->anal->user;
 		r_core_cmdf (core, "%s %"PFMT64d" %" PFMT64d, cmd, a1, a2);
