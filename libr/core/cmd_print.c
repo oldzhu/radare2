@@ -83,6 +83,7 @@ static const char *help_msg_pc[] = {
 	"pcg", "", "Golang",
 	"pcS", "", "shellscript that reconstructs the bin",
 	"pcs", "", "string",
+	"pcn", "", "space separated list of numbers",
 	"pcv", "", "JaVa",
 	"pcV", "", "V (vlang.io)",
 	"pcw", "", "C words (4 byte)",
@@ -1190,7 +1191,7 @@ static int cmd_pdu(RCore *core, const char *input) {
 			break;
 		}
 
-		ret = r_core_print_disasm (core, addr, buf, len, 0, opcode, "call", false,
+		ret = r_core_print_disasm (core, addr, buf, len, 0, pdu_opcode, "call", false,
 				input[1] == 'j', NULL, NULL);
 		break;
 	/*case 'e': // "pdue"
@@ -1207,7 +1208,7 @@ static int cmd_pdu(RCore *core, const char *input) {
 			r_core_cmd_help_match (core, help_msg_pdu, "pdui", true);
 			break;
 		}
-		ret = r_core_print_disasm (core, addr, buf, len, 0, instruction, arg, false,
+		ret = r_core_print_disasm (core, addr, buf, len, 0, pdu_instruction, arg, false,
 				input[1] == 'j', NULL, NULL);
 		break;
 	case 'o': // "pduo"
@@ -1215,7 +1216,7 @@ static int cmd_pdu(RCore *core, const char *input) {
 			r_core_cmd_help_match (core, help_msg_pdu, "pduo", true);
 			break;
 		}
-		ret = r_core_print_disasm (core, addr, buf, len, 0, opcode, arg, false,
+		ret = r_core_print_disasm (core, addr, buf, len, 0, pdu_opcode, arg, false,
 				input[1] == 'j', NULL, NULL);
 		break;
 	case 's': // "pdus"
@@ -1223,7 +1224,7 @@ static int cmd_pdu(RCore *core, const char *input) {
 			r_core_cmd_help_match (core, help_msg_pdu, "pdus", true);
 			break;
 		}
-		ret = r_core_print_disasm (core, addr, buf, len, 0, instruction, "syscall", false,
+		ret = r_core_print_disasm (core, addr, buf, len, 0, pdu_instruction, "syscall", false,
 				input[1] == 'j', NULL, NULL);
 		break;
 	case '?': // "pdu?"
@@ -7024,25 +7025,25 @@ static int cmd_print(void *data, const char *input) {
 			cmd_pCd (core, "");
 			break;
 		case ' ':
-		case 'd':
+		case 'd': // "pCd"
 			cmd_pCd (core, input + 2);
 			break;
-		case 'D':
+		case 'D': // "pCD"
 			cmd_pCD (core, input + 2);
 			break;
-		case 'a':
+		case 'a': // "pCa"
 			cmd_pCx (core, input + 2, "pxa");
 			break;
-		case 'A':
+		case 'A': // pCA"
 			cmd_pCx (core, input + 2, "pxA");
 			break;
-		case 'x':
+		case 'x': // "pCx"
 			cmd_pCx (core, input + 2, "px");
 			break;
-		case 'w':
+		case 'w': // "pCw"
 			cmd_pCx (core, input + 2, "pxw");
 			break;
-		case 'c':
+		case 'c': // "pCc"
 			cmd_pCx (core, input + 2, "pc");
 			break;
 		default:

@@ -2993,7 +2993,32 @@ static bool cbcore(void *user, int type, const char *origin, const char *msg) {
 	return false;
 }
 
+#if __UNIX__
+static R_TH_LOCAL RCore *Gcore = NULL;
+
+static void cmdusr1(int p) {
+	const char *cmd = r_config_get (Gcore->config, "cmd.usr1");
+	if (R_STR_ISNOTEMPTY (cmd)) {
+		r_core_cmd0 (Gcore, cmd);
+		r_cons_flush ();
+	}
+}
+
+static void cmdusr2(int p) {
+	const char *cmd = r_config_get (Gcore->config, "cmd.usr2");
+	if (R_STR_ISNOTEMPTY (cmd)) {
+		r_core_cmd0 (Gcore, cmd);
+		r_cons_flush ();
+	}
+}
+#endif
+
 R_API bool r_core_init(RCore *core) {
+#if __UNIX__
+	Gcore = core;
+	r_sys_signal (SIGUSR1, cmdusr1);
+	r_sys_signal (SIGUSR2, cmdusr2);
+#endif
 	r_w32_init ();
 	core->blocksize = R_CORE_BLOCKSIZE;
 	core->block = (ut8 *)calloc (R_CORE_BLOCKSIZE + 1, 1);
@@ -4146,7 +4171,8 @@ R_API RBuffer *r_core_syscall(RCore *core, const char *name, const char *args) {
 }
 
 R_API RCoreAutocomplete *r_core_autocomplete_add(RCoreAutocomplete *parent, const char* cmd, int type, bool lock) {
-	if (!parent || !cmd || type < 0 || type >= R_CORE_AUTOCMPLT_END) {
+	r_return_val_if_fail (parent && cmd, NULL);
+	if (type < 0 || type >= R_CORE_AUTOCMPLT_END) {
 		return NULL;
 	}
 	RCoreAutocomplete *autocmpl = R_NEW0 (RCoreAutocomplete);
