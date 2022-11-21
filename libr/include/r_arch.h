@@ -4,6 +4,7 @@
 #define R2_ARCH_H
 
 #include <r_util.h>
+#include <r_bin.h>
 #include <r_anal/op.h>
 
 #ifdef __cplusplus
@@ -88,15 +89,13 @@ typedef struct r_arch_decoder_t {
 
 typedef struct r_arch_t {
 	RList *plugins;	       // all plugins
+	RBinBind binb; // required for java, dalvik, wasm and pyc plugin... pending refactor
 	struct r_arch_session_t *session;
-	// HtPP *ht_plugins; faster resolution by name
-#if 1
-	struct r_arch_instance_t *cur; // this var must deprecate current!
+#if 0
 	RArchDecoder *current; // currently used decoder
-	HtPP *decoders;        // as decoders instantiated plugins
+#endif
 	RArchConfig *cfg;      // global / default config
 	bool autoselect;
-#endif
 } RArch;
 
 typedef struct r_arch_session_t {
@@ -116,6 +115,7 @@ typedef char *(*RArchPluginRegistersCallback)(RArchSession *ai);
 typedef char *(*RArchPluginMnemonicsCallback)(RArchSession *s, int id, bool json);
 typedef bool (*RArchPluginDecodeCallback)(RArchSession *s, struct r_anal_op_t *op, RArchDecodeMask mask);
 typedef bool (*RArchPluginEncodeCallback)(RArchSession *s, struct r_anal_op_t *op, RArchEncodeMask mask);
+typedef bool (*RArchPluginPluginCallback)(RArchSession *s, struct r_anal_op_t *op, RArchEncodeMask mask);
 typedef bool (*RArchPluginInitCallback)(RArchSession *s);
 typedef bool (*RArchPluginFiniCallback)(RArchSession *s);
 
@@ -128,14 +128,15 @@ typedef struct r_arch_plugin_t {
 	char *version;
 	char *cpus;
 	ut32 endian;
-	ut32 bits;
-	ut32 addr_bits;
+	RSysBits bits;
+	RSysBits addr_bits;
 	RArchPluginInitCallback init;
 	RArchPluginInitCallback fini;
 	RArchPluginInfoCallback info;
 	RArchPluginRegistersCallback regs;
 	RArchPluginEncodeCallback encode;
 	RArchPluginDecodeCallback decode;
+	RArchPluginEncodeCallback patch;
 	RArchPluginMnemonicsCallback mnemonics;
 //TODO: reenable this later
 //	bool (*esil_init)(REsil *esil);
@@ -159,6 +160,7 @@ R_API bool r_arch_encode(RArch *a, RAnalOp *op, RArchEncodeMask mask);
 R_API RArchSession *r_arch_session(RArch *arch, RArchConfig *cfg, RArchPlugin *ap);
 R_API bool r_arch_session_decode(RArchSession *ai, RAnalOp *op, RArchDecodeMask mask);
 R_API bool r_arch_session_encode(RArchSession *ai, RAnalOp *op, RArchEncodeMask mask);
+R_API bool r_arch_session_patch(RArchSession *ai, RAnalOp *op, RArchEncodeMask mask);
 R_API int r_arch_session_info(RArchSession *ai, int q);
 
 // arch.c
