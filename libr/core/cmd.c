@@ -4333,7 +4333,29 @@ repeat_arroba:
 				}
 				break;
 			case 'r': // "@r:" // regname
-				if (ptr[1] == ':') {
+				if (ptr[1] == '{') { // @r{PC}
+					ut64 regval;
+					char *mander = strdup (ptr + 2);
+					char *brace = strchr (mander, '}');
+					if (brace) {
+						*brace = 0;
+					}
+					char *sep = findSeparator (mander);
+					if (sep) {
+						char ch = *sep;
+						*sep = 0;
+						regval = r_debug_reg_get (core->dbg, mander);
+						*sep = ch;
+						char *numexpr = r_str_newf ("0x%"PFMT64x"%s", regval, sep);
+						regval = r_num_math (core->num, numexpr);
+						free (numexpr);
+					} else {
+						regval = r_debug_reg_get (core->dbg, ptr + 2);
+					}
+					r_core_seek (core, regval, true);
+					cmd_tmpseek = core->tmpseek = true;
+					free (mander);
+				} else if (ptr[1] == ':') { // @r:PC
 					ut64 regval;
 					char *mander = strdup (ptr + 2);
 					char *sep = findSeparator (mander);
@@ -5891,14 +5913,15 @@ R_API char *r_core_cmd_strf(RCore *core, const char *fmt, ...) {
 
 /* return: pointer to a buffer with the output of the command */
 R_API char *r_core_cmd_str(RCore *core, const char *cmd) {
-	if (*cmd != '"' && strchr (cmd, '>')) {
+	r_return_val_if_fail (core, NULL);
+	if (cmd && *cmd != '"' && strchr (cmd, '>')) {
 		r_core_cmd0 (core, cmd);
 		return strdup ("");
 	}
 	r_cons_push ();
 	core->cons->context->noflush = true;
 	core->cons->context->cmd_str_depth++;
-	if (r_core_cmd (core, cmd, 0) == -1) {
+	if (cmd && r_core_cmd (core, cmd, 0) == -1) {
 		//eprintf ("Invalid command: %s\n", cmd);
 		if (--core->cons->context->cmd_str_depth == 0) {
 			core->cons->context->noflush = false;
