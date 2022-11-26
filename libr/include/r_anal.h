@@ -473,6 +473,7 @@ typedef struct r_anal_t {
 	int cs_obits;
 	int cs_omode;
 	size_t cs_handle;
+	int uses; // 0 = nothing, 1 = anal plugin, 2 = arch plugin
 	/* end private */
 	R_DIRTY_VAR;
 } RAnal;
@@ -1678,7 +1679,6 @@ extern RAnalPlugin r_anal_plugin_pdp11_gnu;
 extern RAnalPlugin r_anal_plugin_ppc_cs;
 extern RAnalPlugin r_anal_plugin_ppc_gnu;
 extern RAnalPlugin r_anal_plugin_propeller;
-extern RAnalPlugin r_anal_plugin_riscv;
 extern RAnalPlugin r_anal_plugin_riscv_cs;
 extern RAnalPlugin r_anal_plugin_sh;
 extern RAnalPlugin r_anal_plugin_snes;
