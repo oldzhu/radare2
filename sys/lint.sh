@@ -2,9 +2,19 @@
 
 cd "$(dirname $0)"/..
 
+# NAME=no preincrement/predecrement in 3rd part of for statement
+(git grep -n -e '++[a-z][a-z]*[);]' libr | grep -v arch) && exit 1
+
+# Bad: static void foo() {
+# Good: static void foo(void) {
+# NAME=use void on functions without parameters
+(git grep -e ^R_API -e ^static libr | grep -e '[a-z]() {' -e '[a-z]();') && exit 1
+
+(git grep '|Usage' libr) && exit 1
 # (git grep -e '_[a-z][a-z](' libr | grep -v '{'| grep c:) && exit 1
 # TODO  : also check for '{0x'
 (git grep '\t{"' libr | grep -v strcmp | grep -v format | grep -v '{",' | grep -v esil | grep c:) && exit 1
+(git grep -e "\telse" libr | grep c:) && exit 1
 (git grep '"},' libr | grep -v strcmp | grep -v format | grep -v '"},' | grep -v '"}{' | grep -v esil | grep -v anal/p | grep c:) && exit 1
 (git grep '^\ \ \ ' libr | grep -v '/arch/' | grep -v dotnet | grep -v mangl | grep c:) && exit 1
 (git grep 'TODO' libr | grep R_LOG_INFO) && exit 1
@@ -72,6 +82,9 @@ cd "$(dirname $0)"/..
  find *| grep h$|grep -v r_version | grep -v userconf| grep -v heap|grep -v sflib | sort -u > /tmp/.b
  diff -ru /tmp/.a /tmp/.b
 ) || exit 1
+
+# TODO: detect bool foo = RConfig.get_i ("boolvar"); -> must use get_b()
+#(git grep 'get_i (' | grep bool)
 
 # pending cleanups
 # ( git grep 'desc = "[A-Z]' ) && exit 1

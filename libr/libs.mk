@@ -2,11 +2,11 @@
 
 ifeq ($(LIBS0),)
 LIBS0=util
-LIBS1=socket reg cons magic bp config
-LIBS2=syscall lang crypto flag arch esil
-LIBS3=parse io search
-LIBS4=asm fs
-LIBS5=anal egg bin
+LIBS1=socket reg cons magic bp config crypto
+LIBS2=syscall lang search flag arch esil
+LIBS3=parse io
+LIBS4=asm fs anal
+LIBS5=egg bin
 LIBS6=debug
 LIBS7=core
 LIBS8=main

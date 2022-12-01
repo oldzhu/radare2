@@ -452,7 +452,7 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 			}
 		} else {
 			int set;
-			const char *ws = r_config_get_i (core->config, "scr.utf8")? "·": " ";
+			const char *ws = r_config_get_b (core->config, "scr.utf8")? "·": " ";
 			for (set = 1; set >= 0; set--) {
 				r_cons_printf ("\nbit: ");
 				for (i = 0; i < 8; i++) {
@@ -1578,12 +1578,14 @@ R_API int r_core_visual_anal_classes(RCore *core) {
 			}
 			break;
 		case 'j':
-			if (++index >= list->length) {
+			if (index + 1 >= list->length) {
 				index = 0;
+			} else {
+				index++;
 			}
 			break;
 		case 'k':
-			if (--index < 0) {
+			if (index-- < 1) {
 				index = list->length - 1;
 			}
 			break;
@@ -2975,7 +2977,7 @@ static void variable_rename(RCore *core, ut64 addr, int vindex, const char *name
 			r_core_seek (core, a_tmp, false);
 			break;
 		}
-		++i;
+		i++;
 	}
 	r_list_free (list);
 }
@@ -3124,7 +3126,7 @@ static ut64 var_variables_show(RCore* core, int idx, int *vindex, int show, int 
 				break;
 			}
 		}
-		++i;
+		i++;
 	}
 	r_list_free (list);
 	return addr;

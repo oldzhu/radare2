@@ -7093,7 +7093,9 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 			}
 			const char *esilstr = r_strbuf_get (&aop->esil);
 			if (R_STR_ISNOTEMPTY (esilstr)) {
-				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr);
+				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr,
+					r_config_get_b (core->config, "esil.dfg.mapinfo"),
+					r_config_get_b (core->config, "esil.dfg.maps"));
 				if (!dfg) {
 					r_anal_op_free (aop);
 					return;
@@ -7116,7 +7118,9 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 				r_strbuf_append (sb, argv[i]);
 			}
 			char *esilexpr = r_strbuf_drain (sb);
-			RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilexpr);
+			RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilexpr,
+					r_config_get_b (core->config, "esil.dfg.mapinfo"),
+					r_config_get_b (core->config, "esil.dfg.maps"));
 			if (dfg) {
 				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
 				r_anal_esil_dfg_free (dfg);
@@ -7149,7 +7153,9 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 			}
 			const char *esilstr = r_strbuf_get (&aop->esil);
 			if (R_STR_ISNOTEMPTY (esilstr)) {
-				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr);
+				RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, esilstr,
+					r_config_get_b (core->config, "esil.dfg.mapinfo"),
+					r_config_get_b (core->config, "esil.dfg.maps"));
 				if (!dfg) {
 					r_anal_op_free (aop);
 					return;
@@ -7159,7 +7165,9 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 			}
 			r_anal_op_free (aop);
 		} else {
-			RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, argv[1]);
+			RAnalEsilDFG *dfg = r_anal_esil_dfg_expr (core->anal, NULL, argv[1],
+				r_config_get_b (core->config, "esil.dfg.mapinfo"),
+				r_config_get_b (core->config, "esil.dfg.maps"));
 			r_return_if_fail (dfg);
 			agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
 			r_anal_esil_dfg_free (dfg);
@@ -7181,7 +7189,9 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 		break;
 	case 'f':	// "aegf"
 	{
-		RStrBuf *filtered = r_anal_esil_dfg_filter_expr (core->anal, argv[1], argv[2]);
+		RStrBuf *filtered = r_anal_esil_dfg_filter_expr (core->anal, argv[1], argv[2],
+			r_config_get_b (core->config, "esil.dfg.mapinfo"),
+			r_config_get_b (core->config, "esil.dfg.maps"));
 		if (filtered) {
 			r_cons_printf ("%s\n", r_strbuf_get (filtered));
 			r_strbuf_free (filtered);
@@ -8109,7 +8119,9 @@ static void cmd_anal_opcode(RCore *core, const char *input) {
 			if (ret > 0) {
 				const char *arg = input + 2;
 				const char *expr = R_STRBUF_SAFEGET (&aop.esil);
-				RStrBuf *b = r_anal_esil_dfg_filter_expr (core->anal, expr, arg);
+				RStrBuf *b = r_anal_esil_dfg_filter_expr (core->anal, expr, arg,
+					r_config_get_b (core->config, "esil.dfg.mapinfo"),
+					r_config_get_b (core->config, "esil.dfg.maps"));
 				if (b) {
 					char *s = r_strbuf_drain (b);
 					r_cons_printf ("%s\n", s);
@@ -11241,9 +11253,17 @@ static void cmd_anal_aad(RCore *core, const char *input) {
 }
 
 static bool archIsThumbable(RCore *core) {
-	RAsm *as = core ? core->rasm : NULL;
-	if (as && as->cur && as->config->bits <= 32 && as->cur->name) {
-		return strstr (as->cur->name, "arm");
+	RArchConfig *ac = R_UNWRAP4 (core, anal, arch, cfg);
+	if (ac && ac->bits <= 32) {
+		// XXX for some reason this is null
+		if (!strcmp (ac->arch, "arm")) {
+			return true;
+		}
+		if (core->anal->cur) {
+			if (!strcmp (core->anal->cur->arch, "arm")) {
+				return true;
+			}
+		}
 	}
 	return false;
 }
@@ -11251,7 +11271,7 @@ static bool archIsThumbable(RCore *core) {
 static void _CbInRangeAav(RCore *core, ut64 from, ut64 to, int vsize, void *user) {
 	bool asterisk = user;
 	int arch_align = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
-	bool vinfun = r_config_get_i (core->config, "anal.vinfun");
+	bool vinfun = r_config_get_b (core->config, "anal.vinfun");
 	int searchAlign = r_config_get_i (core->config, "search.align");
 	int align = (searchAlign > 0)? searchAlign: arch_align;
 	if (align > 1) {

@@ -55,6 +55,11 @@ R_API REgg *r_egg_new(void) {
 	if (!egg->rasm) {
 		goto beach;
 	}
+	egg->anal = r_anal_new ();
+	if (!egg->anal) {
+		goto beach;
+	}
+	r_anal_bind (egg->anal, &egg->rasm->analb);
 	egg->bits = 0;
 	egg->endian = 0;
 	egg->db = sdb_new (NULL, NULL, 0);
@@ -105,6 +110,7 @@ R_API void r_egg_free(REgg *egg) {
 		r_buf_free (egg->bin);
 		r_list_free (egg->list);
 		r_asm_free (egg->rasm);
+		r_anal_free (egg->anal);
 		r_syscall_free (egg->syscall);
 		sdb_free (egg->db);
 		r_list_free (egg->plugins);
@@ -127,6 +133,7 @@ R_API void r_egg_reset(REgg *egg) {
 	r_list_purge (egg->patches);
 }
 
+// TODO: use RArchConfig instead
 R_API bool r_egg_setup(REgg *egg, const char *arch, int bits, int endian, const char *os) {
 	r_return_val_if_fail (egg && arch, false);
 	const char *asmcpu = NULL; // TODO
@@ -335,6 +342,7 @@ R_API bool r_egg_assemble_asm(REgg *egg, char **asm_list) {
 	}
 	if (asm_name) {
 		r_asm_use (egg->rasm, asm_name);
+		r_asm_use_assembler (egg->rasm, asm_name);
 		r_asm_set_bits (egg->rasm, egg->bits);
 		r_asm_set_big_endian (egg->rasm, egg->endian);
 		r_asm_set_syntax (egg->rasm, R_ARCH_SYNTAX_INTEL);
