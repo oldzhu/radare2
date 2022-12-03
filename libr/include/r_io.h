@@ -121,7 +121,6 @@ typedef struct r_io_t {
 	RIDStorage *files;	// RIODescs accessible by their fd
 	RIDStorage *maps;	// RIOMaps accessible by their id
 	RIDStorage *banks;	// RIOBanks accessible by their id
-	RCache *buffer;
 	RPVector cache;
 	RSkyline cache_skyline;
 	ut8 *write_mask;
@@ -519,11 +518,6 @@ R_API void r_io_desc_cache_fini(RIODesc *desc);
 R_API void r_io_desc_cache_fini_all(RIO *io);
 R_API RList *r_io_desc_cache_list(RIODesc *desc);
 R_API int r_io_desc_extend(RIODesc *desc, ut64 size);
-
-/* io/buffer.c */
-R_API int r_io_buffer_read(RIO* io, ut64 addr, ut8* buf, int len);
-R_API int r_io_buffer_load(RIO* io, ut64 addr, int len);
-R_API void r_io_buffer_close(RIO* io);
 
 /* io/fd.c */
 R_API int r_io_fd_open(RIO *io, const char *uri, int flags, int mode);

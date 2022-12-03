@@ -124,13 +124,6 @@ endif
 # else
 if no_user_plugins
 
-asm_plugins += [
-  'arm_as',
-  'ppc_as',
-  'x86_as',
-  'x86_nasm',
-]
-
 # TODO: add the pyc plugin for meson builds too
 anal_plugins += [
   '6502',
