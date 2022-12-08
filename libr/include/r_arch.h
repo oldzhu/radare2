@@ -81,20 +81,11 @@ typedef enum {
 #define R_ANAL_OP_MASK_DISASM = 16, // It fills RAnalop->mnemonic // should be RAnalOp->disasm // only from r_core_anal_op()
 #define R_ANAL_OP_MASK_ALL   = 1 | 2 | 4 | 8 | 16
 
-typedef struct r_arch_decoder_t {
-	struct r_arch_plugin_t *p;
-	void *user;
-	ut32 refctr;
-} RArchDecoder;
-
 typedef struct r_arch_t {
 	RList *plugins;	       // all plugins
 	RBinBind binb; // required for java, dalvik, wasm and pyc plugin... pending refactor
 	RNum *num; // XXX maybe not required
 	struct r_arch_session_t *session;
-#if 0
-	RArchDecoder *current; // currently used decoder
-#endif
 	RArchConfig *cfg;      // global / default config
 } RArch;
 
@@ -109,25 +100,28 @@ typedef struct r_arch_session_t {
 
 typedef ut32 RArchDecodeMask;
 typedef ut32 RArchEncodeMask; // syntax ?
+typedef ut32 RArchModifyMask; // syntax ?
 
 typedef int (*RArchPluginInfoCallback)(RArchSession *cfg, ut32 query);
 typedef char *(*RArchPluginRegistersCallback)(RArchSession *ai);
 typedef char *(*RArchPluginMnemonicsCallback)(RArchSession *s, int id, bool json);
 typedef bool (*RArchPluginDecodeCallback)(RArchSession *s, struct r_anal_op_t *op, RArchDecodeMask mask);
 typedef bool (*RArchPluginEncodeCallback)(RArchSession *s, struct r_anal_op_t *op, RArchEncodeMask mask);
-typedef bool (*RArchPluginPluginCallback)(RArchSession *s, struct r_anal_op_t *op, RArchEncodeMask mask);
+typedef bool (*RArchPluginModifyCallback)(RArchSession *s, struct r_anal_op_t *op, RArchModifyMask mask);
 typedef bool (*RArchPluginInitCallback)(RArchSession *s);
 typedef bool (*RArchPluginFiniCallback)(RArchSession *s);
 
 // TODO: use `const char *const` instead of `char*`
 typedef struct r_arch_plugin_t {
-	// all const
+	// RPluginMeta meta; //  = { .name = ... }
 	char *name;
 	char *desc;
-	char *license;
-	char *arch;
 	char *author;
 	char *version;
+	char *license;
+
+	// all const
+	char *arch;
 	char *cpus;
 	ut32 endian;
 	RSysBits bits;
@@ -138,9 +132,10 @@ typedef struct r_arch_plugin_t {
 	RArchPluginRegistersCallback regs;
 	RArchPluginEncodeCallback encode;
 	RArchPluginDecodeCallback decode;
-	RArchPluginEncodeCallback patch;
+	RArchPluginModifyCallback patch;
 	RArchPluginMnemonicsCallback mnemonics;
-//TODO: reenable this later
+//TODO: reenable this later? maybe it should be called reset() or setenv().. but esilinit/fini
+       // 	seems to specific to esil and those functions may want to do moreo things like io stuff
 //	bool (*esil_init)(REsil *esil);
 //	void (*esil_fini)(REsil *esil);
 } RArchPlugin;
@@ -150,7 +145,6 @@ typedef struct r_arch_plugin_t {
 R_API bool r_arch_load_decoder(RArch *arch, const char *dname);
 R_API bool r_arch_use_decoder(RArch *arch, const char *dname);
 R_API bool r_arch_unload_decoder(RArch *arch, const char *dname);
-
 
 // deprecate
 R_API int r_arch_info(RArch *arch, int query);
@@ -162,7 +156,7 @@ R_API bool r_arch_encode(RArch *a, RAnalOp *op, RArchEncodeMask mask);
 R_API RArchSession *r_arch_session(RArch *arch, RArchConfig *cfg, RArchPlugin *ap);
 R_API bool r_arch_session_decode(RArchSession *ai, RAnalOp *op, RArchDecodeMask mask);
 R_API bool r_arch_session_encode(RArchSession *ai, RAnalOp *op, RArchEncodeMask mask);
-R_API bool r_arch_session_patch(RArchSession *ai, RAnalOp *op, RArchEncodeMask mask);
+R_API bool r_arch_session_patch(RArchSession *ai, RAnalOp *op, RArchModifyMask mask);
 R_API int r_arch_session_info(RArchSession *ai, int q);
 
 // arch.c
@@ -261,6 +255,9 @@ extern RArchPlugin r_arch_plugin_any_vasm;
 extern RArchPlugin r_arch_plugin_arm;
 extern RArchPlugin r_arch_plugin_x86_nz;
 extern RArchPlugin r_arch_plugin_x86_nasm;
+extern RArchPlugin r_arch_plugin_snes;
+extern RArchPlugin r_arch_plugin_6502;
+extern RArchPlugin r_arch_plugin_xap;
 
 #ifdef __cplusplus
 }

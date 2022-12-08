@@ -40,7 +40,7 @@ ifeq ($(USE_CS4),1)
 CS_TIP=1d230532840a37ac032c6ab80128238fc930c6c1
 CS_BRA=v4
 else
-CS_TIP=087889dddb545923613d8416af70e35eecfef70c
+CS_TIP=12e8258f60647a997ffa72702a9e5b37bd622044
 CS_BRA=next
 endif
 ifeq ($(CS_COMMIT_ARCHIVE),1)
@@ -147,7 +147,7 @@ ifeq ($(EXT_EXE),.wasm)
 		CFLAGS_SHARED="${CFLAGS_SHARED} -DHAVE_MMAN=0" \
 		CC="${CC}" AR="${AR}" ARCH=undefined CFLAGS='${CFLAGS} -DHAVE_MMAN=0' LDFLAGS='${LDFLAGS}' libsdb.$(EXT_AR)
 else
-	$(MAKE) -C sdb/src ARCH=xxx EXT_AR=.$(EXT_AR) RANLIB="${RANLIB}" CPPFLAGS=-I$(SHLR)/sdb/include \
+	$(MAKE) -C sdb/src ARCH=xxx EXT_AR=.$(EXT_AR) RANLIB="${RANLIB}" CPPFLAGS="-I$(SHLR)/sdb/include -DHAVE_SYSTEM=0" \
 		CFLAGS_SHARED="${CFLAGS_SHARED}" \
 		CC="${CC}" AR="${AR}" ARCH=undefined LDFLAGS='${LDFLAGS}' libsdb.$(EXT_AR)
 endif

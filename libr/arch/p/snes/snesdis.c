@@ -5,7 +5,7 @@
 #include <r_anal.h>
 #include <r_lib.h>
 #include <string.h>
-#include "snes_op_table.h"
+#include "optable.h"
 
 static int snesDisass(int M_flag, int X_flag, ut64 pc, RAnalOp *op, const ut8 *buf, int len) {
 	snes_op_t *s_op = &snes_op[buf[0]];
@@ -13,7 +13,7 @@ static int snesDisass(int M_flag, int X_flag, ut64 pc, RAnalOp *op, const ut8 *b
 	if (len < op_len) {
 		return 0;
 	}
-	switch (s_op->len) {
+	switch (s_op->flags) {
 	case SNES_OP_8BIT:
 		op->mnemonic = r_str_newf ("%s", s_op->name);
 		break;
