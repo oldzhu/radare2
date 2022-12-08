@@ -798,7 +798,7 @@ static void cmd_prc_zoom(RCore *core, const char *input) {
 	}
 
 	core->print->zoom->mode = (input && *input)? input[1]: 'e';
-	r_print_zoom_buf (core->print, core, printzoomcallback, from, to, len, len);
+	r_print_zoom_buf (core->print, printzoomcallback, core, from, to, len, len);
 	block = core->print->zoom->buf;
 
 	for (i = 0; i < len; i += cols) {
@@ -2596,8 +2596,8 @@ static bool count_pzf(RFlagItem *fi, void *u) {
 	return true;
 }
 
-static int printzoomcallback(void *user, int mode, ut64 addr, ut8 *bufz, ut64 size) {
-	RCore *core = (RCore *) user;
+static int printzoomcallback(void *cbarg, int mode, ut64 addr, ut8 *bufz, ut64 size) {
+	RCore *core = (RCore *) cbarg;
 	int j, ret = 0;
 	struct count_pz_t u;
 
@@ -4976,12 +4976,15 @@ static void print_json_string(RCore *core, const char* block, int len, const cha
 	const char* section_name = r_core_get_section_name (core, core->offset);
 	if (section_name && strlen (section_name) < 1) {
 		section_name = "unknown";
-	} else {
+	} else if (section_name) {
 		// cleaning useless spaces in section name in json data.
 		section_name = r_str_trim_head_ro (section_name);
 		char* p;
 		for (p = (char*) section_name; *p && *p != ' '; p++) {}
 		*p = '\0';
+	}
+	if (!section_name) {
+		section_name = "unknown";
 	}
 	if (!type) {
 		switch (get_string_type (core->block, len)) {
@@ -6510,7 +6513,7 @@ static int cmd_print(void *data, const char *input) {
 		case 'l': // "pdl"
 			processed_cmd = true;
 			{
-				RAsmOp asmop;
+				RAnalOp asmop;
 				int j, ret;
 				if (!l) {
 					l = len;
@@ -6994,7 +6997,7 @@ static int cmd_print(void *data, const char *input) {
 			if (input[1] == 'A') { // "pcA"
 				r_cons_printf ("sub_0x%08"PFMT64x ":\n", core->offset);
 				for (i = 0; i < len; i++) {
-					RAsmOp asmop = {
+					RAnalOp asmop = {
 						0
 					};
 					(void) r_asm_disassemble (core->rasm, &asmop, buf + i, len - i);
@@ -7007,7 +7010,7 @@ static int cmd_print(void *data, const char *input) {
 						r_cons_printf ("%s0x%02x", j? ", ": "", buf[i]);
 						i++;
 					}
-					r_cons_printf ("  // %s\n", r_strbuf_get (&asmop.buf_asm));
+					r_cons_printf ("  // %s\n", asmop.mnemonic);
 					i--;
 					r_asm_op_fini (&asmop);
 				}
@@ -8118,7 +8121,7 @@ static int cmd_print(void *data, const char *input) {
 				}
 			}
 			if (do_zoom && l > 0) {
-				r_print_zoom (core->print, core, printzoomcallback,
+				r_print_zoom (core->print, printzoomcallback, core,
 					from, to, l, (int) maxsize);
 			}
 			if (oldmode) {

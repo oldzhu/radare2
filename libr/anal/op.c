@@ -4,6 +4,16 @@
 #include <r_util.h>
 #include <r_list.h>
 
+R_API ut64 r_anal_block_ninstr(RAnalBlock *block, int pos) {
+	r_return_val_if_fail (block, UT64_MAX);
+	if (pos < 1) {
+		return block->addr;
+	}
+	if (pos > block->ninstr) {
+		return UT64_MAX;
+	}
+	return block->addr + block->op_pos[pos - 1];
+}
 
 static int defaultCycles(RAnalOp *op) {
 	switch (op->type) {
@@ -96,7 +106,16 @@ R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 	if (pcalign && (addr % pcalign)) {
 		op->type = R_ANAL_OP_TYPE_ILL;
 		op->addr = addr;
-		op->size = 1;
+		op->size = pcalign - (addr % pcalign);
+		r_anal_op_set_mnemonic (op, addr, "unaligned");
+		if (op->size > len) {
+			ut8 *fakedata = malloc (op->size);
+			memcpy (fakedata, data, len);
+			r_anal_op_set_bytes (op, addr, fakedata, op->size);
+			free (fakedata);
+		} else {
+			r_anal_op_set_bytes (op, addr, data, op->size);
+		}
 		return -1;
 	}
 	int ret = R_MIN (2, len);

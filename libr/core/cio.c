@@ -145,17 +145,18 @@ R_API ut8* r_core_transform_op(RCore *core, const char *arg, char op) {
 		if (arg && !isnum) {  // parse arg for key
 			// r_hex_str2bin() is guaranteed to output maximum half the
 			// input size, or 1 byte if there is just a single nibble.
-			str = (char *)malloc ((strlen (arg) / 2) + 1);
+			str = (char *)malloc (((strlen (arg) + 2) / 2) + 1);
 			if (!str) {
 				goto beach;
 			}
-			len = r_hex_str2bin (arg, (ut8 *)str);
+			int xlen = r_hex_str2bin (arg, (ut8 *)str);
 			// Output is invalid if there was just a single nibble,
 			// but in that case, len is negative (-1).
-			if (len <= 0) {
+			if (xlen <= 0) {
 				R_LOG_ERROR ("Invalid hexpair string");
 				goto beach;
 			}
+			len = xlen;
 		} else {  // use clipboard as key
 			const ut8 *tmp = r_buf_data (core->yank_buf, &len);
 			str = r_mem_dup (tmp, len);

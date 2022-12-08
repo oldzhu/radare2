@@ -55,6 +55,8 @@ static const char *help_msg_o_[] = {
 	"o-*","","close all opened files",
 	"o-!","","close all files except the current one",
 	"o-3","","close fd=3",
+	"o-$","","close last fd",
+	"o-.","","close current fd",
 	NULL
 };
 
@@ -104,12 +106,15 @@ static const char *help_msg_oba[] = {
 
 static const char *help_msg_ob[] = {
 	"Usage:", "ob", " # List open binary files backed by fd",
-	"ob", " [bfid]", "switch to open given objid",
+	"ob", " [name|bfid]", "switch to open given objid (or name)",
 	"ob", "", "list opened binary files and objid",
 	"ob*", "", "list opened binary files and objid (r2 commands)",
 	"ob", " *", "select all bins (use 'ob bfid' to pick one)",
+	"obm", "([id])", "merge current selected binfile into previous binfile (id-1)",
+	"obm-", "([id])", "same as obm, but deletes the current binfile",
 	"ob-", "*", "delete all binfiles",
 	"ob-", "[objid]", "delete binfile by binobjid",
+	"ob--", "", "delete the last binfile",
 	"ob.", " ([addr])", "show bfid at current address",
 	"ob=", "", "show ascii art table having the list of open files",
 	"obL", "", "same as iL or Li",
@@ -118,7 +123,6 @@ static const char *help_msg_ob[] = {
 	"oba", " [addr]", "open bin info from the given address",
 	"obf", " ([file])", "load bininfo for current file (useful for r2 -n)",
 	"obj", "", "list opened binary files and objid (JSON format)",
-	"obn", " [name]", "select binfile by name",
 	"obo", " [fd]", "switch to open binfile by fd number",
 	"obr", " [baddr]", "rebase current bin object",
 	NULL
@@ -341,7 +345,7 @@ static void cmd_open_bin(RCore *core, const char *input) {
 			r_list_free (files);
 		}
 		break;
-	case ' ': // "ob "
+	case ' ': // "ob " // select bf by id or name
 	{
 		ut32 id;
 		const char *tmp;
@@ -386,6 +390,41 @@ static void cmd_open_bin(RCore *core, const char *input) {
 			value = input[2] ? input + 2 : NULL;
 		}
 		break;
+	case 'm': // "obm"
+		{
+			int dstid = atoi (input + 2);
+			// TODO take argument with given id to merge to
+			RBinFile *src = r_bin_cur (core->bin);
+			int current = src? src->id: -1;
+			if (current > 0) {
+				if (dstid < 1) {
+					dstid = current - 1;
+				}
+				RBinFile *dst = r_bin_file_find_by_id (core->bin, dstid);
+				if (dst) {
+					r_bin_file_merge (dst, src);
+					R_LOG_DEBUG ("merge %d into %d", current, dstid);
+					if (strchr (input + 2, '-')) { // "obm-"
+						int curfd = -1;
+						if (core->io->desc) {
+							curfd = core->io->desc->fd;
+						}
+						r_core_cmd_callf (core, "op %d", dst->fd);
+						r_bin_file_set_cur_binfile (core->bin, dst);
+						r_bin_file_delete (core->bin, current);
+						if (curfd >= 0) {
+							r_io_fd_close (core->io, curfd);
+							// r_core_cmd_callf (core, "o-%d", curfd);
+						}
+					}
+					break;
+				} else {
+					R_LOG_ERROR ("Cannot find binfile with id=%d", dstid);
+				}
+			}
+			R_LOG_INFO ("Nothing to merge");
+		}
+		break;
 	case 'o': // "obo"
 		if (input[2] == ' ') {
 			ut32 fd = r_num_math (core->num, input + 3);
@@ -400,6 +439,13 @@ static void cmd_open_bin(RCore *core, const char *input) {
 	case '-': // "ob-"
 		if (input[2] == '*') {
 			r_bin_file_delete_all (core->bin);
+		} else if (input[2] == '-') {
+			RBinFile *bf = r_bin_cur (core->bin);
+			int current = bf? bf->id: 0;
+			if (current >= 0) {
+				r_core_cmd_callf (core, "ob-%d", current);
+				r_core_cmd_callf (core, "ob %d", current -1);
+			}
 		} else {
 			ut32 id;
 			value = r_str_trim_head_ro (input + 2);
@@ -410,12 +456,13 @@ static void cmd_open_bin(RCore *core, const char *input) {
 			id = (*value && r_is_valid_input_num_value (core->num, value)) ?
 					r_get_input_num_value (core->num, value) : UT32_MAX;
 			RBinFile *bf = r_bin_file_find_by_id (core->bin, id);
-			if (!bf) {
+			if (bf) {
+				int bfid = bf->id;
+				if (!r_core_bin_delete (core, bfid)) {
+					R_LOG_ERROR ("Cannot find an RBinFile associated with id %d", bfid);
+				}
+			} else {
 				R_LOG_ERROR ("Invalid binid");
-				break;
-			}
-			if (!r_core_bin_delete (core, bf->id)) {
-				R_LOG_ERROR ("Cannot find an RBinFile associated with that id");
 			}
 		}
 		break;
@@ -2067,6 +2114,21 @@ static int cmd_open(void *data, const char *input) {
 		switch (input[1]) {
 		case '!': // "o-!"
 			r_core_file_close_all_but (core);
+			break;
+		case '$': // "o-$"
+			R_LOG_TODO ("o-$: close last fd is not implemented");
+			break;
+		case '.': // "o-."
+			{
+				RBinFile *bf = r_bin_cur (core->bin);
+				if (bf && bf->fd >= 0) {
+					core->bin->cur = NULL;
+					int fd = bf->fd;
+					if (!r_io_fd_close (core->io, fd)) {
+						R_LOG_ERROR ("Unable to find file descriptor %d", fd);
+					}
+				}
+			}
 			break;
 		case '*': // "o-*"
 			r_io_close_all (core->io);

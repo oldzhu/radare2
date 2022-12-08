@@ -233,6 +233,7 @@ static const char *help_msg_ab[] = {
 	"abf", " [addr]", "address of incoming (from) basic blocks",
 	"abj", " [addr]", "display basic block information in JSON",
 	"abl", "[?] [.-cqj]", "list all basic blocks",
+	"abo", "", "list opcode offsets of current basic block",
 	"abx", " [hexpair-bytes]", "analyze N bytes",
 	"abt", "[?] [addr] [num]", "find num paths from current offset to addr",
 	NULL
@@ -552,6 +553,7 @@ static const char *help_msg_afb[] = {
 	"afbj", " [addr]", "show basic blocks information in json",
 	"afbr", "", "show addresses of instructions which leave the function",
 	"afbt", "", "show basic blocks of current function in a table",
+	"afbo", "", "list addresses of each instruction for every basic block in function (see abo)",
 	"afB", " [bits]", "define asm.bits for the given function",
 	NULL
 };
@@ -582,10 +584,10 @@ static const char *help_msg_afC[] = {
 static const char *help_msg_afi[] = {
 	"Usage:", "afi[jlp*]", " <addr>",
 	"afi", "", "show information of the function",
-	"afii", "[-][import]", "show/add/delete imports used in function",
 	"afi.", "", "show function name in current offset",
 	"afi*", "", "function, variables and arguments",
 	"afij", "", "function info in json format",
+	"afii", "[-][import]", "show/add/delete imports used in function",
 	"afil", "", "verbose function info",
 	"afip", "", "show whether the function is pure or not",
 	"afiq", "", "show quite few info about the function",
@@ -2228,7 +2230,7 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 	}
 	}
 	for (i = idx = ret = 0; idx < len && (!nops || (nops && i < nops)); i++, idx += ret) {
-		RAsmOp asmop = {0};
+		RAnalOp asmop = {0};
 		addr = core->offset + idx;
 		r_asm_set_pc (core->rasm, addr);
 		hint = r_anal_hint_get (core->anal, addr);
@@ -3837,6 +3839,31 @@ static void __core_cmd_anal_fcn_allstats(RCore *core, const char *input) {
 	r_core_seek (core, oseek, true);
 	r_list_free (dbs);
 }
+static void _abo(RAnalBlock *bb) {
+	int i;
+	for (i = 0; i <= bb->ninstr; i++) {
+		ut64 at = r_anal_block_ninstr (bb, i);
+		r_cons_printf ("0x%08"PFMT64x"\n", at);
+	}
+}
+
+static void abo(RCore *core) {
+	RAnalBlock *bb = r_anal_get_block_at (core->anal, core->offset);
+	if (bb) {
+		_abo (bb);
+	}
+}
+
+static void afbo(RCore *core) {
+	RAnalFunction *f = r_anal_get_function_at (core->anal, core->offset);
+	if (f) {
+		RListIter *iter;
+		RAnalBlock *bb;
+		r_list_foreach (f->bbs, iter, bb) {
+			_abo (bb);
+		}
+	}
+}
 
 R_API char *fcnshowr(RAnalFunction *function) {
 	RAnal *a = function->anal;
@@ -4532,13 +4559,16 @@ static int cmd_af(RCore *core, const char *input) {
 				}
 			}
 			break;
-		default:
+		case ' ':
+		case 0:
 			{
 				const char *arg = input[2]? input + 2: "";
 				const char *sec = "\x01";
 				r_core_anal_fcn_list (core, arg, sec);
 			}
 			break;
+		default:
+			r_core_cmd_help (core, help_msg_afi);
 		}
 		break;
 	case 'l': // "afl"
@@ -4938,6 +4968,9 @@ static int cmd_af(RCore *core, const char *input) {
 		switch (input[2]) {
 		case '-': // "afb-"
 			anal_fcn_del_bb (core, r_str_trim_head_ro (input + 3));
+			break;
+		case 'o': // "afbo"
+			afbo (core);
 			break;
 		case 'e': // "afbe"
 			anal_bb_edge (core, r_str_trim_head_ro (input + 3));
@@ -8814,8 +8847,7 @@ static char *get_buf_asm(RCore *core, ut64 from, ut64 addr, RAnalFunction *fcn, 
 	char str[512];
 	const int size = 12;
 	ut8 buf[12];
-	RAsmOp asmop = {0};
-	char *buf_asm = NULL;
+	RAnalOp asmop = {0};
 	bool asm_subvar = r_config_get_b (core->config, "asm.sub.var");
 	bool be = R_ARCH_CONFIG_IS_BIG_ENDIAN (core->rasm->config);
 	core->parser->pseudo = r_config_get_b (core->config, "asm.pseudo");
@@ -8828,29 +8860,27 @@ static char *get_buf_asm(RCore *core, ut64 from, ut64 addr, RAnalFunction *fcn, 
 	r_io_read_at (core->io, addr, buf, size);
 	r_asm_set_pc (core->rasm, addr);
 	r_asm_disassemble (core->rasm, &asmop, buf, size);
-	int ba_len = r_strbuf_length (&asmop.buf_asm) + 128;
+	int ba_len = strlen (asmop.mnemonic) + 128;
 	char *ba = malloc (ba_len);
-	strcpy (ba, r_strbuf_get (&asmop.buf_asm));
+	strcpy (ba, asmop.mnemonic);
 	if (asm_subvar) {
 		core->parser->get_ptr_at = r_anal_function_get_var_stackptr_at;
 		core->parser->get_reg_at = r_anal_function_get_var_reg_at;
 		core->parser->get_op_ireg = get_op_ireg;
-		r_parse_subvar (core->parser, fcn, addr, asmop.size,
-				ba, ba, sizeof (asmop.buf_asm));
+		r_parse_subvar (core->parser, fcn, addr, asmop.size, ba, ba, ba_len);
 	}
 	RAnalHint *hint = r_anal_hint_get (core->anal, addr);
-	r_parse_filter (core->parser, addr, core->flags, hint,
-			ba, str, sizeof (str), be);
+	r_parse_filter (core->parser, addr, core->flags, hint, ba, str, sizeof (str), be);
 	r_anal_hint_free (hint);
-	r_asm_op_set_asm (&asmop, ba);
+	r_anal_op_set_mnemonic (&asmop, asmop.addr, ba);
 	free (ba);
+	char *buf_asm = NULL;
 	if (color && has_color) {
 		buf_asm = r_print_colorize_opcode (core->print, str,
 				core->cons->context->pal.reg, core->cons->context->pal.num, false, fcn ? fcn->addr : 0);
 	} else {
 		buf_asm = r_str_new (str);
 	}
-	r_strbuf_fini (&asmop.buf_asm);
 	return buf_asm;
 }
 
@@ -9227,7 +9257,7 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 				axfm (core);
 				break;
 			}
-			RAsmOp asmop;
+			RAnalOp asmop;
 			RList *list = NULL;
 			RAnalRef *ref;
 			RListIter *iter;
@@ -9687,7 +9717,7 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 				addr = core->offset;
 			}
 			r_str_trim (type);
-			RAsmOp asmop;
+			RAnalOp asmop;
 			RAnalOp op = {0};
 			ut8 code[128] = {0};
 			(void)r_io_read_at (core->io, core->offset, code, sizeof (code));
@@ -12807,6 +12837,9 @@ static int cmd_anal(void *data, const char *input) {
 			break;
 		case 'a': // "aba"
 			r_core_cmdf (core, "aeab%s", input + 1);
+			break;
+		case 'o': // "abo"
+			abo (core);
 			break;
 		case 'e': // "aeb"
 			r_core_cmdf (core, "aeb%s", input + 2);

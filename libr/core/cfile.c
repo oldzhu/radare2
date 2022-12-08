@@ -823,6 +823,20 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 		goto beach;
 	}
 beach:
+	if (r_config_get_b (r->config, "bin.dbginfo") && R_STR_ISNOTEMPTY (filenameuri)) {
+		// load companion dwarf files
+		const char *basename = r_file_basename (filenameuri);
+		char *macdwarf = r_str_newf ("%s.dSYM/Contents/Resources/DWARF/%s", filenameuri, basename);
+		if (r_file_exists (macdwarf)) {
+			// RBinObject *obj = r_bin_cur_object (r->bin);
+			// ut64 nbaddr = obj? obj->baddr: baddr;
+			r_core_cmd_callf (r, "o %s", macdwarf);
+			r_core_cmd_call (r, "obm-");
+			// r_core_cmd_callf (r, "o-."); // causes uaf
+		}
+		free (macdwarf);
+	}
+
 	r_flag_space_set (r->flags, "*");
 	return true;
 }
