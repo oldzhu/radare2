@@ -13,12 +13,13 @@ R_LIB_VERSION(r_lang);
 #include "p/vala.c"  // hardcoded
 #include "p/rust.c"  // hardcoded
 #include "p/zig.c"   // hardcoded
-#if __UNIX__
+#if R2__UNIX__
 #include "p/cpipe.c" // hardcoded
 #endif
 #endif
 #include "p/go.c"    // hardcoded
 #include "p/lib.c"
+#include "p/qjs.c"
 
 R_API RLang *r_lang_new(void) {
 	RLang *lang = R_NEW0 (RLang);
@@ -40,7 +41,7 @@ R_API RLang *r_lang_new(void) {
 	lang->defs->free = (RListFree)r_lang_def_free;
 	lang->cb_printf = (PrintfCallback)printf;
 #if HAVE_SYSTEM
-#if __UNIX__
+#if R2__UNIX__
 	r_lang_add (lang, &r_lang_plugin_c);
 	r_lang_add (lang, &r_lang_plugin_cpipe);
 #endif
@@ -53,6 +54,7 @@ R_API RLang *r_lang_new(void) {
 	r_lang_add (lang, &r_lang_plugin_go);
 	r_lang_add (lang, &r_lang_plugin_spp);
 	r_lang_add (lang, &r_lang_plugin_lib);
+	r_lang_add (lang, &r_lang_plugin_qjs);
 
 	return lang;
 }
@@ -121,8 +123,18 @@ R_API void r_lang_undef(RLang *lang, const char *name) {
 
 R_API bool r_lang_setup(RLang *lang) {
 	RLangPlugin *p = R_UNWRAP3 (lang, session, plugin);
-	if (p && p->setup) {
-		return p->setup (lang->session);
+	if (p) {
+		if (p->setup) {
+			return p->setup (lang->session);
+		} else {
+			if (p->fini) {
+				p->fini (lang->session);
+			}
+			if (p->init) {
+				p->init (lang->session);
+			}
+			return true;
+		}
 	}
 	return false;
 }

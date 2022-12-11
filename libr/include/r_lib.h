@@ -4,7 +4,7 @@
 #include "r_types.h"
 #include "r_list.h"
 
-#if __UNIX__ && WANT_DYLINK
+#if R2__UNIX__ && WANT_DYLINK
 #include <dlfcn.h>
 #endif
 
@@ -22,7 +22,7 @@ R_LIB_VERSION_HEADER (r_lib);
 #define R_LIB_ENV "R2_LIBR_PLUGINS"
 
 /* TODO: This must depend on HOST_OS, and maybe move into r_types */
-#if __WINDOWS__
+#if R2__WINDOWS__
 #include <windows.h>
 #define R_LIB_EXT "dll"
 #elif __APPLE__

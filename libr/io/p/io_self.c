@@ -18,7 +18,7 @@
 #include <mach/task.h>
 #include <mach/task_info.h>
 void macosx_debug_regions (RIO *io, task_t task, mach_vm_address_t address, int max);
-#elif __BSD__
+#elif R2__BSD__
 #if __FreeBSD__
 #include <sys/sysctl.h>
 #include <sys/user.h>
@@ -241,7 +241,7 @@ static int update_self_regions(RIO *io, int pid) {
 	fclose (fd);
 
 	return true;
-#elif __BSD__
+#elif R2__BSD__
 	return bsd_proc_vmmaps(io, pid);
 #elif __HAIKU__
 	image_info ii;
@@ -418,7 +418,7 @@ static ut64 __lseek(RIO *io, RIODesc *fd, ut64 offset, int whence) {
 }
 
 static void got_alarm(int sig) {
-#if !defined(__WINDOWS__)
+#if !defined(R2__WINDOWS__)
 	// !!! may die if not running from r2preload !!! //
 	kill (r_sys_getpid (), SIGUSR1);
 #endif
@@ -429,7 +429,7 @@ static char *__system(RIO *io, RIODesc *fd, const char *cmd) {
 		return r_str_newf ("%d", fd->fd);
 	} else if (r_str_startswith (cmd, "pid")) {
 		/* do nothing here */
-#if !defined(__WINDOWS__)
+#if !defined(R2__WINDOWS__)
 	} else if (r_str_startswith (cmd, "kill")) {
 		if (r_sandbox_enable (false)) {
 			R_LOG_ERROR ("This is unsafe, so disabled by the sandbox");
@@ -529,7 +529,7 @@ static char *__system(RIO *io, RIODesc *fd, const char *cmd) {
 		}
 		eprintf ("RES %"PFMT64d"\n", result);
 		free (argv);
-#if !defined(__WINDOWS__) && !defined (__serenity__)
+#if !defined(R2__WINDOWS__) && !defined (__serenity__)
 	} else if (r_str_startswith (cmd, "alarm ")) {
 		struct itimerval tmout;
 		int secs = atoi (cmd + 6);
@@ -576,7 +576,7 @@ static char *__system(RIO *io, RIODesc *fd, const char *cmd) {
 		eprintf (" :pid               show getpid()\n");
 		eprintf (" :maps              show map regions (same as :dm)\n");
 		eprintf (" :kill              commit suicide\n");
-#if !defined(__WINDOWS__)
+#if !defined(R2__WINDOWS__)
 		eprintf (" :alarm [secs]      setup alarm signal to raise r2 prompt\n");
 #endif
 		eprintf (" :dlsym [sym]       dlopen\n");
@@ -711,7 +711,7 @@ void macosx_debug_regions(RIO *io, task_t task, mach_vm_address_t address, int m
 		}
 	}
 }
-#elif __BSD__
+#elif R2__BSD__
 bool bsd_proc_vmmaps(RIO *io, int pid) {
 #if __FreeBSD__
 	size_t size;

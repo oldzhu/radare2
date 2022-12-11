@@ -3,7 +3,7 @@
 #define INTERACTIVE_MAX_REP 1024
 
 #include <r_core.h>
-#if __UNIX__
+#if R2__UNIX__
 #include <sys/utsname.h>
 #ifndef __wasi__
 #include <pwd.h>
@@ -103,6 +103,7 @@ static RCoreHelpMessage help_msg_j = {
 	"ji:", "[cmd]", "run command and indent it as json like (cmd~{})",
 	"js", " [expr]", "run given javascript expression",
 	"js-", "", "read from stdin until ^D",
+	"js!", "", "reset js vm (same as #!!)",
 	"js:", "[file]", "interpret javascript file",
 	"join", " f1 f2", "join the contents of two files",
 	NULL
@@ -1285,7 +1286,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 			ret = lang_run_file (core, core->lang, file);
 		} else {
 // XXX this is an ugly hack, we need to use execve here and specify args properly
-#if __WINDOWS__
+#if R2__WINDOWS__
 #define cmdstr(x) r_str_newf (x" %s", file);
 #else
 #define cmdstr(x) r_str_newf (x" '%s'", file);
@@ -1300,7 +1301,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					free (cmd);
 					ret = 1;
 				} else if (!strcmp (ext, "exe")) {
-#if __WINDOWS__
+#if R2__WINDOWS__
 					char *cmd = r_str_newf ("%s", file);
 #else
 					char *cmd = cmdstr ("wine");
@@ -1409,7 +1410,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 						}
 					}
 					if (fp) {
-#if __WINDOWS__
+#if R2__WINDOWS__
 						char *cmd = r_str_newf ("%s %s", fp, file);
 #else
 						char *cmd = r_str_newf ("%s '%s'", fp, file);
@@ -1575,13 +1576,15 @@ static int cmd_join(void *data, const char *input) { // "join"
 	if (input[0] == 's') { // "js"
 		if (input[1] == ':' || input[1] == '.') { // "js:"
 			r_core_cmdf (core, ". %s", input + 2);
+		} else if (input[1] == '!') { // "js!"
+			r_lang_setup (core->lang);
 		} else if (input[1] == '-') { // "js-"
 			if (r_config_get_b (core->config, "scr.interactive")) {
 				int sz;
 				char *data = r_stdin_slurp (&sz);
 				if (data) {
 					char *code = r_str_newf ("(function() { %s })()", data);
-					if (r_lang_use (core->lang, "mujs")) {
+					if (r_lang_use (core->lang, "qjs")) {
 						r_lang_run (core->lang, code, sz);
 					} else {
 						R_LOG_ERROR ("Requires mujs");
@@ -1593,7 +1596,7 @@ static int cmd_join(void *data, const char *input) { // "join"
 				R_LOG_ERROR ("requires scr.interactive");
 			}
 		} else if (input[1] == ' ') { // "js "
-			if (r_lang_use (core->lang, "mujs")) {
+			if (r_lang_use (core->lang, "qjs")) {
 				r_lang_run (core->lang, input + 1, -1);
 			} else {
 				r_core_cmdf (core, "#!pipe node -e '%s'", input + 1);
@@ -3209,7 +3212,7 @@ static char *unescape_special_chars(const char *s, const char *special_chars) {
 	return dst;
 }
 
-#if __WINDOWS__
+#if R2__WINDOWS__
 #include <tchar.h>
 #define __CLOSE_DUPPED_PIPES() \
 		close (1);             \
@@ -3335,7 +3338,7 @@ err_r_w32_cmd_pipe:
 #endif
 
 R_API int r_core_cmd_pipe(RCore *core, char *radare_cmd, char *shell_cmd) {
-#if __UNIX__ && !__wasi__ && HAVE_FORK
+#if R2__UNIX__ && !__wasi__ && HAVE_FORK
 	int stdout_fd, fds[2];
 	int child;
 #endif
@@ -3366,7 +3369,7 @@ R_API int r_core_cmd_pipe(RCore *core, char *radare_cmd, char *shell_cmd) {
 	}
 #if !HAVE_FORK
 	// nothing
-#elif __UNIX__
+#elif R2__UNIX__
 	r_str_trim_head (radare_cmd);
 	r_str_trim_head (shell_cmd);
 
@@ -3397,7 +3400,7 @@ R_API int r_core_cmd_pipe(RCore *core, char *radare_cmd, char *shell_cmd) {
 		}
 		close (stdout_fd);
 	}
-#elif __WINDOWS__
+#elif R2__WINDOWS__
 	r_w32_cmd_pipe (core, radare_cmd, shell_cmd);
 #else
 #ifdef _MSC_VER
@@ -5775,7 +5778,7 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 	}
 	size_t line_count = r_str_char_count(lines, '\n');
 
-#if __UNIX__
+#if R2__UNIX__
 	const bool istty = r_cons_is_tty ();
 #else
 	const bool istty = true;

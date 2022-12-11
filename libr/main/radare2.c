@@ -203,7 +203,7 @@ static int main_help(int line) {
 
 static int main_print_var(const char *var_name) {
 	int i = 0;
-#ifdef __WINDOWS__
+#ifdef R2__WINDOWS__
 	char *incdir = r_str_r2_prefix (R2_INCDIR);
 	char *libdir = r_str_r2_prefix (R2_LIBDIR);
 #else
@@ -343,7 +343,7 @@ static inline void autoload_zigns(RCore *r) {
 
 // Try to set the correct scr.color for the current terminal.
 static void set_color_default(RCore *r) {
-#ifdef __WINDOWS__
+#ifdef R2__WINDOWS__
 	char *alacritty = r_sys_getenv ("ALACRITTY_LOG");
 	if (alacritty) {
 		// Despite the setting of env vars to the contrary, Alacritty on
@@ -985,9 +985,9 @@ R_API int r_main_radare2(int argc, const char **argv) {
 		free (envprofile);
 		return main_help (help > 1? 2: 0);
 	}
-#if __WINDOWS__
+#if R2__WINDOWS__
 	pfile = r_acp_to_utf8 (pfile);
-#endif // __WINDOWS__
+#endif // R2__WINDOWS__
 	if (customRarunProfile) {
 		char *tfn = r_file_temp (".rarun2");
 		if (!r_file_dump (tfn, (const ut8*)customRarunProfile, strlen (customRarunProfile), 0)) {
@@ -1123,7 +1123,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 		char *buf = r_stdin_slurp (&sz);
 		eprintf ("^D\n");
 		r_cons_set_raw (false);
-#if __UNIX__
+#if R2__UNIX__
 		// TODO: keep flags :?
 		R_UNUSED_RESULT (freopen ("/dev/tty", "rb", stdin));
 		R_UNUSED_RESULT (freopen ("/dev/tty", "w", stdout));
@@ -1190,7 +1190,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 					if (!strstr (pfile, "://")) {
 						opt.ind--; // take filename
 					}
-#if __WINDOWS__
+#if R2__WINDOWS__
 					pfile = r_acp_to_utf8 (pfile);
 #endif
 					fh = r_core_file_open (r, pfile, perms, mapaddr);
@@ -1243,7 +1243,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 					free (pfile);
 					pfile = strdup ("dbg://");
 				}
-#if __UNIX__
+#if R2__UNIX__
 				/* implicit ./ to make unix behave like windows */
 				if (f) {
 					char *path, *escaped_path;
@@ -1264,7 +1264,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 					R_FREE (escaped_path);
 					R_FREE (path);
 				}
-#elif __WINDOWS__
+#elif R2__WINDOWS__
 				char *acpfile = r_acp_to_utf8 (f);
 				// backslashes must be escaped because they are unscaped when parsing the uri
 				char *r = r_str_replace (acpfile, "\\", "\\\\", true);
@@ -1321,7 +1321,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 				while (opt.ind < argc) {
 					R_FREE (pfile);
 					pfile = strdup (argv[opt.ind++]);
-#if __WINDOWS__
+#if R2__WINDOWS__
 					pfile = r_acp_to_utf8 (pfile);
 #endif
 					fh = r_core_file_open (r, pfile, perms, mapaddr);
@@ -1594,7 +1594,7 @@ R_API int r_main_radare2(int argc, const char **argv) {
 		}
 	}
 #if UNCOLORIZE_NONTTY
-#if __UNIX__
+#if R2__UNIX__
 	if (!r_cons_is_tty ()) {
 		r_config_set_i (r->config, "scr.color", COLOR_MODE_DISABLED);
 	}

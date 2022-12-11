@@ -20,7 +20,7 @@
 #include <r_util.h>
 #include "tcc.h"
 
-#ifdef __WINDOWS__
+#ifdef R2__WINDOWS__
 // GCC appears to use '/' for relative paths and '\\' for absolute paths on Windows
 static char *normalize_slashes(char *path) {
 	char *p;
@@ -42,7 +42,7 @@ static char *normalize_slashes(char *path) {
 #endif
 
 /* strcat and truncate. */
-PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s) {
+PUB_FUNC char *strcat2(char *buf, int buf_size, const char *s) {
 	int len = strlen (buf);
 	if (len < buf_size) {
 		r_str_ncpy (buf + len, s, buf_size - len);
@@ -235,7 +235,7 @@ ST_FUNC bool tcc_open_bf(TCCState *s1, const char *filename, int initlen) {
 	bf->buf_end = bf->buffer + initlen;
 	bf->buf_end[0] = CH_EOB;/* put eob symbol */
 	r_str_ncpy (bf->filename, filename, sizeof (bf->filename));
-#ifdef __WINDOWS__
+#ifdef R2__WINDOWS__
 	normalize_slashes (bf->filename);
 #endif
 	bf->line_num = 1;
@@ -506,7 +506,7 @@ static void tcc_init_defines(TCCState *s) {
 	// TODO: Move that in SDB
 
 	if (!strncmp (os, "windows", 7)) {
-		tcc_define_symbol (s, "__WINDOWS__", NULL);
+		tcc_define_symbol (s, "R2__WINDOWS__", NULL);
 		if (bits == 64) {
 			tcc_define_symbol (s, "_WIN64", NULL);
 		}

@@ -179,7 +179,7 @@ R_API int r_core_rtr_http_stop(RCore *u) {
 	const char *port;
 	RSocket* sock;
 
-#if __WINDOWS__
+#if R2__WINDOWS__
 	r_socket_http_server_set_breaked (&r_cons_context ()->breaked);
 #endif
 	if (((size_t)u) > 0xff) {
@@ -213,7 +213,7 @@ static char *rtr_dir_files(const char *path) {
 	return r_str_append (ptr, "</body></html>\n");
 }
 
-#if __UNIX__ && !__wasi__
+#if R2__UNIX__ && !__wasi__
 static void dietime(int sig) {
 	eprintf ("It's Time To Die!\n");
 	exit (0);
@@ -223,7 +223,7 @@ static void dietime(int sig) {
 static void activateDieTime(RCore *core) {
 	int dt = r_config_get_i (core->config, "http.dietime");
 	if (dt > 0) {
-#if __UNIX__ && !__wasi__
+#if R2__UNIX__ && !__wasi__
 		r_sys_signal (SIGALRM, dietime);
 		alarm (dt);
 #else
@@ -904,7 +904,7 @@ R_API void r_core_rtr_event(RCore *core, const char *input) {
 	}
 	if (!strcmp (input, "errmsg")) {
 		// TODO: support udp, tcp, rap, ...
-#if __UNIX__ && !__wasi__
+#if R2__UNIX__ && !__wasi__
 		char *f = r_file_temp ("errmsg");
 		r_cons_printf ("%s\n", f);
 		r_file_rm (f);
