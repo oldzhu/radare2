@@ -12,7 +12,7 @@
 #define countof(x) (sizeof (x) / sizeof ((x)[0]))
 
 #include "quickjs.h"
-#include "../r2papi.c"
+#include "../js_r2papi.c"
 
 typedef struct {
 	JSContext *ctx;
@@ -68,6 +68,31 @@ static JSValue r2error(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
 	return JS_NewBool (ctx, true);
 }
 
+static JSValue b64(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+	size_t plen;
+	bool decode = false;
+	if (argc > 1) {
+		decode = true;
+	}
+	char *ret = NULL;
+	if (argc > 0) {
+		const char *n = JS_ToCStringLen2 (ctx, &plen, argv[0], false);
+		if (R_STR_ISNOTEMPTY (n)) {
+			if (decode) {
+				int res = 0;
+				ut8 *bret = sdb_decode (n, &res);
+				ret = r_str_ndup ((const char *)bret, res);
+				free (bret);
+			} else {
+				ret = sdb_encode ((const ut8*)n, -1);
+			}
+		}
+	}
+	// JS_FreeValue (ctx, argv[0]);
+	JSValue v = JS_NewString (ctx, r_str_get (ret));
+	free (ret);
+	return v;
+}
 static JSValue r2cmd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
 	JSRuntime *rt = JS_GetRuntime (ctx);
 	QjsContext *k = JS_GetRuntimeOpaque (rt);
@@ -77,7 +102,7 @@ static JSValue r2cmd(JSContext *ctx, JSValueConst this_val, int argc, JSValueCon
 	if (R_STR_ISNOTEMPTY (n)) {
 		ret = k->core->lang->cmd_str (k->core, n);
 	}
-	JS_FreeValue (ctx, argv[0]);
+	// JS_FreeValue (ctx, argv[0]);
 	return JS_NewString (ctx, r_str_get (ret));
 }
 
@@ -119,9 +144,10 @@ static JSValue js_os_read_write(JSContext *ctx, JSValueConst this_val, int argc,
 	int ret;
 	uint8_t *buf;
 
-	if (JS_ToInt32(ctx, &fd, argv[0]))
+	if (JS_ToInt32 (ctx, &fd, argv[0])) {
 		return JS_EXCEPTION;
-	if (JS_ToIndex(ctx, &pos, argv[2]))
+	}
+	if (JS_ToIndex (ctx, &pos, argv[2]))
 		return JS_EXCEPTION;
 	if (JS_ToIndex(ctx, &len, argv[3]))
 		return JS_EXCEPTION;
@@ -191,6 +217,8 @@ static void register_helpers(JSContext *ctx) {
 	js_init_module_os (ctx, "os");
 	JS_AddModuleExportList (ctx, m, js_r2_funcs, countof (js_r2_funcs));
 	JSValue global_obj = JS_GetGlobalObject (ctx);
+	JS_SetPropertyStr (ctx, global_obj, "b64",
+			JS_NewCFunction (ctx, b64, "b64", 1));
 	JS_SetPropertyStr (ctx, global_obj, "r2cmd",
 			JS_NewCFunction (ctx, r2cmd, "r2cmd", 1));
 	JS_SetPropertyStr (ctx, global_obj, "r2log",
@@ -201,6 +229,7 @@ static void register_helpers(JSContext *ctx) {
 			JS_NewCFunction (ctx, js_flush, "flush", 1));
 	JS_SetPropertyStr (ctx, global_obj, "print", // write + newline
 			JS_NewCFunction (ctx, js_print, "print", 1));
+	eval (ctx, "setTimeout = (x,y) => x();");
 	eval (ctx, "function dir(x) {"
 		"console.log(JSON.stringify(x).replace(/,/g,',\\n '));"
 		"for (var i in x) {console.log(i);}}");
@@ -208,8 +237,8 @@ static void register_helpers(JSContext *ctx) {
 	eval (ctx, "var r2 = { log:r2log, cmd:r2cmd, cmdj:(x)=>JSON.parse(r2cmd(x))};");
 	eval (ctx, "r2.call = (x) => r2.cmd('\"\"' + x);");
 	eval (ctx, "var global = globalThis; var G = globalThis;");
-	eval (ctx, r2papi_qjs);
-	eval (ctx, "G.R=new R2Api(r2);");
+	eval (ctx, js_r2papi_qjs);
+	eval (ctx, "G.R=new R2Papi(r2);");
 }
 
 static JSContext *JS_NewCustomContext(JSRuntime *rt) {
@@ -240,8 +269,13 @@ static void eval_jobs(JSContext *ctx) {
 }
 
 static bool eval(JSContext *ctx, const char *code) {
-	// set raw console
-			r_cons_set_raw (true);
+	if (R_STR_ISEMPTY (code)) {
+		return false;
+	}
+	bool wantRaw = strstr (code, "termInit(");
+	if (wantRaw) {
+		r_cons_set_raw (true);
+	}
 	JSValue v = JS_Eval (ctx, code, strlen (code), "-", 0);
 	if (JS_IsException (v)) {
 		js_std_dump_error (ctx);
@@ -249,7 +283,9 @@ static bool eval(JSContext *ctx, const char *code) {
 		js_dump_obj (ctx, stderr, e);
 	}
 	eval_jobs (ctx);
-			r_cons_set_raw (false);
+	if (wantRaw) {
+		r_cons_set_raw (false);
+	}
 	// restore raw console
 	JS_FreeValue (ctx, v);
 	return true;
@@ -291,7 +327,6 @@ static bool fini(RLangSession *s) {
 	s->plugin_data = NULL;
 	JS_FreeContext (k->ctx);
 	k->ctx = NULL;
-	// XXX this is segfaulting JS_FreeRuntime (k->r);
 	k->r = NULL;
 	free (k);
 	return NULL;
