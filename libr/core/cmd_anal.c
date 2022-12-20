@@ -118,6 +118,12 @@ static const char *help_msg_a8[] = {
 static const char *help_msg_ap[] = {
 	"Usage:", "ap[?]", " # analyze prelude in current offset",
 	"ap", "", "check if current offset contains a function prelude",
+	"apl", "", "list available function preludes defined by the arch plugin",
+	// "ap+", "bytes:mask:align", "add a new function prelude",
+	"apt", "", "analysis process-thread (like dpt for esil), list threads",
+	"apt ", "[id]", "select a thread (change register profile and TLS map",
+	"apt+", "[map]", "create a thread with given TLS mapid and prints the new thread id",
+	"apt-", "[id]", "delete a thread by id",
 	NULL
 };
 
@@ -5279,6 +5285,7 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 		}
 	}
 	RReg *hack = core->dbg->reg;
+	core->dbg->reg = core->anal->reg;
 	const char *use_color;
 	int use_colors = r_config_get_i (core->config, "scr.color");
 	if (use_colors) {
@@ -5384,7 +5391,7 @@ void cmd_anal_reg(RCore *core, const char *str) {
 #endif
 	int size = 0, i, type = R_REG_TYPE_GPR;
 	int use_colors = r_config_get_i (core->config, "scr.color");
-	const char *use_color;
+	const char *use_color = NULL;
 	const char *name;
 	char *arg;
 
@@ -5392,8 +5399,6 @@ void cmd_anal_reg(RCore *core, const char *str) {
 #define ConsP(x) (core->cons && core->cons->context->pal.x)? core->cons->context->pal.x
 		use_color = ConsP (creg)
 		: Color_BWHITE;
-	} else {
-		use_color = NULL;
 	}
 	switch (str[0]) {
 	case 'l': // "arl"
@@ -9931,12 +9936,12 @@ static void cmd_agraph_node(RCore *core, const char *input) {
 				if (body[B_LEN]) {
 					body = r_str_replace (body, "\\n", "", true);
 					newbody = (char *)r_base64_decode_dyn (body + B_LEN, -1);
-					free (body);
 					if (!newbody) {
 						R_LOG_ERROR ("Invalid base64 string in agn (%s)", body+B_LEN);
 						r_str_argv_free (args);
 						break;
 					}
+					free (body);
 					body = newbody;
 				} else {
 					free (body);
@@ -12772,37 +12777,103 @@ static bool core_anal_abf(RCore *core, const char* input) {
 	return true;
 }
 
+static void match_prelude(RCore *core, const char *input) {
+	const ut8 *prelude = (const ut8*)"\xe9\x2d"; //:fffff000";
+	const int prelude_sz = 2;
+	const int bufsz = 4096;
+	ut8 *buf = calloc (1, bufsz);
+	ut64 off = core->offset;
+	if (input[1] == ' ') {
+		off = r_num_math (core->num, input + 1);
+	}
+	r_io_read_at (core->io, off - bufsz + prelude_sz, buf, bufsz);
+	//const char *prelude = "\x2d\xe9\xf0\x47"; //:fffff000";
+	r_mem_reverse (buf, bufsz);
+	//r_print_hexdump (NULL, off, buf, bufsz, 16, -16);
+	const ut8 *pos = r_mem_mem (buf, bufsz, prelude, prelude_sz);
+	if (pos) {
+		int delta = (size_t)(pos - buf);
+		// R_LOG_DEBUG ("POS = %d", delta);
+		// R_LOG_DEBUG ("HIT = 0x%"PFMT64x, off - delta);
+		r_cons_printf ("0x%08"PFMT64x"\n", off - delta);
+	} else {
+		R_LOG_ERROR ("Cannot find prelude");
+	}
+	free (buf);
+}
+
+static int cmd_apt(RCore *core, const char *input) {
+	switch (*input) {
+	case '?':
+		r_core_cmd_help_match (core, help_msg_ap, "apt", false);
+		break;
+	case '=':
+	case ' ':
+		r_anal_tid_select (core->anal, atoi (input + 1));
+		core->dbg->reg = core->anal->reg;
+		break;
+	case '+':
+		{
+			int tid = r_anal_tid_add (core->anal, atoi (input + 1));
+			if (tid != -1) {
+				core->anal->thread = tid;
+			}
+		}
+		break;
+	case '-':
+		r_anal_tid_kill (core->anal, atoi (input + 1));
+		break;
+	case 0:
+		{
+			RListIter *iter;
+			RAnalThread *t;
+			r_list_foreach (core->anal->threads, iter, t) {
+				const int diff = (r_time_now () - t->birth) / 1000000;
+				const char cur = (t->id == core->anal->thread)? '*': '-';
+				r_cons_printf ("%c %d map=%d age=%ds\n", cur, t->id, t->map, diff);
+			}
+		}
+		break;
+	}
+	return 0;
+}
+
 static int cmd_anal(void *data, const char *input) {
 	const char *r;
 	RCore *core = (RCore *)data;
 	ut32 tbs = core->blocksize;
 	switch (input[0]) {
 	case 'p': // "ap"
-		if (input[1] == '?') {
+		switch (input[1]) {
+		case '?':
 			r_core_cmd_help (core, help_msg_ap);
-		} else {
-			const ut8 *prelude = (const ut8*)"\xe9\x2d"; //:fffff000";
-			const int prelude_sz = 2;
-			const int bufsz = 4096;
-			ut8 *buf = calloc (1, bufsz);
-			ut64 off = core->offset;
-			if (input[1] == ' ') {
-				off = r_num_math (core->num, input + 1);
+			break;
+		case 'l': // "apl"
+			// list function preludes
+			{
+				RSearchKeyword *k;
+				RListIter *iter;
+				RList *list = r_anal_preludes (core->anal);
+				r_list_foreach (list, iter, k) {
+					char *hex0 = r_hex_bin2strdup (k->bin_keyword, k->keyword_length);
+					char *hex1 = r_hex_bin2strdup (k->bin_binmask, k->binmask_length);
+					// XXX must add an align field
+					r_cons_printf ("ap+ %s %s\n", hex0, hex1);
+					free (hex0);
+					free (hex1);
+				}
 			}
-			r_io_read_at (core->io, off - bufsz + prelude_sz, buf, bufsz);
-			//const char *prelude = "\x2d\xe9\xf0\x47"; //:fffff000";
-			r_mem_reverse (buf, bufsz);
-			//r_print_hexdump (NULL, off, buf, bufsz, 16, -16);
-			const ut8 *pos = r_mem_mem (buf, bufsz, prelude, prelude_sz);
-			if (pos) {
-				int delta = (size_t)(pos - buf);
-				// R_LOG_DEBUG ("POS = %d", delta);
-				// R_LOG_DEBUG ("HIT = 0x%"PFMT64x, off - delta);
-				r_cons_printf ("0x%08"PFMT64x"\n", off - delta);
-			} else {
-				R_LOG_ERROR ("Cannot find prelude");
-			}
-			free (buf);
+			break;
+		case 't': // "apt"
+			cmd_apt (core, input + 2);
+			break;
+		case ' ':
+		case 0:
+			match_prelude (core, r_str_trim_head_ro (input));
+			break;
+		default:
+			r_core_cmd_help (core, help_msg_ap);
+			break;
 		}
 		break;
 	case '8':  // "a8"

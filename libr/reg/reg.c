@@ -13,6 +13,7 @@ static const char * const types[R_REG_TYPE_LAST + 1] = {
 
 R_API bool r_reg_hasbits_check(RReg *reg, int size) {
 	return reg->hasbits & size;
+#if 0
 #define HB(x) if (size&x && reg->hasbits &x) return true
 	HB(1);
 	HB(2);
@@ -25,6 +26,7 @@ R_API bool r_reg_hasbits_check(RReg *reg, int size) {
 	HB(256);
 #undef HB
 	return false;
+#endif
 }
 
 R_API void r_reg_hasbits_clear(RReg *reg) {
@@ -305,6 +307,7 @@ R_API RReg *r_reg_init(RReg *reg) {
 	r_return_val_if_fail (reg, NULL);
 	size_t i;
 	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		memset (&reg->regset[i], 0, sizeof (RRegSet));
 		RRegArena *arena = r_reg_arena_new (0);
 		if (!arena) {
 			free (reg);
@@ -357,6 +360,8 @@ R_API void r_reg_set_copy(RRegSet *d, RRegSet *s) {
 	d->maskregstype = s->maskregstype;
 	RRegArena *a;
 	RListIter *iter;
+	d->pool = r_list_newf ((RListFree)r_reg_arena_free);
+	d->regs = r_list_newf ((RListFree)r_reg_item_free);
 	r_list_foreach (s->pool, iter, a) {
 		RRegArena *na = r_reg_arena_clone (a);
 		r_list_append (d->pool, na);
@@ -372,32 +377,67 @@ R_API void r_reg_set_copy(RRegSet *d, RRegSet *s) {
 	d->ht_regs = pp;
 }
 
+
+static inline char *dups(const char *x) {
+	return x? strdup (x): NULL;
+}
+
+#if 0
+R_API RReg *r_reg_clone(RReg *reg) {
+	int i;
+	RReg *r = R_NEW0 (RReg);
+	r->profile = dups (reg->profile);
+	r->reg_profile_cmt = dups (reg->reg_profile_cmt);
+	r->reg_profile_str = dups (reg->reg_profile_str);
+	for (i = 0; i < R_REG_NAME_LAST; i++) {
+		r->name[i] = dups (reg->name[i]);
+	}
+	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		r->regset[i] = r_reg_set_clone (reg->regset[i]);
+	}
+	return r;
+}
+#endif
 R_API RReg *r_reg_clone(RReg *r) {
+	r_return_val_if_fail (r, NULL);
 	RListIter *iter;
 	RRegItem *reg;
 	int i;
+	if (r->config) {
+		r_ref (r->config);
+	}
 	RReg *rr = R_NEW0 (RReg);
-	rr->profile = strdup (r->profile);
-	rr->reg_profile_cmt = strdup (r->reg_profile_cmt);
-	rr->reg_profile_str = strdup (r->reg_profile_str);
+	if (!rr) {
+		return NULL;
+	}
+	rr->profile = dups (r->profile);
+	rr->reg_profile_cmt = dups (r->reg_profile_cmt);
+	rr->reg_profile_str = dups (r->reg_profile_str);
 	for (i = 0; i < R_REG_NAME_LAST; i++) {
-		rr->name[i] = strdup (r->name[i]);
+		rr->name[i] = dups (r->name[i]);
+		// r_reg_set_copy (&rr->regset[i], &r->regset[i]);
+	}
+	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		rr->name[i] = dups (r->name[i]);
 		r_reg_set_copy (&rr->regset[i], &r->regset[i]);
 	}
 	rr->iters = r->iters;
 	rr->size = r->size;
 	rr->bits_default = r->bits_default;
 	rr->hasbits = r->hasbits;
-	r_ref (r->config);
 	rr->config = r->config;
+	r->allregs = r_list_newf (NULL);
 	r_list_foreach (r->allregs, iter, reg) {
 		RRegItem *ri = r_reg_item_clone (reg);
 		r_list_append (rr->allregs, ri);
 	}
+	r->roregs = r_list_newf (NULL);
 	r_list_foreach (r->roregs, iter, reg) {
 		RRegItem *ri = r_reg_item_clone (reg);
 		r_list_append (rr->roregs, ri);
 	}
+	r_reg_arena_push (rr);
+	r_reg_hasbits_clear (rr);
 	return rr;
 }
 
