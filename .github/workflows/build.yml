@@ -20,6 +20,19 @@ jobs:
         name: linux-wasi
         path: radare2-*-wasi.zip
 
+  # Source Tarballs
+  tarball:
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Creating zip and tarball
+      run: sys/tarball.sh
+    - uses: actions/upload-artifact@v3
+      with:
+        name: tarball
+        path: radare2-*.*
+
   # Linux
   linux-static:
     if: contains(github.ref, 'master') || contains(github.ref, 'ci-')
@@ -299,6 +312,7 @@ jobs:
         pip install git+https://github.com/frida/meson.git@f7f25b19a8d71cebf8e2934733eb041eb6862eee
         pip install ninja r2pipe wget
     - name: Extract r2 version
+      shell: bash
       run: echo "branch=`sys/version.py -n`" >> $GITHUB_OUTPUT
       id: r2v
     - name: Build with meson + ninja
@@ -393,6 +407,7 @@ jobs:
         pip install git+https://github.com/frida/meson.git@f7f25b19a8d71cebf8e2934733eb041eb6862eee
         pip install ninja r2pipe wget r2env
     - name: Extract r2 version
+      shell: bash
       run: echo "branch=`sys/version.py -n`" >> $GITHUB_OUTPUT
       id: r2v
     - name: Build with meson + ninja
@@ -443,6 +458,7 @@ jobs:
         pip install git+https://github.com/frida/meson.git@f7f25b19a8d71cebf8e2934733eb041eb6862eee
         pip install ninja r2pipe wget
     - name: Extract r2 version
+      shell: bash
       run: echo "branch=`sys/version.py -n`" >> $GITHUB_OUTPUT
       id: r2v
     - name: Build with meson + ninja
@@ -557,6 +573,7 @@ jobs:
         with:
           fetch-depth: 0 # Download all git history and tags
       - name: Extract r2 version
+        shell: bash
         run: echo "branch=`sys/version.py -n`" >> $GITHUB_OUTPUT
         id: r2v
       - name: Prepare release notes
@@ -585,6 +602,24 @@ jobs:
           asset_path: dist/artifacts/linux-acr-deb-64/radare2/radare2_${{ steps.r2v.outputs.branch }}_amd64.deb
           asset_name: radare2_${{ steps.r2v.outputs.branch }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
+      - name: Upload prefetched tarball (source)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/artifacts/tarball/radare2/radare2-${{ steps.r2v.outputs.branch }}.tar.xz
+          asset_name: radare2-${{ steps.r2v.outputs.branch }}.tar.xz
+          asset_content_type: application/x-txz
+      - name: Upload prefetched zip (source)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/artifacts/tarball/radare2/radare2-${{ steps.r2v.outputs.branch }}.zip
+          asset_name: radare2-${{ steps.r2v.outputs.branch }}.zip
+          asset_content_type: application/x-zip
       - name: Upload asset for Debian (i386)
         uses: actions/upload-release-asset@v1
         env:
