@@ -72,8 +72,14 @@ static int git_pull(const char *dir, bool reset) {
 }
 
 static int git_clone(const char *dir, const char *url) {
+	char *git = r_file_path ("git");
+	if (!git) {
+		R_LOG_ERROR ("Cannot find `git` in $PATH");
+		return 1;
+	}
+	free (git);
 	char *cmd = r_str_newf ("git clone --depth=10 --recursive %s %s", url, dir);
-	R_LOG_DEBUG ("%s", cmd);
+	R_LOG_INFO ("%s", cmd);
 	int rc = r_sandbox_system (cmd, 1);
 	free (cmd);
 	return rc;
@@ -287,19 +293,18 @@ static int r2pm_update(bool force) {
 	if (force) {
 		r_file_rm_rf (pmpath);
 	}
+	int rc = 0;
 	if (r_file_is_directory (pmpath)) {
 		if (git_pull (pmpath, force) != 0) {
 			R_LOG_ERROR ("git pull");
-			free (pmpath);
-			free (gpath);
-			return 1;
+			rc = 1;
 		}
 	} else {
-		git_clone (pmpath, R2PM_GITURL);
+		rc = git_clone (pmpath, R2PM_GITURL);
 	}
 	free (gpath);
 	free (pmpath);
-	return 0;
+	return rc;
 }
 
 static void r2pm_setenv(void) {
@@ -394,80 +399,6 @@ static void r2pm_setenv(void) {
 	free (python);
 }
 
-static int r2pm_install_pkg(const char *pkg, bool global) {
-	R_LOG_INFO ("Starting install for %s", pkg);
-	char *deps = r2pm_get (pkg, "\nR2PM_DEPS ", TT_TEXTLINE);
-	if (deps) {
-		char *dep;
-		RListIter *iter;
-		RList *l = r_str_split_list (deps, " ", 0);
-		r_list_foreach (l, iter, dep) {
-			r2pm_install_pkg (dep, false); // XXX get current pkg global value
-		}
-	}
-	char *srcdir = r2pm_gitdir ();
-	r2pm_setenv ();
-	R_LOG_DEBUG ("Entering %s", srcdir);
-	char *qjs_script = r2pm_get (pkg, "\nR2PM_INSTALL_QJS() {\n", TT_CODEBLOCK);
-	if (qjs_script) {
-		int res = 0;
-		const char *const argv[5] = { "radare2", "-j", "-e", qjs_script, NULL };
-#if R2__UNIX__ && !defined(__wasi__)
-		int child = fork ();
-		if (child == -1) {
-			eprintf ("Cannot find radare2 in PATH");
-			return -1;
-		}
-		if (child) {
-			int status;
-			res = waitpid (child, &status, 0);
-		} else {
-			execv (argv[0], (char *const*) argv);
-			exit (1);
-		}
-#else
-		eprintf ("r2pm.QJS support is experimental\n");
-		res = 1;
-#endif
-		// run script!
-		free (qjs_script);
-		free (srcdir);
-		return res;
-	}
-#if R2__WINDOWS__
-	char *script = r2pm_get (pkg, "\nR2PM_INSTALL_WINDOWS() {\n", TT_CODEBLOCK);
-	if (!script) {
-		R_LOG_ERROR ("This package does not have R2PM_INSTALL_WINDOWS instructions");
-		return 1;
-	}
-	char *s = r_str_newf ("cd %s && cd %s && %s", srcdir, pkg, script);
-	int res = r_sandbox_system (s, 1);
-	free (s);
-#else
-	char *script = r2pm_get (pkg, "\nR2PM_INSTALL() {\n", TT_CODEBLOCK);
-	if (!script) {
-		R_LOG_ERROR ("Cannot find the R2PM_INSTALL() {} script block for '%s'", pkg);
-		free (srcdir);
-		return 1;
-	}
-	eprintf ("script (%s)\n", script);
-	char *pkgdir = r_str_newf ("%s/%s", srcdir, pkg);
-	if (!r_file_is_directory (pkgdir)) {
-		R_LOG_ERROR ("Cannot find directory: %s", pkgdir);
-		free (pkgdir);
-		return 1;
-	}
-	free (pkgdir);
-	char *s = r_str_newf ("cd '%s/%s'\nexport MAKE=make\nR2PM_FAIL(){\n  echo $@\n}\n%s", srcdir, pkg, script);
-	int res = r_sandbox_system (s, 1);
-	free (s);
-	if (res == 0) {
-		r2pm_register (pkg, global);
-	}
-#endif
-	free (srcdir);
-	return res;
-}
 
 static int r2pm_doc_pkg(const char *pkg) {
 	char *docstr = r2pm_get (pkg, "\nR2PM_DOC=\"", TT_ENDQUOTE);
@@ -558,6 +489,7 @@ static bool download(const char *url, const char *outfile) {
 		free (tool);
 		return res == 0;
 	}
+	R_LOG_ERROR ("Please install `curl` or `wget`");
 	return false;
 }
 
@@ -591,6 +523,10 @@ static int r2pm_clone(const char *pkg) {
 			free (url);
 		} else {
 			char *url = r2pm_get (pkg, "\nR2PM_TGZ", TT_TEXTLINE);
+			if (!url) {
+				free (srcdir);
+				return 1;
+			}
 			const char *filename = r_file_basename (url);
 			char *outfile = r_str_newf ("%s/%s", srcdir, filename);
 			r_sys_mkdirp (srcdir);
@@ -610,6 +546,94 @@ static int r2pm_clone(const char *pkg) {
 	}
 	free (srcdir);
 	return 0;
+}
+
+static int r2pm_install_pkg(const char *pkg, bool global) {
+	R_LOG_INFO ("Starting install for %s", pkg);
+	char *deps = r2pm_get (pkg, "\nR2PM_DEPS ", TT_TEXTLINE);
+	if (deps) {
+		char *dep;
+		RListIter *iter;
+		RList *l = r_str_split_list (deps, " ", 0);
+		r_list_foreach (l, iter, dep) {
+			if (r2pm_clone (dep) == 0) {
+				r2pm_install_pkg (dep, false); // XXX get current pkg global value
+			} else {
+				R_LOG_ERROR ("Cannot clone %s", dep);
+			}
+		}
+	}
+	char *srcdir = r2pm_gitdir ();
+	r2pm_setenv ();
+	R_LOG_DEBUG ("Entering %s", srcdir);
+	char *qjs_script = r2pm_get (pkg, "\nR2PM_INSTALL_QJS() {\n", TT_CODEBLOCK);
+	if (qjs_script) {
+		int res = 0;
+		const char *const argv[5] = { "radare2", "-j", "-e", qjs_script, NULL };
+#if R2__UNIX__ && !defined(__wasi__)
+		int child = fork ();
+		if (child == -1) {
+			eprintf ("Cannot find radare2 in PATH");
+			return -1;
+		}
+		if (child) {
+			int status;
+			res = waitpid (child, &status, 0);
+		} else {
+			execv (argv[0], (char *const*) argv);
+			exit (1);
+		}
+#else
+		eprintf ("r2pm.QJS support is experimental\n");
+		res = 1;
+#endif
+		// run script!
+		free (qjs_script);
+		free (srcdir);
+		return res;
+	}
+#if R2__WINDOWS__
+	char *script = r2pm_get (pkg, "\nR2PM_INSTALL_WINDOWS() {\n", TT_CODEBLOCK);
+	if (!script) {
+		R_LOG_ERROR ("This package does not have R2PM_INSTALL_WINDOWS instructions");
+		return 1;
+	}
+	char *s = r_str_newf ("cd %s && cd %s && %s", srcdir, pkg, script);
+	int res = r_sandbox_system (s, 1);
+	free (s);
+#else
+	char *script = r2pm_get (pkg, "\nR2PM_INSTALL() {\n", TT_CODEBLOCK);
+	if (!script) {
+		R_LOG_ERROR ("Cannot find the R2PM_INSTALL() {} script block for '%s'", pkg);
+		free (srcdir);
+		return 1;
+	}
+	eprintf ("script (%s)\n", script);
+	char *pkgdir = r_str_newf ("%s/%s", srcdir, pkg);
+	if (!r_file_is_directory (pkgdir)) {
+		R_LOG_ERROR ("Cannot find directory: %s", pkgdir);
+		free (pkgdir);
+		return 1;
+	}
+	free (pkgdir);
+	char *s = r_str_newf ("cd '%s/%s'\nexport MAKE=make\nR2PM_FAIL(){\n  echo $@\n}\n%s", srcdir, pkg, script);
+	int res = r_sandbox_system (s, 1);
+	free (s);
+	if (res == 0) {
+		r2pm_register (pkg, global);
+	}
+#endif
+	free (srcdir);
+	return res;
+}
+
+static bool r2pm_have_packages(void) {
+	char *gpath = r2pm_gitdir ();
+	char *pmpath = r_str_newf ("%s/%s", gpath, "radare2-pm");
+	bool res = r_file_is_directory (pmpath);
+	free (gpath);
+	free (pmpath);
+	return res;
 }
 
 static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, bool global) {
@@ -638,6 +662,10 @@ static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, 
 		r_sys_setenv ("GLOBAL", "0");
 		r_sys_setenv ("R2PM_SUDO", "");
 	}
+	if (!r2pm_have_packages ()) {
+		R_LOG_ERROR ("Please run r2pm -U to initialize/update the database");
+		return 1;
+	}
 	r_list_foreach (targets, iter, t) {
 		if (R_STR_ISEMPTY (t)) {
 			continue;
@@ -648,8 +676,12 @@ static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, 
 		if (clean) {
 			r2pm_clean_pkg (t);
 		}
-		r2pm_clone (t);
-		rc |= r2pm_install_pkg (t, global);
+		if (r2pm_clone (t) == 0) {
+			rc |= r2pm_install_pkg (t, global);
+		} else {
+			R_LOG_ERROR ("Cannot clone %s", t);
+			rc = 1;
+		}
 	}
 	return rc;
 }
