@@ -9,6 +9,9 @@
 #include "../js_require.c"
 #include "../js_r2papi.c"
 
+static R_TH_LOCAL JSContext *Gctx = NULL;
+static R_TH_LOCAL JSValue Gfunc;
+
 typedef struct {
 	JSContext *ctx;
 	JSRuntime *r;
@@ -88,6 +91,93 @@ static JSValue b64(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst
 	free (ret);
 	return v;
 }
+
+static int r2plugin_core_call(void *_core, const char *input) {
+	JSValueConst args[1] = {
+		JS_NewString (Gctx, input)
+	};
+	JSValue res = JS_Call (Gctx, Gfunc, JS_UNDEFINED, countof (args), args);
+	return JS_ToBool (Gctx, res) == 1;
+}
+
+static JSValue r2plugin_core(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+	if (Gctx) {
+		return JS_ThrowRangeError (ctx, "r2plugin core already registered (only one exists)");
+	}
+	JSRuntime *rt = JS_GetRuntime (ctx);
+	QjsContext *k = JS_GetRuntimeOpaque (rt);
+	RCore *core = k->core;
+	if (argc != 2) {
+		return JS_ThrowRangeError(ctx, "r2plugin expects two arguments");
+	}
+
+	JSValueConst args[1] = {
+		JS_NewString (ctx, "POP"),
+	};
+	JSValue res = JS_Call (ctx, argv[1], JS_UNDEFINED, countof (args), args);
+
+	// check if res is an object
+	if (!JS_IsObject (res)) {
+		return JS_ThrowRangeError(ctx, "r2plugin function must return an object");
+	}
+
+	RCorePlugin *ap = R_NEW0 (RCorePlugin);
+	JSValue name = JS_GetPropertyStr (ctx, res, "name");
+	size_t namelen;
+	const char *nameptr = JS_ToCStringLen2 (ctx, &namelen, name, false);
+	if (nameptr) {
+		ap->name = strdup (nameptr);
+	} else {
+		return JS_ThrowRangeError(ctx, "r2plugin requires the function to return an object with the `name` field");
+	}
+	JSValue desc = JS_GetPropertyStr (ctx, res, "desc");
+	const char *descptr = JS_ToCStringLen2 (ctx, &namelen, desc, false);
+	if (descptr) {
+		ap->desc = strdup (descptr);
+	}
+	JSValue license = JS_GetPropertyStr (ctx, res, "license");
+	const char *licenseptr = JS_ToCStringLen2 (ctx, &namelen, license, false);
+	if (licenseptr) {
+		ap->license = strdup (licenseptr);
+	}
+	JSValue func = JS_GetPropertyStr (ctx, res, "call");
+	if (!JS_IsFunction (ctx, func)) {
+		return JS_ThrowRangeError(ctx, "r2plugin requires the function to return an object with the `call` field to be a function");
+	}
+
+	// XXX dont do globals
+	Gctx = ctx;
+	Gfunc = func;
+
+	ap->call = r2plugin_core_call;
+	int ret = -1;
+
+	RLibStruct *lib = R_NEW0 (RLibStruct);
+	if (lib) {
+		lib->type = R_LIB_TYPE_CORE;
+		lib->data = ap;
+		lib->version = R2_VERSION;
+		ret = r_lib_open_ptr (core->lib, "qjs", NULL, lib);
+	}
+	return JS_NewBool (ctx, ret == 0);
+}
+
+static JSValue r2plugin(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+	size_t plen;
+	const char *n = JS_ToCStringLen2 (ctx, &plen, argv[0], false);
+	if (R_STR_ISNOTEMPTY (n)) {
+		if (!strcmp (n, "core")) {
+			// { name: string, call: function, license: string, desc: string }
+			// JSValue val =
+			return r2plugin_core (ctx, this_val, argc, argv);
+		} else {
+			// invalid throw exception here
+			return JS_ThrowRangeError(ctx, "invalid r2plugin type");
+		}
+	}
+	return JS_NewBool (ctx, false);
+}
+
 static JSValue r2cmd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
 	JSRuntime *rt = JS_GetRuntime (ctx);
 	QjsContext *k = JS_GetRuntimeOpaque (rt);
@@ -139,25 +229,29 @@ static JSValue js_os_read_write(JSContext *ctx, JSValueConst this_val, int argc,
 	uint64_t pos, len;
 	size_t size;
 	int ret;
-	uint8_t *buf;
 
 	if (JS_ToInt32 (ctx, &fd, argv[0])) {
 		return JS_EXCEPTION;
 	}
-	if (JS_ToIndex (ctx, &pos, argv[2]))
+	if (JS_ToIndex (ctx, &pos, argv[2])) {
 		return JS_EXCEPTION;
-	if (JS_ToIndex(ctx, &len, argv[3]))
+	}
+	if (JS_ToIndex(ctx, &len, argv[3])) {
 		return JS_EXCEPTION;
-	buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
-	if (!buf)
+	}
+	uint8_t *buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
+	if (!buf) {
 		return JS_EXCEPTION;
-	if (pos + len > size)
+	}
+	if (pos + len > size) {
 		return JS_ThrowRangeError(ctx, "read/write array buffer overflow");
-	if (magic)
-		ret = write(fd, buf + pos, len);
-	else
-		ret = read(fd, buf + pos, len);
-	return JS_NewInt64(ctx, ret);
+	}
+	if (magic) {
+		ret = write (fd, buf + pos, len);
+	} else {
+		ret = read (fd, buf + pos, len);
+	}
+	return JS_NewInt64 (ctx, ret);
 }
 
 
@@ -174,8 +268,8 @@ static int js_r2_init(JSContext *ctx, JSModuleDef *m) {
 
 
 static const JSCFunctionListEntry js_os_funcs[] = {
-	JS_CFUNC_MAGIC_DEF("read", 4, js_os_read_write, 0 ),
-	JS_CFUNC_MAGIC_DEF("write", 4, js_os_read_write, 1 ),
+	JS_CFUNC_MAGIC_DEF ("read", 4, js_os_read_write, 0 ),
+	JS_CFUNC_MAGIC_DEF ("write", 4, js_os_read_write, 1 ),
 #if 0
 	JS_CFUNC_MAGIC_DEF("setReadHandler", 2, js_os_setReadHandler, 0 ),
 	JS_CFUNC_DEF("setTimeout", 2, js_os_setTimeout ),
@@ -191,9 +285,9 @@ static int js_os_init(JSContext *ctx, JSModuleDef *m) {
 }
 
 JSModuleDef *js_init_module_os(JSContext *ctx, const char *module_name) {
-	JSModuleDef *m = JS_NewCModule(ctx, module_name, js_os_init);
+	JSModuleDef *m = JS_NewCModule (ctx, module_name, js_os_init);
 	if (m) {
-		JS_AddModuleExportList(ctx, m, js_os_funcs, countof(js_os_funcs));
+		JS_AddModuleExportList (ctx, m, js_os_funcs, countof(js_os_funcs));
 	}
 	return m;
 }
@@ -214,18 +308,14 @@ static void register_helpers(JSContext *ctx) {
 	js_init_module_os (ctx, "os");
 	JS_AddModuleExportList (ctx, m, js_r2_funcs, countof (js_r2_funcs));
 	JSValue global_obj = JS_GetGlobalObject (ctx);
-	JS_SetPropertyStr (ctx, global_obj, "b64",
-			JS_NewCFunction (ctx, b64, "b64", 1));
-	JS_SetPropertyStr (ctx, global_obj, "r2cmd",
-			JS_NewCFunction (ctx, r2cmd, "r2cmd", 1));
-	JS_SetPropertyStr (ctx, global_obj, "r2log",
-			JS_NewCFunction (ctx, r2log, "r2log", 1));
-	JS_SetPropertyStr (ctx, global_obj, "write",
-			JS_NewCFunction (ctx, js_write, "write", 1));
-	JS_SetPropertyStr (ctx, global_obj, "flush", // fflush stdout
-			JS_NewCFunction (ctx, js_flush, "flush", 1));
-	JS_SetPropertyStr (ctx, global_obj, "print", // write + newline
-			JS_NewCFunction (ctx, js_print, "print", 1));
+	JS_SetPropertyStr (ctx, global_obj, "b64", JS_NewCFunction (ctx, b64, "b64", 1));
+	JS_SetPropertyStr (ctx, global_obj, "r2cmd", JS_NewCFunction (ctx, r2cmd, "r2cmd", 1));
+	JS_SetPropertyStr (ctx, global_obj, "r2plugin", JS_NewCFunction (ctx, r2plugin, "r2plugin", 1));
+	// JS_SetPropertyStr (ctx, global_obj, "r2unplugin", JS_NewCFunction (ctx, r2unplugin, "r2unplugin", 1));
+	JS_SetPropertyStr (ctx, global_obj, "r2log", JS_NewCFunction (ctx, r2log, "r2log", 1));
+	JS_SetPropertyStr (ctx, global_obj, "write", JS_NewCFunction (ctx, js_write, "write", 1));
+	JS_SetPropertyStr (ctx, global_obj, "flush", JS_NewCFunction (ctx, js_flush, "flush", 1));
+	JS_SetPropertyStr (ctx, global_obj, "print", JS_NewCFunction (ctx, js_print, "print", 1));
 	eval (ctx, "setTimeout = (x,y) => x();");
 	eval (ctx, "function dir(x) {"
 		"console.log(JSON.stringify(x).replace(/,/g,',\\n '));"

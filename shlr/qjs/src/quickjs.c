@@ -30624,9 +30624,9 @@ typedef struct CodeContext {
     JSAtom atom;
 } CodeContext;
 
-#define M2(op1, op2)            ((op1) | ((op2) << 8))
-#define M3(op1, op2, op3)       ((op1) | ((op2) << 8) | ((op3) << 16))
-#define M4(op1, op2, op3, op4)  ((op1) | ((op2) << 8) | ((op3) << 16) | ((op4) << 24))
+#define M2(op1, op2)            (uint32_t)((op1) | ((op2) << 8))
+#define M3(op1, op2, op3)       (uint32_t)((op1) | ((op2 & 0xff) << 8) | ((op3 & 0xff) << 16))
+#define M4(op1, op2, op3, op4)  (uint32_t)((op1) | ((uint32_t)(op2 & 0xff) << 8) | ((uint32_t)(op3 & 0xff) << 16) | ((uint32_t)(op4 & 0xff) << 24))
 
 static BOOL code_match(CodeContext *s, int pos, ...)
 {
@@ -48500,7 +48500,8 @@ static JSValue js_date_constructor(JSContext *ctx, JSValueConst new_target,
     // Date(y, mon, d, h, m, s, ms)
     JSValue rv;
     int i, n;
-    double a, val;
+    double a = 0;
+    double val = 0;
 
     if (JS_IsUndefined(new_target)) {
         /* invoked as function */
