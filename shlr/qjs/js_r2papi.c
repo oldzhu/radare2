@@ -1,104 +1,208 @@
-const char *const js_r2papi_qjs = "" \
-  "G.__esModule=!0,G.Base64=G.NativePointer=G.R2Papi=void 0;var "\
-  "shell_js_1=G;function t(t){this.r2=t}t.prototype.getShell=fun"\
-  "ction(){return new shell_js_1.R2PapiShell(this)},t.prototype."\
-  "printAt=function(t,r,n){},t.prototype.clearScreen=function(){"\
-  "this.r2.cmd(\"!clear\")},t.prototype.getConfig=function(t){retu"\
-  "rn this.r2.call(\"e \"+t).trim()},t.prototype.setConfig=functio"\
-  "n(t,r){this.r2.call(\"e \"+t+\"=\"+r)},t.prototype.getRegisters=f"\
-  "unction(){return this.cmdj(\"drj\")},t.prototype.enumerateThrea"\
-  "ds=function(){return[{context:this.cmdj(\"drj\"),id:0,state:\"wa"\
-  "iting\",selected:!0}]},t.prototype.setRegisters=function(t){fo"\
-  "r(var r=0,n=Object.keys(t);r<n.length;r++){var i=n[r],o=t[i];"\
-  "this.r2.cmd(\"dr \"+i+\"=\"+o)}},t.prototype.analyzeProgram=funct"\
-  "ion(){this.r2.cmd(\"aa\")},t.prototype.hex=function(t){return t"\
-  "his.r2.cmd(\"?v \"+t).trim()},t.prototype.step=function(){retur"\
-  "n this.r2.cmd(\"ds\"),this},t.prototype.stepOver=function(){ret"\
-  "urn this.r2.cmd(\"dso\"),this},t.prototype.math=function(t){ret"\
-  "urn+this.r2.cmd(\"?v \"+t)},t.prototype.searchString=function(t"\
-  "){return this.cmdj(\"/j \"+t)},t.prototype.searchBytes=function"\
-  "(t){t=t.map(function(t){return(255&t).toString(16)}).join(\"\")"\
-  ";return this.cmdj(\"/xj \"+t)},t.prototype.binInfo=function(){t"\
-  "ry{return this.cmdj(\"ij~{bin}\")}catch(t){return{}}},t.prototy"\
-  "pe.enumerateModules=function(){return this.callj(\"dmmj\")},t.p"\
-  "rototype.skip=function(){this.r2.cmd(\"dss\")},t.prototype.ptr="\
-  "function(t){return new NativePointer(t,this)},t.prototype.cal"\
-  "l=function(t){return this.r2.call(t)},t.prototype.callj=funct"\
-  "ion(t){return JSON.parse(this.call(t))},t.prototype.cmd=funct"\
-  "ion(t){return this.r2.cmd(t)},t.prototype.cmdj=function(t){re"\
-  "turn JSON.parse(this.cmd(t))},t.prototype.log=function(t){ret"\
-  "urn this.r2.log(t)},t.prototype.clippy=function(t){this.r2.lo"\
-  "g(this.r2.cmd(\"?E \"+t))},t.prototype.ascii=function(t){this.r"\
-  "2.log(this.r2.cmd(\"?ea \"+t))},t.prototype.listFunctions=funct"\
-  "ion(){return this.cmdj(\"aflj\")},t.prototype.listFlags=functio"\
-  "n(){return this.cmdj(\"fj\")},G.R2Papi=t;var NativePointer=func"\
-  "tion(){function t(t,r){this.api=void 0===r?G.R:r,this.addr=(\""\
-  "\"+t).trim()}return t.prototype.readByteArray=function(t){retu"\
-  "rn JSON.parse(this.api.cmd(\"p8j \".concat(t,\"@\").concat(this.a"\
-  "ddr)))},t.prototype.and=function(t){return this.addr=this.api"\
-  ".call(\"?v \".concat(this.addr,\" & \").concat(t)).trim(),this},t"\
-  ".prototype.or=function(t){return this.addr=this.api.call(\"?v "\
-  "\".concat(this.addr,\" | \").concat(t)).trim(),this},t.prototype"\
-  ".add=function(t){return this.addr=this.api.call(\"?v \".concat("\
-  "this.addr,\"+\").concat(t)).trim(),this},t.prototype.sub=functi"\
-  "on(t){return this.addr=this.api.call(\"?v \".concat(this.addr,\""\
-  "-\").concat(t)).trim(),this},t.prototype.writeByteArray=functi"\
-  "on(t){return this.api.cmd(\"wx \"+t.join(\"\")),this},t.prototype"\
-  ".writeAssembly=function(t){return this.api.cmd('\"wa '.concat("\
-  "t,\" @ \").concat(this.addr)),this},t.prototype.writeCString=fu"\
-  "nction(t){return this.api.cmd('\"w '+t+'\"'),this},t.prototype."\
-  "isNull=function(){return 0==+this.addr},t.prototype.compare=f"\
-  "unction(r){return(r=\"string\"!=typeof r&&\"number\"!=typeof r?r:"\
-  "new t(r)).addr===this.addr},t.prototype.pointsToNull=function"\
-  "(){return this.readPointer().compare(0)},t.prototype.toString"\
-  "=function(){return this.addr.trim()},t.prototype.writePointer"\
-  "=function(t){var r=64==+this.api.getConfig(\"asm.bits\")?\"wv8\":"\
-  "\"wv4\";this.api.cmd(\"\".concat(r,\" \").concat(t,\"@\").concat(this"\
-  "))},t.prototype.readPointer=function(){return 64==+this.api.g"\
-  "etConfig(\"asm.bits\")?new t(this.api.call(\"pv8@\"+this.addr)):n"\
-  "ew t(this.api.call(\"pv4@\"+this.addr))},t.prototype.readU8=fun"\
-  "ction(){return+this.api.cmd('pv1@\"'.concat(this.addr))},t.pro"\
-  "totype.readU16=function(){return+this.api.cmd('pv2@\"'.concat("\
-  "this.addr))},t.prototype.readU32=function(){return+this.api.c"\
-  "md('pv4@\"'.concat(this.addr))},t.prototype.readU64=function()"\
-  "{return+this.api.cmd('pv8@\"'.concat(this.addr))},t.prototype."\
-  "writeInt=function(t){return+this.api.cmd(\"wv4 \".concat(t,\"@\")"\
-  ".concat(this.addr))},t.prototype.writeU8=function(t){return t"\
-  "his.api.cmd(\"wv1 \".concat(t,\"@\").concat(this.addr)),!0},t.pro"\
-  "totype.writeU16=function(t){return this.api.cmd(\"wv2 \".concat"\
-  "(t,\"@\").concat(this.addr)),!0},t.prototype.writeU32=function("\
-  "t){return this.api.cmd(\"wv4 \".concat(t,\"@\").concat(this.addr)"\
-  "),!0},t.prototype.writeU64=function(t){return this.api.cmd(\"w"\
-  "v8 \".concat(t,\"@\").concat(this.addr)),!0},t.prototype.readInt"\
-  "=function(){return+this.api.cmd('pv4@\"'.concat(this.addr))},t"\
-  ".prototype.readCString=function(){return JSON.parse(this.api."\
-  "cmd(\"psj@\".concat(this.addr))).string},t.prototype.instructio"\
-  "n=function(){return this.api.cmdj(\"aoj@\".concat(this.addr))[0"\
-  "]},t.prototype.analyzeFunction=function(){this.api.cmd(\"af@\"+"\
-  "this.addr)},t.prototype.name=function(){return this.api.cmd(\""\
-  "fd \"+this.addr).trim()},t.prototype.basicBlock=function(){ret"\
-  "urn this.api.cmdj(\"abj@\"+this.addr)},t.prototype.functionBasi"\
-  "cBlocks=function(){return this.api.cmdj(\"afbj@\"+this.addr)},t"\
-  ".prototype.xrefs=function(){return this.api.cmdj(\"axtj@\"+this"\
-  ".addr)},t}(),Base64=(G.NativePointer=NativePointer,function()"\
-  "{function t(){}return t.encode=function(t){return(0,G.b64)(t)"\
-  "},t.decode=function(t){return(0,G.b64)(t,!0)},t}()),Base64=(G"\
-  ".Base64=Base64,G.__esModule=!0,G.R2PapiShell=void 0,function("\
-  "){function t(t){this.rp=t}return t.prototype.mkdir=function(t"\
-  ",r){return!0===r?this.rp.call(\"mkdir -p \".concat(t)):this.rp."\
-  "call(\"mkdir \".concat(t)),!0},t.prototype.unlink=function(t){r"\
-  "eturn this.rp.call(\"rm \".concat(t)),!0},t.prototype.chdir=fun"\
-  "ction(t){return this.rp.call(\"cd \".concat(t)),!0},t.prototype"\
-  ".ls=function(){return this.rp.call(\"ls -q\").trim().split(\"\\n\""\
-  ")},t.prototype.fileExists=function(t){return!1},t.prototype.o"\
-  "pen=function(t){this.rp.call(\"open \".concat(t))},t.prototype."\
-  "system=function(t){return this.rp.call(\"!\".concat(t)),0},t.pr"\
-  "ototype.run=function(t){return this.rp.call(\"rm \".concat(t)),"\
-  "0},t.prototype.mount=function(t,r){return this.rp.call(\"m \".c"\
-  "oncat(t,\" \").concat(r)),!0},t.prototype.umount=function(t){th"\
-  "is.rp.call(\"m-\".concat(t))},t.prototype.chdir2=function(t){re"\
-  "turn this.rp.call(\"mdq \".concat(t=void 0===t?\"/\":t)),!0},t.pr"\
-  "ototype.ls2=function(t){return this.rp.call(\"mdq \".concat(t=v"\
-  "oid 0===t?\"/\":t)).trim().split(\"\\n\")},t.prototype.enumerateMo"\
-  "untpoints=function(){return this.rp.cmdj(\"mlj\")},t}());G.R2Pa"\
-  "piShell=Base64;\n";
+static const char *const js_r2papi_qjs = "" \
+  "Object.defineProperty(G,\"__esModule\",{value:!0}),G.Base64=G.N"\
+  "ativePointer=G.R2Papi=void 0;const shell_js_1=G;G.R2Papi=clas"\
+  "s{constructor(t){this.r2=t}jsonToTypescript(t,s){let e=`inter"\
+  "face ${t} {\n`;s.length&&0<s.length&&(s=s[0]);for(let t of Obj"\
+  "ect.keys(s))e+=`    ${t}: ${typeof s[t]};\n`;return e+`}\n`}new"\
+  "Map(t,s,e,i,r,n=\"\"){this.cmd(`om ${t} ${s} ${e} ${i} ${r} `+n"\
+  ")}at(t){return new NativePointer(t)}getShell(){return new she"\
+  "ll_js_1.R2PapiShell(this)}version(){return this.r2.cmd(\"?Vq\")"\
+  ".trim()}platform(){return this.r2.cmd(\"uname\").trim()}arch(){"\
+  "return this.r2.cmd(\"uname -a\").trim()}bits(){return this.r2.c"\
+  "md(\"uname -b\").trim()}id(){return+this.r2.cmd(\"?vi:$p\")}print"\
+  "At(t,s,e){}clearScreen(){return this.r2.cmd(\"!clear\"),this}ge"\
+  "tConfig(t){return this.r2.call(\"e \"+t).trim()}setConfig(t,s){"\
+  "return this.r2.call(\"e \"+t+\"=\"+s),this}getRegisters(){return "\
+  "this.cmdj(\"drj\")}resizeFile(t){return this.cmd(\"r \"+t),this}i"\
+  "nsertNullBytes(t,s){return this.cmd(`r+${t}@`+(s=void 0===s?\""\
+  "$$\":s)),this}removeBytes(t,s){return this.cmd(`r-${t}@`+(s=vo"\
+  "id 0===s?\"$$\":s)),this}seek(t){return this.cmd(\"s \"+t),this}g"\
+  "etBlockSize(){return+this.cmd(\"b\")}setBlockSize(t){return thi"\
+  "s.cmd(\"b \"+t),this}enumerateThreads(){return[{context:this.cm"\
+  "dj(\"drj\"),id:0,state:\"waiting\",selected:!0}]}currentThreadId("\
+  "){return+this.cmd(\"e cfg.debug\")?+this.cmd(\"dpt.\"):this.id()}"\
+  "setRegisters(t){for(var s of Object.keys(t)){var e=t[s];this."\
+  "r2.cmd(\"dr \"+s+\"=\"+e)}}hex(t){return this.r2.cmd(\"?v \"+t).tri"\
+  "m()}step(){return this.r2.cmd(\"ds\"),this}stepOver(){return th"\
+  "is.r2.cmd(\"dso\"),this}math(t){return+this.r2.cmd(\"?v \"+t)}ste"\
+  "pUntil(t){this.cmd(\"dsu \"+t)}searchDisasm(t){return this.call"\
+  "j(\"/ad \"+t)}searchString(t){return this.cmdj(\"/j \"+t)}searchB"\
+  "ytes(t){t=t.map(function(t){return(255&t).toString(16)}).join"\
+  "(\"\");return this.cmdj(\"/xj \"+t)}binInfo(){try{return this.cmd"\
+  "j(\"ij~{bin}\")}catch(t){return{}}}selectBinary(t){this.call(\"o"\
+  "b \"+t)}openFile(t){this.call(\"o \"+t)}enumeratePlugins(t){swit"\
+  "ch(t){case\"bin\":return this.callj(\"Lij\");case\"io\":return this"\
+  ".callj(\"Loj\");case\"core\":return this.callj(\"Lcj\");case\"anal\":"\
+  "return this.callj(\"Laj\");case\"lang\":return this.callj(\"Llj\")}"\
+  "return[]}enumerateModules(){return this.callj(\"dmmj\")}enumera"\
+  "teFiles(){return this.callj(\"oj\")}enumerateBinaries(){return "\
+  "this.callj(\"obj\")}enumerateMaps(){return this.callj(\"omj\")}en"\
+  "umerateSymbols(){return this.callj(\"isj\")}enumerateExports(){"\
+  "return this.callj(\"iEj\")}enumerateImports(){return this.callj"\
+  "(\"iij\")}enumerateLibraries(){return this.callj(\"ilj\")}enumera"\
+  "teSections(){return this.callj(\"iSj\")}enumerateSegments(){ret"\
+  "urn this.callj(\"iSSj\")}enumerateEntrypoints(){return this.cal"\
+  "lj(\"iej\")}enumerateRelocations(){return this.callj(\"irj\")}enu"\
+  "merateFunctions(){return this.cmdj(\"aflj\")}enumerateFlags(){r"\
+  "eturn this.cmdj(\"fj\")}skip(){this.r2.cmd(\"dss\")}ptr(t){return"\
+  " new NativePointer(t,this)}call(t){return this.r2.call(t)}cal"\
+  "lj(t){return JSON.parse(this.call(t))}cmd(t){return this.r2.c"\
+  "md(t)}cmdj(t){return JSON.parse(this.cmd(t))}log(t){return th"\
+  "is.r2.log(t)}clippy(t){this.r2.log(this.r2.cmd(\"?E \"+t))}asci"\
+  "i(t){this.r2.log(this.r2.cmd(\"?ea \"+t))}};class NativePointer"\
+  "{constructor(t,s){this.api=void 0===s?G.R:s,this.addr=(\"\"+t)."\
+  "trim()}hexdump(t){return this.api.cmd(`x${void 0===t?\"\":\"\"+t}"\
+  "@`+this.addr)}functionGraph(t){return\"dot\"===t?this.api.cmd(\""\
+  "agfd@ \"+this.addr):\"json\"===t?this.api.cmd(\"agfj@\"+this.addr)"\
+  ":\"mermaid\"===t?this.api.cmd(\"agfm@\"+this.addr):this.api.cmd(\""\
+  "agf@\"+this.addr)}readByteArray(t){return JSON.parse(this.api."\
+  "cmd(`p8j ${t}@`+this.addr))}and(t){return this.addr=this.api."\
+  "call(`?v ${this.addr} & `+t).trim(),this}or(t){return this.ad"\
+  "dr=this.api.call(`?v ${this.addr} | `+t).trim(),this}add(t){r"\
+  "eturn this.addr=this.api.call(`?v ${this.addr}+`+t).trim(),th"\
+  "is}sub(t){return this.addr=this.api.call(`?v ${this.addr}-`+t"\
+  ").trim(),this}writeByteArray(t){return this.api.cmd(\"wx \"+t.j"\
+  "oin(\"\")),this}writeAssembly(t){return this.api.cmd(`\"wa ${t} "\
+  "@ `+this.addr),this}writeCString(t){return this.api.call(\"w \""\
+  "+t),this}isNull(){return 0==+this.addr}compare(t){return(t=\"s"\
+  "tring\"!=typeof t&&\"number\"!=typeof t?t:new NativePointer(t))."\
+  "addr===this.addr}pointsToNull(){return this.readPointer().com"\
+  "pare(0)}toString(){return this.addr.trim()}writePointer(t){va"\
+  "r s=64==+this.api.getConfig(\"asm.bits\")?\"wv8\":\"wv4\";this.api."\
+  "cmd(s+` ${t}@`+this)}readPointer(){return 64==+this.api.getCo"\
+  "nfig(\"asm.bits\")?new NativePointer(this.api.call(\"pv8@\"+this."\
+  "addr)):new NativePointer(this.api.call(\"pv4@\"+this.addr))}rea"\
+  "dU8(){return+this.api.cmd('pv1@\"'+this.addr)}readU16(){return"\
+  "+this.api.cmd('pv2@\"'+this.addr)}readU32(){return+this.api.cm"\
+  "d('pv4@\"'+this.addr)}readU64(){return+this.api.cmd('pv8@\"'+th"\
+  "is.addr)}writeInt(t){return+this.api.cmd(`wv4 ${t}@`+this.add"\
+  "r)}writeU8(t){return this.api.cmd(`wv1 ${t}@`+this.addr),!0}w"\
+  "riteU16(t){return this.api.cmd(`wv2 ${t}@`+this.addr),!0}writ"\
+  "eU32(t){return this.api.cmd(`wv4 ${t}@`+this.addr),!0}writeU6"\
+  "4(t){return this.api.cmd(`wv8 ${t}@`+this.addr),!0}readInt(){"\
+  "return+this.api.cmd('pv4@\"'+this.addr)}readCString(){return J"\
+  "SON.parse(this.api.cmd(\"psj@\"+this.addr)).string}instruction("\
+  "){return this.api.cmdj(\"aoj@\"+this.addr)[0]}disassemble(t){re"\
+  "turn this.api.cmd(`pd ${void 0===t?\"\":\"\"+t}@`+this.addr)}anal"\
+  "yzeFunction(){return this.api.cmd(\"af@\"+this.addr),this}analy"\
+  "zeFunctionRecursively(){return this.api.cmd(\"afr@\"+this.addr)"\
+  ",this}analyzeProgram(t){switch(t=void 0===t?0:t){case 0:this."\
+  "api.cmd(\"aa\");break;case 1:this.api.cmd(\"aaa\");break;case 2:t"\
+  "his.api.cmd(\"aaaa\");break;case 3:this.api.cmd(\"aaaaa\")}return"\
+  " this}name(){return this.api.cmd(\"fd \"+this.addr).trim()}basi"\
+  "cBlock(){return this.api.cmdj(\"abj@\"+this.addr)}functionBasic"\
+  "Blocks(){return this.api.cmdj(\"afbj@\"+this.addr)}xrefs(){retu"\
+  "rn this.api.cmdj(\"axtj@\"+this.addr)}}G.NativePointer=NativePo"\
+  "inter;G.Base64=class{static encode(t){return(0,G.b64)(t)}stat"\
+  "ic decode(t){return(0,G.b64)(t,!0)}},Object.defineProperty(G,"\
+  "\"__esModule\",{value:!0}),G.R2PapiShell=void 0;G.R2PapiShell=c"\
+  "lass{constructor(t){this.rp=t}mkdir(t,s){return!0===s?this.rp"\
+  ".call(\"mkdir -p \"+t):this.rp.call(\"mkdir \"+t),!0}unlink(t){re"\
+  "turn this.rp.call(\"rm \"+t),!0}chdir(t){return this.rp.call(\"c"\
+  "d \"+t),!0}ls(){return this.rp.call(\"ls -q\").trim().split(\"\\n\""\
+  ")}fileExists(t){return!1}open(t){this.rp.call(\"open \"+t)}syst"\
+  "em(t){return this.rp.call(\"!\"+t),0}run(t){return this.rp.call"\
+  "(\"rm \"+t),0}mount(t,s){return this.rp.call(`m ${t} `+s),!0}um"\
+  "ount(t){this.rp.call(\"m-\"+t)}chdir2(t){return this.rp.call(\"m"\
+  "dq \"+(t=void 0===t?\"/\":t)),!0}ls2(t){return this.rp.call(\"mdq"\
+  " \"+(t=void 0===t?\"/\":t)).trim().split(\"\\n\")}enumerateMountpoi"\
+  "nts(){return this.rp.cmdj(\"mlj\")}isSymlink(t){return!1}isDire"\
+  "ctory(t){return!1}},Object.defineProperty(G,\"__esModule\",{val"\
+  "ue:!0}),G.EsilParser=G.EsilNode=G.EsilToken=void 0;class Esil"\
+  "Token{constructor(t,s){this.label=\"\",this.comment=\"\",this.tex"\
+  "t=\"\",this.addr=\"0\",this.position=0,this.text=t,this.position="\
+  "s}toString(){return this.text}}G.EsilToken=EsilToken;class Es"\
+  "ilNode{constructor(t,s){this.token=t,this.type=s,this.childre"\
+  "n=[]}setSides(t,s){this.lhs=t,this.rhs=s}addChildren(t,s){voi"\
+  "d 0!==t&&this.children.push(t),void 0!==s&&this.children.push"\
+  "(s)}toEsil(){if(void 0===this.lhs||void 0===this.rhs)return t"\
+  "his.token.text;{let t=this.lhs.toEsil();return\"\"!==t&&(t+=\",\""\
+  "),this.rhs.toEsil()+\",\"+t+this.token}}toString(){let t=\"\";if("\
+  "\"\"!==this.token.label&&(t+=this.token.label+\":\\n\"),this.token"\
+  ".addr,\"\"!==this.token.comment&&(t+=\"/*\"+this.token.comment+\"*"\
+  "/\\n\"),\"GOTO\"===this.token.toString()&&(0<this.children.length"\
+  "?t+=\"goto label_\"+this.children[0].token.position+\";\\n\":t+=`g"\
+  "oto label_0;\n`),0<this.children.length){t+=`  (if (${this.rhs"\
+  "})\n`;for(var s of this.children)null!==s&&\"\"!=(s=s.toString()"\
+  ")&&(t+=`  ${s}\n`);t+=\"  )\\n\"}return void 0!==this.lhs&&void 0"\
+  "!==this.rhs?t+`    ( ${this.lhs} ${this.token} ${this.rhs} )`"\
+  ":t+this.token.toString()}}G.EsilNode=EsilNode;G.EsilParser=cl"\
+  "ass{constructor(t){this.cur=0,this.r2=t,this.cur=0,this.stack"\
+  "=[],this.nodes=[],this.tokens=[],this.root=new EsilNode(new E"\
+  "silToken(\"function\",0),\"block\")}toJSON(){if(0<this.stack.leng"\
+  "th)throw new Error(\"The ESIL stack is not empty\");return JSON"\
+  ".stringify(this.root,null,2)}toEsil(){return this.nodes.map(t"\
+  "=>t.toEsil()).join(\",\")}optimizeFlags(t){void 0!==t.rhs&&this"\
+  ".optimizeFlags(t.rhs),void 0!==t.lhs&&this.optimizeFlags(t.lh"\
+  "s);for(let s=0;s<t.children.length;s++)this.optimizeFlags(t.c"\
+  "hildren[s]);var s=t.toString();4096<+s&&\"\"!=(s=r2.cmd(\"fd.@ \""\
+  "+s).trim().split(\"\\n\")[0].trim())&&-1===s.indexOf(\"+\")&&(t.to"\
+  "ken.text=s)}optimize(t){-1!=t.indexOf(\"flag\")&&this.optimizeF"\
+  "lags(this.root)}toString(){return this.root.children.map(t=>t"\
+  ".toString()).join(\";\\n\")}reset(){this.nodes=[],this.stack=[],"\
+  "this.tokens=[],this.cur=0,this.root=new EsilNode(new EsilToke"\
+  "n(\"function\",0),\"block\")}parseRange(t,s){let e=t;for(;e<this."\
+  "tokens.length&&e<s;){const t=this.peek(e);if(!t)break;this.cu"\
+  "r=e,this.pushToken(t),e=this.cur,e++}}parse(t,s){const e=t.tr"\
+  "im().split(\",\").map(t=>t.trim()),i=this.tokens.length;for(let"\
+  " t of e){const e=new EsilToken(t,this.tokens.length);void 0!="\
+  "=s&&(e.addr=s),this.tokens.push(e)}t=this.tokens.length;this."\
+  "parseRange(i,t)}peek(t){return this.tokens[t]}pushToken(t){if"\
+  "(this.isNumber(t)){var s=new EsilNode(t,\"number\");this.stack."\
+  "push(s),this.nodes.push(s)}else if(this.isInternal(t)){const "\
+  "s=new EsilNode(t,\"flag\");this.stack.push(s),this.nodes.push(s"\
+  ")}else if(!this.isOperation(t)){const s=new EsilNode(t,\"regis"\
+  "ter\");this.stack.push(s),this.nodes.push(s)}}isNumber(t){retu"\
+  "rn!!t.toString().startsWith(\"0\")||0<+t}isInternal(t){t=t.toSt"\
+  "ring();return t&&t.startsWith(\"$\")&&1<t.length}parseUntil(t){"\
+  "t+=1;let e=t;const i=[],r=this.nodes.length;for(this.stack.fo"\
+  "rEach(t=>i.push(t));e<this.tokens.length;){const t=this.peek("\
+  "e);if(!t)break;if(\"}\"===t.toString())break;if(\"}{\"===t.toStri"\
+  "ng())break;e++}this.stack=i;var n=e;return this.parseRange(t,"\
+  "n),this.nodes.length==r?null:this.nodes[this.nodes.length-1]}"\
+  "getNodeFor(t){if(void 0!==this.peek(t)){for(var s of this.nod"\
+  "es)if(s.token.position===t)return s;this.nodes.push(new EsilN"\
+  "ode(new EsilToken(\"label\",t),\"label\"))}return null}findNodeFo"\
+  "r(t){for(var s of this.nodes)if(s.token.position===t)return s"\
+  ";return null}isOperation(t){switch(t.toString()){case\"[1]\":ca"\
+  "se\"[2]\":case\"[4]\":case\"[8]\":if(!(1<=this.stack.length))throw "\
+  "new Error(\"Stack needs more items\");{const t=this.stack.pop()"\
+  ";new EsilNode(t.token,\"operation\"),this.stack.push(t)}return!"\
+  "0;case\"!\":var s,e,i;if(1<=this.stack.length)return s=new Esil"\
+  "Node(new EsilToken(\"\",t.position),\"none\"),e=this.stack.pop(),"\
+  "(i=new EsilNode(t,\"operation\")).setSides(s,e),this.stack.push"\
+  "(i),!0;throw new Error(\"Stack needs more items\");case\"\":case\""\
+  "}\":case\"}{\":return!0;case\"DUP\":{if(this.stack.length<1)throw "\
+  "new Error(\"goto cant pop\");const t=this.stack.pop();this.stac"\
+  "k.push(t),this.stack.push(t)}return!0;case\"GOTO\":if(null!==th"\
+  "is.peek(t.position-1)){if(this.stack.length<1)throw new Error"\
+  "(\"goto cant pop\");const s=this.stack.pop();if(null!==s){const"\
+  " e=0|+s.toString();if(0<e){const s=this.peek(e);if(null!==s){"\
+  "s.label=\"label_\"+e,s.comment=\"hehe\";const i=new EsilNode(t,\"g"\
+  "oto\"),r=this.getNodeFor(s.position);null!=r&&i.children.push("\
+  "r),this.root.children.push(i)}else console.error(\"Cannot find"\
+  " goto node\")}else console.error(\"Cannot find dest node for go"\
+  "to\")}}return!0;case\"?{\":if(!(1<=this.stack.length))throw new "\
+  "Error(\"Stack needs more items\");{const s=new EsilNode(new Esi"\
+  "lToken(\"if\",t.position),\"none\"),e=this.stack.pop(),i=new Esil"\
+  "Node(t,\"operation\");i.setSides(s,e);let r=this.parseUntil(t.p"\
+  "osition),n=null;null!==r&&(i.children.push(r),this.nodes.push"\
+  "(r),null!==(n=this.parseUntil(r.token.position+1)))&&(i.child"\
+  "ren.push(n),this.nodes.push(n)),this.nodes.push(i),this.root."\
+  "children.push(i),null!==n&&(this.cur=n.token.position)}return"\
+  "!0;case\"-\":if(!(2<=this.stack.length))throw new Error(\"Stack "\
+  "needs more items\");{const s=this.stack.pop(),e=this.stack.pop"\
+  "(),i=new EsilNode(t,\"operation\");i.setSides(s,e),this.stack.l"\
+  "ength,this.stack.push(i),this.nodes.push(i)}return!0;case\"<\":"\
+  "case\">\":case\"^\":case\"&\":case\"|\":case\"+\":case\"*\":case\"/\":case\""\
+  ">>=\":case\"<<=\":case\">>>=\":case\"<<<=\":case\">>>>=\":case\"<<<<=\":"\
+  "if(!(2<=this.stack.length))throw new Error(\"Stack needs more "\
+  "items\");{const s=this.stack.pop(),e=this.stack.pop(),i=new Es"\
+  "ilNode(t,\"operation\");i.setSides(s,e),this.stack.length,this."\
+  "stack.push(i),this.nodes.push(i)}return!0;case\"=\":case\":=\":ca"\
+  "se\"-=\":case\"+=\":case\"==\":case\"=[1]\":case\"=[2]\":case\"=[4]\":cas"\
+  "e\"=[8]\":if(!(2<=this.stack.length))throw new Error(\"Stack nee"\
+  "ds more items\");{const s=this.stack.pop(),e=this.stack.pop(),"\
+  "i=new EsilNode(t,\"operation\");i.setSides(s,e),0===this.stack."\
+  "length&&this.root.children.push(i),this.nodes.push(i)}return!"\
+  "0}return!1}};\n";
