@@ -56,9 +56,22 @@ jobs:
         name: linux-static
         path: r2-static.tar.xz
 
+  linux-acr-rpm-64:
+    # if: contains(github.ref, 'master') || contains(github.ref, 'ci-')
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Packaging for Debian
+      run: make -C dist/rpm
+    - name: Pub
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-acr-rpm-64
+        path: dist/rpm/*.rpm
   linux-acr-deb-64:
     # if: contains(github.ref, 'master') || contains(github.ref, 'ci-')
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -73,7 +86,7 @@ jobs:
         path: dist/debian/*/*.deb
 
   linux-acr-deb-32:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -93,7 +106,7 @@ jobs:
 
 ## RPM PACKAGES DISABLED
 #  linux-meson-rpm:
-#    runs-on: ubuntu:18.04
+#    runs-on: ubuntu:20.04
 #    container: centos:8
 #    steps:
 #    - name: Checkout
@@ -112,7 +125,7 @@ jobs:
 #        path: RPMS/*/*.rpm *.rpm dist/rpm/*.rpm
 #
 #  centos-meson-rpm:
-#    runs-on: ubuntu:18.04
+#    runs-on: ubuntu:20.04
 #    container: centos:8
 #    steps:
 #    - name: Checkout

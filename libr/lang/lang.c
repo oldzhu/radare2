@@ -9,6 +9,7 @@ R_LIB_VERSION (r_lang);
 #if HAVE_SYSTEM
 #include "p/pipe.c"
 #include "p/c.c"
+#include "p/s.c"
 #include "p/v.c"
 #include "p/vala.c"
 #include "p/rust.c"
@@ -17,6 +18,7 @@ R_LIB_VERSION (r_lang);
 #include "p/cpipe.c"
 #endif
 #endif
+#include "p/asm.c"
 #include "p/go.c"
 #include "p/lib.c"
 #include "p/qjs.c"
@@ -43,6 +45,7 @@ R_API RLang *r_lang_new(void) {
 	lang->cb_printf = (PrintfCallback)printf;
 #if HAVE_SYSTEM
 #if R2__UNIX__
+	r_lang_add (lang, &r_lang_plugin_s);
 	r_lang_add (lang, &r_lang_plugin_c);
 	r_lang_add (lang, &r_lang_plugin_cpipe);
 #endif
@@ -55,6 +58,7 @@ R_API RLang *r_lang_new(void) {
 	r_lang_add (lang, &r_lang_plugin_go);
 	r_lang_add (lang, &r_lang_plugin_spp);
 	r_lang_add (lang, &r_lang_plugin_lib);
+	r_lang_add (lang, &r_lang_plugin_asm);
 	r_lang_add (lang, &r_lang_plugin_qjs);
 	r_lang_add (lang, &r_lang_plugin_tsc);
 
