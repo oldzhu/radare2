@@ -62,6 +62,9 @@ static inline char *getformat(RCoreVisualTypes *vt, const char *k) {
 }
 
 static char *colorize_asm_string(RCore *core, const char *buf_asm, int optype, ut64 addr) {
+	if (!buf_asm) {
+		return NULL;
+	}
 	char *tmp, *spacer = NULL;
 	char *source = (char*)buf_asm;
 	bool use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
@@ -377,6 +380,7 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 	memcpy (buf, core->block + cur, sizeof (ut64));
 	for (;;) {
 		RAnalOp asmop;
+		r_anal_op_init (&asmop);
 		// RAnalOp asmop;
 		r_cons_clear00 ();
 		bool use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
@@ -539,6 +543,14 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 				int y = R_MIN (x + 8, nbits - 8);
 				x = y - y % 8;
 			}
+			break;
+		case 'J':
+			r_core_cmd_call (core, "s+8");
+			memcpy (buf, core->block + cur, sizeof (ut64));
+			break;
+		case 'K':
+			r_core_cmd_call (core, "s-8");
+			memcpy (buf, core->block + cur, sizeof (ut64));
 			break;
 		case 'j':
 		case 'k':
