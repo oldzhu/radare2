@@ -23,7 +23,8 @@ static bool isAnExport(RBinSymbol *s) {
 static int r_core_cmd_subst_i(RCore *core, char *cmd, char* colon, bool *tmpseek);
 
 static int bb_cmpaddr(const void *_a, const void *_b) {
-	const RAnalBlock *a = _a, *b = _b;
+	const RAnalBlock *a = _a;
+	const RAnalBlock *b = _b;
 	return a->addr > b->addr ? 1 : (a->addr < b->addr ? -1 : 0);
 }
 
@@ -1474,7 +1475,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					}
 				} else {
 					if (r_file_is_executable (file)) {
-						r_core_cmdf (core, "#!pipe %s%s", (*file=='/')?"":"./", file);
+						r_core_cmdf (core, "#!pipe %s%s", (*file == '/')?"":"./", file);
 						ret = true;
 					} else {
 						ret = r_core_cmd_file (core, file);
@@ -1492,7 +1493,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					ret = 1;
 				} else {
 					if (r_file_is_executable (file)) {
-						r_core_cmdf (core, "#!pipe %s%s", (*file=='/')?"":"./", file);
+						r_core_cmdf (core, "#!pipe %s%s", (*file == '/')?"":"./", file);
 						ret = 1;
 					}
 				}

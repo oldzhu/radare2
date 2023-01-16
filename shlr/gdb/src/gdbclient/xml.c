@@ -294,6 +294,7 @@ static int gdbr_parse_target_xml(libgdbr_t *g, char *xml_data, ut64 len) {
 		case 32:
 			if (!(profile = r_str_prepend (profile,
 						     "=PC	eip\n"
+						     "=A0	eax\n"
 						     "=SP	esp\n"
 						     "=BP	ebp\n"))) {
 				goto exit_err;
@@ -302,6 +303,7 @@ static int gdbr_parse_target_xml(libgdbr_t *g, char *xml_data, ut64 len) {
 		case 64:
 			if (!(profile = r_str_prepend (profile,
 						     "=PC	rip\n"
+						     "=A0	rax\n"
 						     "=SP	rsp\n"
 						     "=BP	rbp\n"))) {
 				goto exit_err;
@@ -852,15 +854,15 @@ static RList *_extract_regs(char *regstr, RList *flags, char *pc_alias) {
 			}
 			// We need type information in r2 register profiles
 		}
-		// Move unidentified vector/large registers from gpr to xmm since r2 set/get
+		// Move unidentified vector/large registers from gpr to vec128 since r2 set/get
 		// registers doesn't support >64bit registers atm(but it's still possible to
 		// read them using gdbr's implementation through dr/drt)
 		if (regsize > 64 && !strcmp (regtype, "gpr")) {
-			regtype = "xmm";
+			regtype = "vec128";
 		}
-		// Move appropriately sized unidentified xmm registers from fpu to xmm
+		// Move appropriately sized unidentified xmm registers from fpu to vec128
 		if (regsize == 128 && !strcmp (regtype, "fpu")) {
-			regtype = "xmm";
+			regtype = "vec128";
 		}
 		if (!(tmpreg = calloc (1, sizeof (gdbr_xml_reg_t)))) {
 			goto exit_err;
