@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2009-2022 - nibble, pancake, xvilka */
+/* radare2 - LGPL - Copyright 2009-2023 - nibble, pancake, xvilka */
 
 #ifndef R2_ANAL_H
 #define R2_ANAL_H
@@ -335,6 +335,7 @@ typedef enum {
 
 /* meta */
 typedef struct r_anal_meta_item_t {
+	// XXX missing size
 	RAnalMetaType type;
 	int subtype;
 	char *str;
@@ -1680,7 +1681,6 @@ extern RAnalPlugin r_anal_plugin_kvx;
 extern RAnalPlugin r_anal_plugin_lh5801;
 extern RAnalPlugin r_anal_plugin_m68k_cs;
 extern RAnalPlugin r_anal_plugin_m680x_cs;
-extern RAnalPlugin r_anal_plugin_mcore;
 extern RAnalPlugin r_anal_plugin_mips_cs;
 extern RAnalPlugin r_anal_plugin_mips_gnu;
 extern RAnalPlugin r_anal_plugin_loongarch_gnu;
