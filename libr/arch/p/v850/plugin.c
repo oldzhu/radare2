@@ -1,4 +1,4 @@
-/* radare - MIT - Copyright 2021-2022 - pancake, brainstorm */
+/* radare - MIT - Copyright 2021-2023 - pancake, brainstorm, condret */
 
 #include <r_lib.h>
 #include <r_anal.h>
@@ -148,6 +148,35 @@ static const char * const esil_conds[] = {
 	[V850_COND_GE]	= "s,ov,^,!",
 	[V850_COND_GT]	= "s,ov,^,z,|,!",
 };
+
+static char *get_sysreg(ut32 regid) {
+	//TODO: check cpu-model
+	switch (regid) {
+	case 0:
+		return "eipc";
+	case 1:
+		return "eipsw";
+	case 2:
+		return "fepc";
+	case 3:
+		return "fepsw";
+	case 4:
+		return "ecr";
+	case 5:
+		return "psw";
+	case 16:
+		return "ctpc";
+	case 17:
+		return "ctpsw";
+	case 18:
+		return "dbpc";
+	case 19:
+		return "dbpsw";
+	case 20:
+		return "ctbp";
+	}
+	return NULL;
+}
 
 static void update_flags(RAnalOp *op, int flags) {
 	if (flags & V850_FLAG_CY) {
@@ -481,6 +510,34 @@ static int v850e0_op(RArchSession *a, RAnalOp *op, ut64 addr, const ut8 *buf, in
 			r_strbuf_appendf (&op->esil, "%s,%s,:=", esil_conds[F3_COND (word1)], F9_RN2 (word1));
 			// update flags here?
 			break;
+		case V850_EXT_LDSR:
+			{
+				const ut32 regid = (word1 & 0xf800) >> 11;
+				if (regid == 4) {
+					break;
+				}
+				const char *sr = get_sysreg (regid);
+				if (!sr) {
+					break;
+				}
+				op->type = R_ANAL_OP_TYPE_LOAD;
+				r_strbuf_appendf (&op->esil, "%s,%s,:=", F9_RN1 (word1), sr);
+				if (regid == 5) {
+					r_strbuf_append (&op->esil, "0,sat,:=");
+					clear_flags (op, -1);
+				}
+			}
+			break;
+		case V850_EXT_STSR:
+			{
+				const char *sr = get_sysreg ((word1 & 0xf800) >> 11);
+				if (!sr) {
+					break;
+				}
+				op->type = R_ANAL_OP_TYPE_STORE;
+				r_strbuf_appendf (&op->esil, "%s,%s,:=", sr, F9_RN1 (word1));
+			}
+			break;
 		case V850_EXT_SHL:
 			op->type = R_ANAL_OP_TYPE_SHL;
 			r_strbuf_appendf (&op->esil, "%s,%s,<<=", F9_RN1(word1), F9_RN2(word1));
@@ -500,6 +557,15 @@ static int v850e0_op(RArchSession *a, RAnalOp *op, ut64 addr, const ut8 *buf, in
 			r_strbuf_appendf (&op->esil, "31,%s,>>,?{,%s,32,-,%s,1,<<,--,<<,}{,0,},%s,%s,>>,|,%s,=", reg2, reg1, reg1, reg1, reg2, reg2);
 			update_flags (op, V850_FLAG_CY | V850_FLAG_S | V850_FLAG_Z);
 			clear_flags (op, V850_FLAG_OV);
+			break;
+		case V850_EXT_RETI:
+			op->type = R_ANAL_OP_TYPE_RCJMP;
+			r_strbuf_append (&op->esil, "epi,!,npi,&,?{,fepc,pc,:=,fepsw,psw,:=,BREAK,},eipc,pc,:=,eipsw,psw,:=");
+			break;
+		case V850_EXT_EXT2:
+			//ei and di
+			op->type = R_ANAL_OP_TYPE_MOV;
+			r_strbuf_appendf (&op->esil, "%d,id,:=", (word2 >> 13) & 1);
 			break;
 		}
 		break;
