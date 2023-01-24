@@ -1,4 +1,4 @@
-project('radare2', 'c', license : 'LGPL3', meson_version : '>=0.49', version : '5.8.2')
+project('radare2', 'c', license : 'LGPL3', meson_version : '>=0.49', version : '5.8.3')
 
 py3_exe = import('python').find_installation('python3')
 git_exe = find_program('git', required: false)
@@ -679,6 +679,7 @@ if cli_enabled
     'man/ragg2.1',
     'man/rahash2.1',
     'man/rarun2.1',
+    'man/rasign2.1',
     'man/rasm2.1',
     'man/rax2.1',
     'man/ravc2.1',
