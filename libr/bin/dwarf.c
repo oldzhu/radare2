@@ -1529,6 +1529,7 @@ static void free_attr_value(RBinDwarfAttrValue *val) {
 	switch (val->attr_form) {
 	case DW_FORM_strp:
 	case DW_FORM_string:
+	case DW_FORM_line_strp:
 		R_FREE (val->string.content);
 		break;
 	case DW_FORM_exprloc:
@@ -1880,7 +1881,7 @@ static const ut8 *parse_attr_value(const ut8 *obuf, int obuf_len, RBinDwarfAttrD
 		ut8 *section = NULL;
 		section = get_section_bytes (bin, section_name, &section_len);
 		if (section && value->string.offset < section_len) {
-			char *ds = r_str_ndup ((const char *)(section + value->string.offset), section_len);
+			char *ds = r_str_ndup ((const char *)(section + value->string.offset), section_len - value->string.offset);
 			if (ds) {
 				r_str_ansi_strip (ds);
 				r_str_replace_ch (ds, '\n', 0, true);
