@@ -270,7 +270,10 @@ extern RArchPlugin r_arch_plugin_v850;
 extern RArchPlugin r_arch_plugin_propeller;
 extern RArchPlugin r_arch_plugin_mcore;
 extern RArchPlugin r_arch_plugin_nios2;
+extern RArchPlugin r_arch_plugin_or1k;
 extern RArchPlugin r_arch_plugin_evm;
+extern RArchPlugin r_arch_plugin_ws;
+extern RArchPlugin r_arch_plugin_lua;
 
 #ifdef __cplusplus
 }
