@@ -19,6 +19,7 @@ arch_plugins = [ 'null',
   'any_as',
   'any_vasm',
   'jdh8',
+  'xtensa',
   'xap',
   'mcore',
   'riscv',
@@ -93,7 +94,7 @@ if not no_user_plugins
     parse_plugins += [ 'v850_pseudo' ]
   endif
   if user_plugins.contains('wasm')
-    anal_plugins += [ 'wasm' ]
+    arch_plugins += [ 'wasm' ]
     parse_plugins += [ 'wasm_pseudo' ]
   endif
   if user_plugins.contains('sparc')
@@ -121,7 +122,7 @@ if not no_user_plugins
     bin_plugins += [ 'elf', 'elf64' ]
   endif
   if user_plugins.contains('pe')
-    bin_plugins += [ 'pe', 'pe64', 'coff', 'mz', 'ne' ]
+    bin_plugins += [ 'pe', 'pe64', 'coff', 'xcoff64', 'mz', 'ne' ]
     bin_xtr_plugins += [ 'xtr_pemixed' ]
   endif
   if not user_plugins.contains('nogrub')
@@ -172,10 +173,8 @@ anal_plugins += [
   'tms320',
   'tricore',
   'vax',
-  'wasm',
   'x86_cs',
-  'xcore_cs',
-  'xtensa',
+  'xcore_cs'
 ]
 
 if no_user_plugins
@@ -253,6 +252,7 @@ bin_plugins += [
   'vsf',
   'wasm',
   'xbe',
+  'xcoff64',
   'xnu_kernelcache',
   'z64',
   'zimg'

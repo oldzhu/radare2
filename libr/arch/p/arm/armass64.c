@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2015-2022 - pancake */
+/* radare - LGPL - Copyright 2015-2023 - pancake */
 
 #include <stdio.h>
 #include <string.h>
@@ -836,7 +836,8 @@ static ut32 tb(ArmOp *op) {
 	} else {
 	  	return UT32_MAX;
 	}
-	data = k | (op->operands[0].reg & 0x1f) << 24;
+	data = k;
+	data |= (op->operands[0].reg & 0x1f) << 24;
 	data |= (op->operands[1].immediate & 0x1f) << 11;
 	data |= (op->operands[2].immediate & 0x1c) << 27;
 	data |= (op->operands[2].immediate & 0x1fe0) << 11;
