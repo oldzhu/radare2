@@ -2729,7 +2729,7 @@ static void __init_autocomplete_default(RCore* core) {
 	const char *files[] = {
 		".", "..", ".*", "/F", "/m", "!", "!!", "#!c", "#!v", "#!cpipe", "#!qjs", "#!tiny", "#!vala", "v.",
 		"#!rust", "#!zig", "#!pipe", "#!python", "aeli", "arp", "arpg", "dmd", "drp", "drpg", "o", "oe", "ot", "o+", "o++", "on",
-		"idp", "idpi", "L", "obf", "o+", "oc", "of", "r2", "rabin2", "rasm2", "rahash2", "rax2",
+		"idp", "idpi", "L", "obf", "o+", "oc", "of", "r2", "rabin2", "rasm2", "rahash2", "rax2", "wff",
 		"rafind2", "cd", "ls", "lua", "on", "wf", "rm", "wF", "wp", "Sd", "Sl", "to", "pm",
 		"/m", "zos", "zfd", "zfs", "zfz", "cat", "wta", "wtf", "wxf", "dml", "dd", "dd+",
 		"vi", "vim", "nvi", "neovim", "nvim", "nano",
@@ -3116,15 +3116,18 @@ R_API bool r_core_init(RCore *core) {
 	r_asm_set_user_ptr (core->rasm, core);
 	core->anal = r_anal_new ();
 #if 1
+	// TODO: use r_ref_set
+	r_ref (core->rasm->config);
 	r_unref (core->print->config);
-	r_unref (core->anal->config);
-	r_unref (core->anal->reg->config);
-	r_ref (core->rasm->config);
 	core->print->config = core->rasm->config;
+
 	r_ref (core->rasm->config);
+	r_unref (core->anal->config);
 	core->anal->config = core->rasm->config;
+
 	r_ref (core->rasm->config);
-	core->anal->reg->config=core->rasm->config;
+	r_unref (core->anal->reg->config);
+	core->anal->reg->config = core->rasm->config;
 #else
 	r_ref_set (core->print->config, core->rasm->config);
 	r_ref_set (core->anal->config, core->rasm->config);
@@ -3176,6 +3179,7 @@ R_API bool r_core_init(RCore *core) {
 
 	r_bin_bind (core->bin, &(core->anal->binb));
 	r_bin_bind (core->bin, &(core->anal->arch->binb));
+	r_num_free (core->anal->arch->num);
 	core->anal->arch->num = core->num;
 	r_io_bind (core->io, &(core->search->iob));
 	r_io_bind (core->io, &(core->print->iob));
