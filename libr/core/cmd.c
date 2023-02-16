@@ -1307,6 +1307,9 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 			ret = r_core_cmd_lines (core, out);
 			free (out);
 		}
+	} else if (r_str_endswith (file, ".pk")) {
+		r_core_cmdf (core, "'poke -f %s", file);
+		ret = true;
 	} else if (r_str_endswith (file, ".html")) {
 		const bool httpSandbox = r_config_get_i (core->config, "http.sandbox");
 		char *httpIndex = strdup (r_config_get (core->config, "http.index"));
@@ -1434,7 +1437,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 					if (r_lang_use (core->lang, "qjs")) {
 						ret = r_lang_run_file (core->lang, file);
 					} else {
-						R_LOG_ERROR ("r2pm -ci rlang-qjs");
+						R_LOG_ERROR ("Cannot instantiate the quickjs runtime");
 						ret = false;
 					}
 				} else if (!strcmp (ext, "wren")) {
@@ -1766,17 +1769,17 @@ static int cmd_stdin(void *data, const char *input) {
 			break;
 		case 'a': // "-a"
 			if (R_STR_ISEMPTY (arg)) {
-				r_core_cmdf (core, "e asm.arch");
+				r_core_cmd0 (core, "e asm.arch");
 			} else {
-				r_core_cmdf (core, "e asm.arch=%s", arg);
-				r_core_cmdf (core, "e anal.arch=%s", arg);
+				r_core_cmdf (core, "'e asm.arch=%s", arg);
+				r_core_cmdf (core, "'e anal.arch=%s", arg);
 			}
 			break;
 		case 'i': // "-i"
 			r_core_cmdf (core, ". %s", arg);
 			break;
 		case 's': // "-s"
-			r_core_cmdf (core, "s %s", arg);
+			r_core_cmdf (core, "'s %s", arg);
 			break;
 		case 'f': // "-f"
 			r_core_cmd0 (core, "b $s");
@@ -3568,14 +3571,64 @@ static char *find_ch_after_macro(char *ptr, char ch) {
 	return NULL;
 }
 
+static int handle_command_call(RCore *core, const char *cmd) {
+	if (R_UNLIKELY (*cmd == '\'')) {
+		// R2_590 - deprecate "" -> use '
+		if (cmd[1] == '@') {
+			int res = 1;
+			char *arg = strdup (cmd + 1);
+			char *end = strstr (arg, "'");
+			if (!end) {
+				R_LOG_ERROR ("Invalid syntax, expected \"'@addr'command\"");
+				free (arg);
+			} else {
+				*end = 0;
+				cmd = end + 1;
+				ut64 addr = core->offset;
+				ut64 at = r_num_math (core->num, arg + 1);
+				r_core_seek (core, at, true);
+				res = r_core_cmd_call (core, cmd);
+				r_core_seek (core, addr, true);
+				free (arg);
+			}
+			return res;
+		}
+		return r_core_cmd_call (core, cmd + 1);
+	} else if (R_UNLIKELY (r_str_startswith (cmd, "\"\""))) {
+		if (cmd[2] == '@') {
+			int res = 1;
+			char *arg = strdup (cmd + 2);
+			char *end = strstr (arg, "\"\"");
+			if (!end) {
+				R_LOG_ERROR ("Invalid syntax, expected \"\"@addr\"\"command");
+				free (arg);
+			} else {
+				*end = 0;
+				cmd = end + 2;
+				ut64 addr = core->offset;
+				ut64 at = r_num_math (core->num, arg + 1);
+				r_core_seek (core, at, true);
+				res = r_core_cmd_call (core, cmd);
+				r_core_seek (core, addr, true);
+				free (arg);
+			}
+			return res;
+		}
+		return r_core_cmd_call (core, cmd + 2);
+	}
+	return -1;
+}
+
 static int r_core_cmd_subst(RCore *core, char *cmd) {
 	ut64 rep = strtoull (cmd, NULL, 10);
 	int ret = 0, orep;
 	char *colon = NULL, *icmd = NULL;
 	bool tmpseek = false;
 	bool original_tmpseek = core->tmpseek;
-	if (R_UNLIKELY (r_str_startswith (cmd, "\"\""))) {
-		return r_core_cmd_call (core, cmd + 2);
+
+	int res = handle_command_call (core, cmd);
+	if (res != -1) {
+		return res;
 	}
 	if (R_UNLIKELY (r_str_startswith (cmd, "?t\"\""))) {
 		char *c = r_str_newf ("?t\"\"%s", cmd + 4);
