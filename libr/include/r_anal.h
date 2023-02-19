@@ -741,6 +741,7 @@ enum {
 	R_ANAL_ESIL_DFG_TAG_REG = 32,
 	R_ANAL_ESIL_DFG_TAG_MEM = 64,
 	R_ANAL_ESIL_DFG_TAG_MERGE = 128,
+	R_ANAL_ESIL_DFG_TAG_SIBLING = 256,
 };	//RAnalEsilDFGTagType
 
 typedef struct r_anal_esil_dfg_t {
@@ -1711,7 +1712,6 @@ extern RAnalPlugin r_anal_plugin_evm_cs;
 extern RAnalPlugin r_anal_plugin_bpf;
 extern RAnalPlugin r_anal_plugin_hppa_gnu;
 extern RAnalPlugin r_anal_plugin_m68k_gnu;
-extern RAnalPlugin r_anal_plugin_lm32;
 
 #ifdef __cplusplus
 }
