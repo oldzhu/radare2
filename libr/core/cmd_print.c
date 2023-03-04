@@ -1149,9 +1149,7 @@ static int cmd_pdu(RCore *core, const char *input) {
 			r_core_cmd_help_match (core, help_msg_pdu, "pdua", true);
 			break;
 		}
-
 		ut64 to = r_num_get (core->num, arg);
-
 		if (!to) {
 			R_LOG_ERROR ("Couldn't parse address \"%s\"", arg);
 			ret = 1;
@@ -4903,7 +4901,7 @@ static void func_walk_blocks(RCore *core, RAnalFunction *f, char input, char typ
 	if (!b) {
 		if (r_list_length (f->bbs) >= 1) {
 			ut32 fcn_size = r_anal_function_realsize (f);
-			b = r_list_get_top (f->bbs);
+			b = r_list_last (f->bbs);
 			if (b->size > fcn_size) {
 				b->size = fcn_size;
 			}
