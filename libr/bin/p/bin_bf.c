@@ -76,7 +76,7 @@ static bool check_buffer(RBinFile *bf, RBuffer *buf) {
 		i = p - tmp;
 	}
 	for (; i < read_length; i++) {
-		switch (p[i]) {
+		switch (tmp[i]) {
 		case '+':
 		case '-':
 		case '>':

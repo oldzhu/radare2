@@ -94,6 +94,10 @@ static inline bool consume_str_new(RBuffer *b, ut64 bound, ut32 *len_out, char *
 	ut32 len = 0;
 	// module_str
 	if (consume_u32_r (b, bound, &len)) {
+		if (len > 0xffff) {
+			// avoid large allocations can be caused by fuzzed bins
+			return false;
+		}
 		char *str = (char *)malloc (len + 1);
 		if (str && consume_str_r (b, bound, len, str)) {
 			if (len_out) {
@@ -186,7 +190,7 @@ static size_t consume_init_expr_r(RBuffer *b, ut64 bound, ut8 eoc, void *out) {
 static size_t consume_locals_r(RBuffer *b, ut64 bound, RBinWasmCodeEntry *out) {
 	r_return_val_if_fail (out, 0);
 	ut32 count = out->local_count;
-	if (count <= 0) {
+	if ((st32)count <= 0) {
 		return 0;
 	}
 	out->locals = R_NEWS0 (struct r_bin_wasm_local_entry_t, count);
@@ -426,9 +430,15 @@ static inline RPVector *parse_vec(RBinWasmObj *bin, ut64 bound, ParseEntryFcn pa
 	if (count > r_buf_size (buf)) {
 		count = r_buf_size (buf) - r_buf_tell (buf);
 	}
+	if ((st32)count < 1) {
+		return NULL;
+	}
+
 	RPVector *vec = r_pvector_new (free_entry);
 	if (vec) {
-		r_pvector_reserve (vec, count);
+		if (!r_pvector_reserve (vec, count)) {
+			return NULL;
+		}
 		ut32 i;
 		for (i = 0; i < count; i++) {
 			ut64 start = r_buf_tell (buf);
@@ -898,10 +908,16 @@ static bool parse_import_sec(RBinWasmObj *bin) {
 	if (!consume_u32_r (buf, bound, &count)) {
 		return false;
 	}
+	if (count > 0xfffff) {
+		return false;
+	}
 
 	// over estimate size, shrink later
 	for (i = 0; i < R_ARRAY_SIZE (bin->g_imports_arr); i++) {
-		r_pvector_reserve (bin->g_imports_arr[i], count);
+		if (!r_pvector_reserve (bin->g_imports_arr[i], count)) {
+			R_LOG_ERROR ("Unable to allocate %d in import array", count);
+			return false;
+		}
 	}
 
 	for (i = 0; i < count; i++) {
