@@ -182,7 +182,7 @@ static inline bool za_add(RCore *core, const char *input) {
 static int cmdAdd(void *data, const char *input) {
 	RCore *core = (RCore *)data;
 	if (*input && input[1] == '?') {
-		char two[2] = {input[0], input[1]};
+		char two[3] = { input[0], input[1], 0 };
 		r_core_cmd_help_match (core, help_msg_za, two, false);
 		return 0;
 	}
@@ -291,13 +291,13 @@ static int cmdOpen(void *data, const char *input) {
 	switch (*input) {
 	case ' ':
 		if (input[1]) {
-			return r_sign_load (core->anal, input + 1, false);
+			return r_sign_load (core->anal, r_str_trim_head_ro (input + 1), false);
 		}
 		r_core_cmd_help_match (core, help_msg_zo, "zo", false);
 		return false;
 	case 's':
 		if (input[1] == ' ' && input[2]) {
-			return r_sign_save (core->anal, input + 2);
+			return r_sign_save (core->anal, r_str_trim_head_ro (input + 2));
 		}
 		r_core_cmd_help_match (core, help_msg_zo, "zos", false);
 		return false;

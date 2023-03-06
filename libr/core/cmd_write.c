@@ -844,7 +844,7 @@ static int cmd_w0(void *data, const char *input) {
 	int res = 0;
 	RCore *core = (RCore *)data;
 	ut64 len = r_num_math (core->num, input);
-	if (len > 0) {
+	if ((st64)len > 0 && len < 0xffffff) {
 		ut8 *buf = calloc (1, len);
 		if (buf) {
 			if (!r_io_write_at (core->io, core->offset, buf, len)) {
@@ -856,6 +856,8 @@ static int cmd_w0(void *data, const char *input) {
 		} else {
 			res = -1;
 		}
+	} else {
+		R_LOG_ERROR ("invalid length");
 	}
 	return res;
 }
@@ -1004,11 +1006,14 @@ static int cmd_we(void *data, const char *input) {
 		break;
 	case 'N': // "weN"
 		if (input[1] == ' ') {
-			input += 2;
-			while (*input && *input == ' ') input++;
+			input = r_str_trim_head_ro (input + 2);
 			addr = r_num_math (core->num, input);
-			while (*input && *input != ' ') input++;
-			input++;
+			while (*input && *input != ' ') {
+				input++;
+			}
+			if (*input) {
+				input++;
+			}
 			len = *input ? r_num_math (core->num, input) : 0;
 			if (len > 0) {
 				ut64 cur_off = core->offset;
@@ -1045,7 +1050,7 @@ static int cmd_we(void *data, const char *input) {
 		}
 		break;
 	case 's': // "wes"
-		input +=  2;
+		input += 2;
 		while (*input && *input == ' ') {
 			input++;
 		}
@@ -1074,12 +1079,16 @@ static int cmd_we(void *data, const char *input) {
 		break;
 	case 'X': // "weX"
 		if (input[1] == ' ') {
-			addr = r_num_math (core->num, input+2);
-			input += 2;
-			while (*input && *input != ' ') input++;
-			input++;
+			input = r_str_trim_head_ro (input + 2);
+			addr = r_num_math (core->num, input);
+			while (*input && *input != ' ') {
+				input++;
+			}
+			if (*input) {
+				input++;
+			}
 			len = *input ? strlen (input) : 0;
-			bytes = len > 1? malloc (len+1) : NULL;
+			bytes = (len > 1)? malloc (len + 1) : NULL;
 			len = bytes ? r_hex_str2bin (input, bytes) : 0;
 			if (len > 0) {
 				//ut64 cur_off = core->offset;
@@ -2074,9 +2083,9 @@ static int cmd_wX(void *data, const char *input) {
 	if (!buf) {
 		return 0;
 	}
-	len = r_hex_str2bin (input, buf);
-	if (len > 0) {
-		r_mem_copyloop (core->block, buf, core->blocksize, len);
+	int slen = r_hex_str2bin (input, buf);
+	if (slen > 0) {
+		r_mem_copyloop (core->block, buf, core->blocksize, slen);
 		if (!r_core_write_at (core, core->offset, core->block, core->blocksize)) {
 			cmd_write_fail (core);
 		} else {
@@ -2132,13 +2141,26 @@ static int cmd_wd(void *data, const char *input) {
 		if (arg) {
 			*arg = 0;
 			ut64 addr = r_num_math (core->num, input + 1);
-			ut64 len = r_num_math (core->num, arg + 1);
-			ut8 *data = malloc (len);
-			r_io_read_at (core->io, addr, data, len);
-			if (!r_io_write_at (core->io, core->offset, data, len)) {
-				eprintf ("r_io_write_at failed at 0x%08" PFMT64x "\n", core->offset);
+			st64 len = r_num_math (core->num, arg + 1);
+			if (len < 1) {
+				R_LOG_ERROR ("Invalid length for wd");
+				return 0;
 			}
-			free (data);
+			if (len > 0xfffff) {
+				R_LOG_TODO ("Region is too large for wd, implement block copy");
+				return 0;
+			}
+			ut8 *data = malloc (len);
+			if (data) {
+				if (r_io_read_at (core->io, addr, data, len)) {
+					if (!r_io_write_at (core->io, core->offset, data, len)) {
+						R_LOG_ERROR ("r_io_write_at failed at 0x%08" PFMT64x, core->offset);
+					}
+				} else {
+					R_LOG_ERROR ("r_io_read_at: cannot read bytes");
+				}
+				free (data);
+			}
 		} else {
 			eprintf ("See wd?\n");
 		}
