@@ -130,6 +130,10 @@ R_API int r_reg_type_by_name(const char *str) {
 	return -1;
 }
 
+static void r_reg_item_unref(RRegItem *item) {
+	r_unref (item);
+}
+
 R_API void r_reg_item_free(RRegItem *item) {
 	if (item) {
 		// TODO use unref here :?
@@ -241,7 +245,7 @@ R_API void r_reg_free_internal(RReg *reg, bool init) {
 		}
 		if (init) {
 			r_list_free (reg->regset[i].regs);
-			reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_free);
+			reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_unref);
 		} else {
 			r_list_free (reg->regset[i].regs);
 			reg->regset[i].regs = NULL;
@@ -322,7 +326,7 @@ R_API RReg *r_reg_init(RReg *reg) {
 			return NULL;
 		}
 		reg->regset[i].pool = r_list_newf ((RListFree)r_reg_arena_free);
-		reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_free);
+		reg->regset[i].regs = r_list_newf ((RListFree)r_reg_item_unref);
 		r_list_push (reg->regset[i].pool, arena);
 		reg->regset[i].arena = arena;
 	}
@@ -369,7 +373,7 @@ R_API void r_reg_set_copy(RRegSet *d, RRegSet *s) {
 	RRegArena *a;
 	RListIter *iter;
 	d->pool = r_list_newf ((RListFree)r_reg_arena_free);
-	d->regs = r_list_newf ((RListFree)r_reg_item_free);
+	d->regs = r_list_newf ((RListFree)r_reg_item_unref);
 	r_list_foreach (s->pool, iter, a) {
 		RRegArena *na = r_reg_arena_clone (a);
 		r_list_append (d->pool, na);
