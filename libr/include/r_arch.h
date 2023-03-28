@@ -317,7 +317,10 @@ extern RArchPlugin r_arch_plugin_pic;
 extern RArchPlugin r_arch_plugin_arm_v35;
 extern RArchPlugin r_arch_plugin_cris;
 extern RArchPlugin r_arch_plugin_cr16;
-
+extern RArchPlugin r_arch_plugin_arc;
+extern RArchPlugin r_arch_plugin_pdp11;
+extern RArchPlugin r_arch_plugin_lh5801;
+extern RArchPlugin r_arch_plugin_ebc;
 
 #ifdef __cplusplus
 }

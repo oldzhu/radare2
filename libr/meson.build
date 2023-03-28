@@ -6,6 +6,9 @@ esil_plugins = [ 'dummy' ]
 asm_plugins = [ 'null' ]
 anal_plugins = [ 'null' ]
 arch_plugins = [ 'null',
+  # 'arc',
+  'lh5801',
+  'ebc',
   'sh',
   'x86_nz',
   'alpha',
@@ -152,18 +155,15 @@ if no_user_plugins
 anal_plugins += [
   '6502_cs',
   '8051',
-  # 'arc',
   'arm_cs',
   'avr',
   'bf',
   'chip8',
   'dalvik',
-  'ebc',
   'gb',
   'h8300',
   'i8080',
   'java',
-  'lh5801',
   'loongarch_gnu',
   'm68k_cs',
   'm68k_gnu',
@@ -185,13 +185,13 @@ if no_user_plugins
       'mips_gnu',
       'loongarch_gnu',
       's390_gnu',
-      'pdp11_gnu',
       'ppc_gnu',
       'm68k_gnu',
       'sparc_gnu',
     ]
     arch_plugins += [
       'z80',
+      'pdp11',
       'lanai'
     ]
   endif

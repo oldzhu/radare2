@@ -1197,13 +1197,13 @@ end:
 	return ret;
 }
 
+// R2_590 - unused we can remove it
 int test_command(libgdbr_t *g, const char *command) {
 	int ret = -1;
 
 	if (!gdbr_lock_enter (g)) {
 		goto end;
 	}
-
 	if ((ret = send_msg (g, command)) < 0) {
 		goto end;
 	}
