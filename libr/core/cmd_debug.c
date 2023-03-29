@@ -1,7 +1,6 @@
-/* radare - LGPL - Copyright 2009-2022 - pancake */
+/* radare - LGPL - Copyright 2009-2023 - pancake */
 
 #include <r_core.h>
-#include <r_debug.h>
 #include <sdb/sdb.h>
 #define TN_KEY_LEN 32
 #define TN_KEY_FMT "%"PFMT64u
@@ -885,11 +884,6 @@ static bool step_until_optype(RCore *core, const char *_optypes) {
 	ut64 pc;
 	bool res = true;
 
-	if (!core || !core->dbg) {
-		R_LOG_ERROR ("Wrong state");
-		res = false;
-		goto end;
-	}
 	st64 maxsteps = r_config_get_i (core->config, "esil.maxsteps");
 	ut64 countsteps = 0;
 	if (R_STR_ISEMPTY (optypes)) {
