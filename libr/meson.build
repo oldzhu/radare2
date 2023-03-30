@@ -7,8 +7,10 @@ asm_plugins = [ 'null' ]
 anal_plugins = [ 'null' ]
 arch_plugins = [ 'null',
   # 'arc',
+  'pyc',
   'lh5801',
   'ebc',
+  'msp430',
   'sh',
   'x86_nz',
   'alpha',
@@ -151,7 +153,6 @@ endif
 # else
 if no_user_plugins
 
-# TODO: add the pyc plugin for meson builds too
 anal_plugins += [
   '6502_cs',
   '8051',
@@ -169,7 +170,6 @@ anal_plugins += [
   'm68k_gnu',
   'm680x_cs',
   'mips_cs',
-  'msp430',
   'ppc_cs',
   'sparc_cs',
   's390_cs',
