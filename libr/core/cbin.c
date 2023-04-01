@@ -579,13 +579,16 @@ static void _print_strings(RCore *r, RList *list, PJ *pj, int mode, int va) {
 	} else if (IS_MODE_SET (mode)) {
 		r_cons_break_pop ();
 	} else if (IS_MODE_NORMAL (mode)) {
+		bool show_table = true;
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			show_table = r_table_query (table, r->table_query);
 		}
-		char *s = r_table_tostring (table);
-		if (s) {
-			r_cons_print (s);
-			free (s);
+		if (show_table) {
+			char *s = r_table_tostring (table);
+			if (s) {
+				r_cons_print (s);
+				free (s);
+			}
 		}
 	}
 	r_table_free (table);
@@ -887,14 +890,16 @@ static int bin_info(RCore *r, PJ *pj, int mode, ut64 laddr) {
 				r_config_set (r->config, "asm.abi", info->abi);
 			}
 			// we can take the eabi from bin.features from arm (f.ex eabi4 eabi5)
-			r_config_set (r->config, "asm.arch", info->arch);
-			r_config_set (r->config, "anal.arch", info->arch);
+			if (info->arch) {
+				r_config_set (r->config, "asm.arch", info->arch);
+				r_config_set (r->config, "anal.arch", info->arch);
+				snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
+				r_config_set (r->config, "asm.bits", str);
+			}
 			// r_config_set (r->config, "arch.decoder", info->arch);
 			if (R_STR_ISNOTEMPTY (info->charset)) {
 				r_config_set (r->config, "cfg.charset", info->charset);
 			}
-			snprintf (str, R_FLAG_NAME_SIZE, "%i", info->bits);
-			r_config_set (r->config, "asm.bits", str);
 			r_config_set (r->config, "asm.dwarf",
 				(R_BIN_DBG_STRIPPED & info->dbg_info) ? "false" : "true");
 			if (R_STR_ISNOTEMPTY (info->cpu)) {
@@ -1961,14 +1966,16 @@ static int bin_relocs(RCore *r, PJ *pj, int mode, int va) {
 		pj_end (pj);
 	}
 	if (IS_MODE_NORMAL (mode)) {
+		bool show_table = true;
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			show_table = r_table_query (table, r->table_query);
 		}
-		char *s = r_table_tostring (table);
-		r_cons_printf ("\n%s\n", s);
-		free (s);
-		r_cons_printf ("\n%i relocations\n", i);
-
+		if (show_table) {
+			char *s = r_table_tostring (table);
+			r_cons_printf ("\n%s\n", s);
+			free (s);
+			r_cons_printf ("\n%i relocations\n", i);
+		}
 	}
 
 	r_table_free (table);
@@ -2032,7 +2039,7 @@ R_DEPRECATE static RBinSymbol *get_import(RBin *bin, RList *symbols, const char 
 	return res;
 }
 #else
-static RList *osymbols = NULL;
+static R_TH_LOCAL RList *osymbols = NULL;
 static RBinSymbol *get_symbol(RBin *bin, RList *symbols, const char *name, ut64 addr) {
 	RBinSymbol *symbol;
 	RListIter *iter;
@@ -2053,17 +2060,17 @@ static RBinSymbol *get_symbol(RBin *bin, RList *symbols, const char *name, ut64 
 
 /* XXX: This is a hack to get PLT references in rabin2 -i */
 R_API ut64 r_core_bin_impaddr(RBin *bin, int va, const char *name) {
-	RList *symbols;
-
+	r_return_val_if_fail (bin, UT64_MAX);
+	ut64 addr = UT64_MAX;
 	if (!name || !*name) {
-		return false;
+		return addr;
 	}
-	if (!(symbols = r_bin_get_symbols (bin))) {
-		return false;
+	RList *symbols = r_bin_get_symbols (bin);
+	if (!symbols) {
+		return addr;
 	}
 	RBinSymbol *s = get_import (bin, symbols, name, 0LL);
 	// maybe ut64_MAX to indicate import not found?
-	ut64 addr = 0LL;
 	if (s) {
 		if (va) {
 			if (s->paddr == UT64_MAX) {
@@ -2135,8 +2142,7 @@ static int bin_imports(RCore *r, PJ *pj, int mode, int va, const char *name) {
 				r_meta_set (r->anal, R_META_TYPE_DATA, addr, cdsz, NULL);
 			}
 		} else if (IS_MODE_SIMPLE (mode)) {
-			r_cons_printf ("%s%s%s\n",
-					r_str_get (libname), libname ? " " : "", symname);
+			r_cons_printf ("%s%s%s\n", r_str_get (libname), libname ? " " : "", symname);
 		} else if (IS_MODE_SIMPLEST (mode)) {
 			r_cons_println (symname);
 		} else if (IS_MODE_JSON (mode)) {
@@ -2157,7 +2163,9 @@ static int bin_imports(RCore *r, PJ *pj, int mode, int va, const char *name) {
 			if (libname) {
 				pj_ks (pj, "libname", libname);
 			}
-			pj_kn (pj, "plt", addr);
+			if (addr && addr != UT64_MAX) {
+				pj_kn (pj, "plt", addr);
+			}
 			pj_end (pj);
 		} else if (IS_MODE_RAD (mode)) {
 			// TODO(eddyb) symbols that are imports.
@@ -2187,12 +2195,15 @@ static int bin_imports(RCore *r, PJ *pj, int mode, int va, const char *name) {
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	} else if (IS_MODE_NORMAL (mode)) {
+		bool show_table = true;
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			show_table = r_table_query (table, r->table_query);
 		}
-		char *s = r_table_tostring (table);
-		r_cons_printf ("%s\n", s);
-		free (s);
+		if (show_table) {
+			char *s = r_table_tostring (table);
+			r_cons_printf ("%s\n", s);
+			free (s);
+		}
 	}
 
 	r_table_free (table);
@@ -2615,7 +2626,10 @@ next:
 	}
 	if (IS_MODE_NORMAL (mode)) {
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			if (!r_table_query (table, r->table_query)) {
+				r_table_free (table);
+				return false;
+			}
 		}
 		char *s = r_table_tostring (table);
 		r_cons_printf ("\n%s", s);
@@ -2908,10 +2922,11 @@ static int bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at,
 		}
 		RTable *table = r_core_table (r, "sections");
 		r_table_visual_list (table, list, r->offset, -1, cols, r->io->va);
+		bool show_table = true;
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			show_table = r_table_query (table, r->table_query);
 		}
-		{
+		if (show_table) {
 			char *s = r_table_tostring (table);
 			r_cons_printf ("\n%s\n", s);
 			free (s);
@@ -3220,12 +3235,15 @@ static int bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at,
 	ret = true;
 out:
 	if (IS_MODE_NORMAL (mode)) {
+		bool show_table = true;
 		if (r->table_query) {
-			r_table_query (table, r->table_query);
+			show_table = r_table_query (table, r->table_query);
 		}
-		char *s = r_table_tostring (table);
-		r_cons_printf ("\n%s\n", s);
-		free (s);
+		if (show_table) {
+			char *s = r_table_tostring (table);
+			r_cons_printf ("\n%s\n", s);
+			free (s);
+		}
 	}
 	free (hashtypes);
 	r_table_free (table);
@@ -4369,14 +4387,11 @@ static bool bin_header(RCore *r, int mode) {
 }
 
 R_API bool r_core_bin_info(RCore *core, int action, PJ *pj, int mode, int va, RCoreBinFilter *filter, const char *chksum) {
+	const char *name = (filter && filter->name)? filter->name : NULL;
 	bool ret = true;
-	const char *name = NULL;
 	ut64 at = UT64_MAX, loadaddr = r_bin_get_laddr (core->bin);
 	if (filter && filter->offset) {
 		at = filter->offset;
-	}
-	if (filter && filter->name) {
-		name = filter->name;
 	}
 	// XXX this makes r2dec very slow (25s vs 80s)
 	// r_core_bin_export_info (core, R_MODE_SET);
