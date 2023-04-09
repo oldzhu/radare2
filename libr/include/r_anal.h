@@ -268,6 +268,7 @@ typedef struct r_anal_function_meta_t {
 
 typedef struct r_anal_function_t {
 	char *name;
+	// R2_590: add realname for the mangled one
 	int bits; // ((> bits 0) (set-bits bits))
 	int type;
 	const char *cc; // calling convention, should come from RAnal.constpool
@@ -1593,7 +1594,6 @@ extern RAnalPlugin r_anal_plugin_x86_udis;
 extern RAnalPlugin r_anal_plugin_xcore_cs;
 extern RAnalPlugin r_anal_plugin_pickle;
 extern RAnalPlugin r_anal_plugin_evm_cs;
-extern RAnalPlugin r_anal_plugin_hppa_gnu;
 extern RAnalPlugin r_anal_plugin_m68k_gnu;
 
 #ifdef __cplusplus

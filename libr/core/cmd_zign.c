@@ -434,7 +434,7 @@ static void apply_name(RCore *core, RAnalFunction *fcn, RSignItem *it, bool rad)
 	if (rad) {
 		char *tmp = r_name_filter_dup (name);
 		if (tmp) {
-			r_cons_printf ("\"afn %s @ 0x%08" PFMT64x "\"\n", tmp, fcn->addr);
+			r_cons_printf ("\"\"@0x%08"PFMT64x"\"\"afn %s\n", fcn->addr, tmp);
 			free (tmp);
 		}
 		return;
@@ -734,7 +734,7 @@ static bool search(RCore *core, bool rad, bool only_func) {
 		}
 	}
 	print_ctx_hits (&ctx);
-	return ctx.count > 0? true: false;
+	return ctx.count > 0;
 }
 
 static void print_possible_matches(RList *list, bool json, RCore *core) {
@@ -843,11 +843,11 @@ static bool bestmatch_fcn(RCore *core, const char *input, bool json) {
 	}
 	free (argv);
 
-	if (!r_config_get_i (core->config, "zign.bytes")) {
+	if (!r_config_get_b (core->config, "zign.bytes")) {
 		r_sign_bytes_free (it->bytes);
 		it->bytes = NULL;
 	}
-	if (!r_config_get_i (core->config, "zign.graph")) {
+	if (!r_config_get_b (core->config, "zign.graph")) {
 		r_sign_graph_free (it->graph);
 		it->graph = NULL;
 	}
@@ -886,7 +886,7 @@ static bool bestmatch_sig(RCore *core, const char *input, bool json) {
 		return false;
 	}
 
-	if (r_config_get_i (core->config, "zign.bytes")) {
+	if (r_config_get_b (core->config, "zign.bytes")) {
 		r_sign_addto_item (core->anal, item, fcn, R_SIGN_BYTES);
 		RSignBytes *b = item->bytes;
 		int minsz = r_config_get_i (core->config, "zign.minsz");
@@ -894,7 +894,7 @@ static bool bestmatch_sig(RCore *core, const char *input, bool json) {
 			R_LOG_WARN ("Function signature is too small (%d < %d) See e zign.minsz", b->size, minsz);
 		}
 	}
-	if (r_config_get_i (core->config, "zign.graph")) {
+	if (r_config_get_b (core->config, "zign.graph")) {
 		r_sign_addto_item (core->anal, item, fcn, R_SIGN_GRAPH);
 	}
 
@@ -947,7 +947,6 @@ static bool bestmatch(void *data, const char *input) {
 static bool _sig_bytediff_cb(RLevBuf *va, RLevBuf *vb, ut32 ia, ut32 ib) {
 	RSignBytes *a = (RSignBytes *)va->buf;
 	RSignBytes *b = (RSignBytes *)vb->buf;
-
 	if ((a->bytes[ia] & a->mask[ia]) == (b->bytes[ib] & b->mask[ib])) {
 		return false;
 	}
