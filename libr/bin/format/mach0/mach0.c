@@ -1214,20 +1214,14 @@ static int parse_function_starts(struct MACH0_(obj_t) *bin, ut64 off) {
 
 static int parse_dylib(struct MACH0_(obj_t) *bin, ut64 off) {
 	struct dylib_command dl;
-	int lib, len;
+	int len;
 	ut8 sdl[sizeof (struct dylib_command)] = {0};
 
 	if (off > bin->size || off + sizeof (struct dylib_command) > bin->size) {
 		return false;
 	}
-	lib = bin->nlibs - 1;
 
-	void *relibs = realloc (bin->libs, bin->nlibs * R_BIN_MACH0_STRING_LENGTH);
-	if (!relibs) {
-		r_sys_perror ("realloc (libs)");
-		return false;
-	}
-	bin->libs = relibs;
+	char lib[R_BIN_MACH0_STRING_LENGTH] = {0};
 	len = r_buf_read_at (bin->b, off, sdl, sizeof (struct dylib_command));
 	if (len < 1) {
 		bprintf ("Error: read (dylib)\n");
@@ -1245,14 +1239,14 @@ static int parse_dylib(struct MACH0_(obj_t) *bin, ut64 off) {
 		return false;
 	}
 
-	memset (bin->libs[lib], 0, R_BIN_MACH0_STRING_LENGTH);
 	len = r_buf_read_at (bin->b, off + dl.dylib.name,
-		(ut8*)bin->libs[lib], R_BIN_MACH0_STRING_LENGTH - 1);
-	bin->libs[lib][R_BIN_MACH0_STRING_LENGTH - 1] = 0;
+		(ut8*) lib, R_BIN_MACH0_STRING_LENGTH - 1);
 	if (len < 1) {
 		bprintf ("Error: read (dylib str)");
 		return false;
 	}
+
+	r_pvector_push (&bin->libs_cache, r_str_ndup (lib, R_BIN_MACH0_STRING_LENGTH));
 	return true;
 }
 
@@ -1730,6 +1724,8 @@ static int init_items(struct MACH0_(obj_t) *bin) {
 	bin->uuidn = 0;
 	bin->os = 0;
 	bin->has_crypto = 0;
+	r_pvector_init (&bin->libs_cache, (RPVectorFree) free);
+
 	if (bin->hdr.sizeofcmds > bin->size) {
 		R_LOG_WARN ("chopping hdr.sizeofcmds because it's larger than the file size");
 		bin->hdr.sizeofcmds = bin->size - 128;
@@ -2147,6 +2143,8 @@ static bool init(struct MACH0_(obj_t) *mo) {
 		R_LOG_WARN ("Cannot initialize items");
 	}
 	mo->baddr = MACH0_(get_baddr)(mo);
+	mo->libs_loaded = true;
+	r_pvector_shrink (&mo->libs_cache);
 	return true;
 }
 
@@ -2172,13 +2170,18 @@ void *MACH0_(mach0_free)(struct MACH0_(obj_t) *mo) {
 	free (mo->dyld_info);
 	free (mo->toc);
 	free (mo->modtab);
-	free (mo->libs);
+	if (mo->libs_loaded) {
+		r_pvector_fini (&mo->libs_cache);
+	}
 	free (mo->func_start);
 	free (mo->signature);
 	free (mo->intrp);
 	free (mo->compiler);
 	r_list_free (mo->symbols_cache);
 	r_list_free (mo->sections_cache);
+	if (mo->imports_loaded) {
+		r_pvector_fini (&mo->imports_cache);
+	}
 	if (mo->chained_starts) {
 		for (i = 0; i < mo->nsegs && i < mo->segs_count; i++) {
 			if (mo->chained_starts[i]) {
@@ -2593,7 +2596,7 @@ static bool parse_import_stub(struct MACH0_(obj_t) *bin, struct symbol_t *symbol
 	return false;
 }
 
-static int inSymtab(HtPP *hash, const char *name, ut64 addr) {
+static int hash_find_or_insert(HtPP *hash, const char *name, ut64 addr) {
 	bool found = false;
 	char *key = r_str_newf ("%"PFMT64x".%s", addr, name);
 	ht_pp_find (hash, key, &found);
@@ -2827,7 +2830,7 @@ const RList *MACH0_(get_symbols_list)(struct MACH0_(obj_t) *bin) {
 		RListIter *it;
 		RBinSymbol *s;
 		r_list_foreach (list, it, s) {
-			inSymtab (hash, s->name, s->vaddr);
+			hash_find_or_insert (hash, s->name, s->vaddr);
 		}
 	}
 
@@ -2925,7 +2928,7 @@ const RList *MACH0_(get_symbols_list)(struct MACH0_(obj_t) *bin) {
 			} else {
 				sym->name = r_str_newf ("unk%u", (ut32)i);
 			}
-			if (!inSymtab (hash, sym->name, sym->vaddr)) {
+			if (!hash_find_or_insert (hash, sym->name, sym->vaddr)) {
 				r_list_append (list, sym);
 			} else {
 				r_bin_symbol_free (sym);
@@ -2976,7 +2979,7 @@ const RList *MACH0_(get_symbols_list)(struct MACH0_(obj_t) *bin) {
 			char *sym_name = get_name (bin, st->n_strx, false);
 			if (sym_name) {
 				sym->name = sym_name;
-				if (inSymtab (hash, sym->name, sym->vaddr)) {
+				if (hash_find_or_insert (hash, sym->name, sym->vaddr)) {
 					r_bin_symbol_free (sym);
 					continue;
 				}
@@ -3009,7 +3012,7 @@ static void assign_export_symbol_t(struct MACH0_(obj_t) *bin, const char *name, 
 	if (j < sym_ctx->symbols_count) {
 		sym_ctx->symbols[j].offset = offset;
 		sym_ctx->symbols[j].addr = offset_to_vaddr (bin, offset);
-		if (inSymtab (sym_ctx->hash, name, sym_ctx->symbols[j].addr)) {
+		if (hash_find_or_insert (sym_ctx->hash, name, sym_ctx->symbols[j].addr)) {
 			return;
 		}
 		sym_ctx->symbols[j].size = 0;
@@ -3126,7 +3129,7 @@ const struct symbol_t *MACH0_(get_symbols)(struct MACH0_(obj_t) *bin) {
 						bin->main_addr = symbols[j].addr;
 					}
 				}
-				if (inSymtab (hash, symbols[j].name, symbols[j].addr)) {
+				if (hash_find_or_insert (hash, symbols[j].name, symbols[j].addr)) {
 					free (symbols[j].name);
 					symbols[j].name = NULL;
 					j--;
@@ -3169,7 +3172,7 @@ const struct symbol_t *MACH0_(get_symbols)(struct MACH0_(obj_t) *bin) {
 					symbols[j].name = r_str_newf ("entry%d", i);
 				}
 				symbols[j].last = 0;
-				if (inSymtab (hash, symbols[j].name, symbols[j].addr)) {
+				if (hash_find_or_insert (hash, symbols[j].name, symbols[j].addr)) {
 					R_FREE (symbols[j].name);
 				} else {
 					j++;
@@ -3263,54 +3266,122 @@ static int parse_import_ptr(struct MACH0_(obj_t) *bin, struct reloc_t *reloc, in
 	return false;
 }
 
-struct import_t *MACH0_(get_imports)(struct MACH0_(obj_t) *bin) {
-	r_return_val_if_fail (bin, NULL);
+static RBinImport *import_from_name(RBin *rbin, const char *orig_name) {
+	RBinImport *ptr = R_NEW0 (RBinImport);
+	if (!ptr) {
+		return NULL;
+	}
 
-	int i, j, idx, stridx;
+	char *name = (char*) orig_name;
+	const char *const _objc_class = "_OBJC_CLASS_$";
+	const char *const _objc_metaclass = "_OBJC_METACLASS_$";
+	const char * type = "FUNC";
+
+	if (r_str_startswith (name, _objc_class)) {
+		name += strlen (_objc_class);
+		type = "OBJC_CLASS";
+	} else if (r_str_startswith (name, _objc_metaclass)) {
+		name += strlen (_objc_metaclass);
+		type = "OBJC_METACLASS";
+	}
+
+	// Remove the extra underscore that every import seems to have in Mach-O.
+	if (*name == '_') {
+		name++;
+	}
+	ptr->name = r_str_ndup (name, R_BIN_MACH0_STRING_LENGTH - 1);
+	ptr->bind = "NONE";
+	ptr->type = r_str_constpool_get (&rbin->constpool, type);
+	return ptr;
+}
+
+static void check_for_special_import_names(struct MACH0_(obj_t) *bin, RBinImport *import) {
+	const char *name = import->name;
+	if (*name == '_') {
+		if (!strcmp (name, "__stack_chk_fail") ) {
+			bin->has_canary = true;
+		}
+		if (!strcmp (name, "__asan_init") || !strcmp (name, "__tsan_init")) {
+			bin->has_sanitizers = true;
+		}
+		if (!strcmp (name, "_NSConcreteGlobalBlock")) {
+			bin->has_blocks_ext = true;
+		}
+	}
+}
+
+const RPVector *MACH0_(load_imports)(RBinFile *bf, struct MACH0_(obj_t) *bin) {
+	r_return_val_if_fail (bin, NULL);
+	if (bin->imports_loaded) {
+		return &bin->imports_cache;
+	}
+
+	bin->imports_loaded = true;
+	r_pvector_init (&bin->imports_cache, (RPVectorFree) r_bin_import_free);
+
+	ut32 nundefsym = bin->dysymtab.nundefsym;
+	if (nundefsym < 1 || nundefsym > 0xfffff) {
+		return NULL;
+	}
+
+	r_pvector_reserve (&bin->imports_cache, nundefsym);
+
 	if (!bin->sects || !bin->symtab || !bin->symstr || !bin->indirectsyms) {
 		return NULL;
 	}
 
-	if (bin->dysymtab.nundefsym < 1 || bin->dysymtab.nundefsym > 0xfffff) {
-		return NULL;
-	}
-
-	struct import_t *imports = calloc (bin->dysymtab.nundefsym + 1, sizeof (struct import_t));
-	if (!imports) {
-		return NULL;
-	}
-	for (i = j = 0; i < bin->dysymtab.nundefsym; i++) {
-		idx = bin->dysymtab.iundefsym + i;
+	int i, num_imports;
+	for (i = num_imports = 0; i < nundefsym; i++) {
+		int idx = bin->dysymtab.iundefsym + i;
 		if (idx < 0 || idx >= bin->nsymtab) {
 			R_LOG_WARN ("Imports index out of bounds. Ignoring relocs");
-			free (imports);
 			return NULL;
 		}
-		stridx = bin->symtab[idx].n_strx;
+
+		int stridx = bin->symtab[idx].n_strx;
 		char *imp_name = get_name (bin, stridx, false);
-		if (imp_name) {
-			r_str_ncpy (imports[j].name, imp_name, R_BIN_MACH0_STRING_LENGTH - 1);
-			free (imp_name);
-		} else {
-			//imports[j].name[0] = 0;
+		if (!imp_name) {
 			continue;
 		}
-		imports[j].ord = i;
-		imports[j++].last = 0;
-	}
-	imports[j].last = 1;
 
-	if (!bin->imports_by_ord_size) {
-		if (j > 0) {
-			bin->imports_by_ord_size = j;
-			bin->imports_by_ord = (RBinImport**)calloc (j, sizeof (RBinImport*));
-		} else {
-			bin->imports_by_ord_size = 0;
-			bin->imports_by_ord = NULL;
+		RBinImport *import = import_from_name (bf->rbin, imp_name);
+		if (!import) {
+			free (imp_name);
+			break;  // TODO change into continue?
 		}
+
+		import->ordinal = i;
+		r_pvector_push (&bin->imports_cache, import);
+		num_imports++;
+		check_for_special_import_names (bin, import);
+		free (imp_name);
 	}
 
-	return imports;
+	bin->has_canary = false;
+	bin->has_retguard = -1;
+	bin->has_sanitizers = false;
+	bin->has_blocks_ext = false;
+
+	if (num_imports > 0) {
+		bin->imports_by_ord_size = num_imports;
+		bin->imports_by_ord = (RBinImport**)calloc (num_imports, sizeof (RBinImport*));
+		if (!bin->imports_by_ord) {
+			return NULL;
+		}
+
+		void **it;
+		r_pvector_foreach (&bin->imports_cache, it) {
+			RBinImport *import = (RBinImport*) *it;
+			if (import->ordinal < bin->imports_by_ord_size) {
+				bin->imports_by_ord[import->ordinal] = import;
+			}
+		}
+	} else {
+		bin->imports_by_ord_size = 0;
+		bin->imports_by_ord = NULL;
+	}
+
+	return &bin->imports_cache;
 }
 
 static int reloc_comparator(struct reloc_t *a, struct reloc_t *b) {
@@ -3958,29 +4029,22 @@ void MACH0_(kv_loadlibs)(struct MACH0_(obj_t) *bin) {
 	char lib_flagname[128];
 	for (i = 0; i < bin->nlibs; i++) {
 		snprintf (lib_flagname, sizeof (lib_flagname), "libs.%d.name", i);
-		sdb_set (bin->kv, lib_flagname, bin->libs[i], 0);
+		sdb_set (bin->kv, lib_flagname, r_pvector_at (&bin->libs_cache, i), 0);
 	}
 }
 
-struct lib_t *MACH0_(get_libs)(struct MACH0_(obj_t) *bin) {
-	struct lib_t *libs;
-	int i;
-	char lib_flagname[128];
+const RPVector *MACH0_(load_libs)(struct MACH0_(obj_t) *bin) {
+	r_return_val_if_fail (bin, NULL);
+	if (bin->libs_loaded) {
+		return &bin->libs_cache;
+	}
 
 	if (!bin->nlibs) {
 		return NULL;
 	}
-	if (!(libs = calloc ((bin->nlibs + 1), sizeof (struct lib_t)))) {
-		return NULL;
-	}
-	for (i = 0; i < bin->nlibs; i++) {
-		snprintf (lib_flagname, sizeof (lib_flagname), "libs.%d.name", i);
-		sdb_set (bin->kv, lib_flagname, bin->libs[i], 0);
-		r_str_ncpy (libs[i].name, bin->libs[i], R_BIN_MACH0_STRING_LENGTH - 1);
-		libs[i].last = 0;
-	}
-	libs[i].last = 1;
-	return libs;
+
+	MACH0_(kv_loadlibs)(bin);
+	return &bin->libs_cache;
 }
 
 ut64 MACH0_(get_baddr)(struct MACH0_(obj_t) *bin) {
