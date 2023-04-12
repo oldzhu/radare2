@@ -16,6 +16,9 @@ r_arch_sources = [
   'p/alpha/alpha-opc.c',
   'p/bpf/plugin.c',
   'p/bpf_cs/plugin.c',
+  'p/ppc/plugin_gnu.c',
+  'p/ppc/gnu/ppc-dis.c',
+  'p/ppc/gnu/ppc-opc.c',
   'p/null/plugin.c',
   'p/lm32/plugin.c',
   'p/mcs96/plugin.c',
@@ -26,6 +29,13 @@ r_arch_sources = [
   'p/sparc/plugin_gnu.c',
   'p/sparc/gnu/sparc-dis.c',
   'p/sparc/gnu/sparc-opc.c',
+  'p/s390_gnu/plugin.c',
+  'p/s390_gnu/s390-dis.c',
+  'p/s390_gnu/s390-opc.c',
+  'p/m68k_gnu/plugin.c',
+  'p/m68k_gnu/m68k-dis.c',
+  'p/m68k_gnu/m68k-opc.c',
+  'p/arm/gnu/floatformat.c',
 # fails on windows
 # error LNK2005: SocketNotificationRetrieveEvents already defined in p_hppa_gnu_hppa-dis.c.obj
   'p/hppa/plugin_gnu.c',

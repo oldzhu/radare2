@@ -167,7 +167,6 @@ anal_plugins += [
   'java',
   'loongarch_gnu',
   'm68k_cs',
-  'm68k_gnu',
   'm680x_cs',
   'mips_cs',
   'ppc_cs',
@@ -178,22 +177,26 @@ anal_plugins += [
   'xcore_cs'
 ]
 
+arch_plugins += [
+  'm68k_gnu',
+]
+
 if no_user_plugins
   if use_gpl
     anal_plugins += [
       'arm_gnu',
       'mips_gnu',
       'loongarch_gnu',
-      's390_gnu',
-      'ppc_gnu',
-      'm68k_gnu',
     ]
     arch_plugins += [
       'z80',
       'pdp11',
+      'ppc_gnu',
 # 'hppa_gnu',
       'sparc_gnu',
-      'lanai'
+      'lanai',
+      's390_gnu',
+      'm68k_gnu',
     ]
   endif
 endif
