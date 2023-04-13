@@ -5,9 +5,6 @@
 #ifndef _INCLUDE_R_BIN_MACH0_H_
 #define _INCLUDE_R_BIN_MACH0_H_
 
-// 20% faster loading times for macho if enabled
-#define FEATURE_SYMLIST 1
-
 #define R_BIN_MACH0_STRING_LENGTH 256
 
 
@@ -57,18 +54,6 @@ struct section_t {
 	ut32 flags;
 	int perm;
 	char name[R_BIN_MACH0_STRING_LENGTH];
-	int last;
-};
-
-struct symbol_t {
-	ut64 offset;
-	ut64 addr;
-	ut64 size;
-	int bits;
-	int type;
-	bool is_imported;
-	char *name;
-	bool last;
 };
 
 struct reloc_t {
@@ -112,6 +97,7 @@ struct MACH0_(opts_t) {
 	ut64 header_at;
 	ut64 symbols_off;
 	int maxsymlen;
+	bool parse_start_symbols;
 	RBinFile *bf;
 };
 
@@ -181,7 +167,7 @@ struct MACH0_(obj_t) {
 	int func_size;
 	bool verbose;
 	ut64 header_at;
-	struct symbol_t *symbols; // TODO remove
+	bool parse_start_symbols;
 	bool symbols_loaded;
 	RVector symbols_cache;
 	ut64 symbols_off;
@@ -190,7 +176,8 @@ struct MACH0_(obj_t) {
 	ut64 main_addr;
 	int (*original_io_read)(RIO *io, RIODesc *fd, ut8 *buf, int count);
 	bool rebasing_buffer;
-	RList *sections_cache;
+	bool sections_loaded;
+	RVector sections_cache;
 	bool imports_loaded;
 	RPVector imports_cache;
 	RList *reloc_fixups;
@@ -255,9 +242,8 @@ void MACH0_(opts_set_default)(struct MACH0_(opts_t) *options, RBinFile *bf);
 struct MACH0_(obj_t) *MACH0_(mach0_new)(const char *file, struct MACH0_(opts_t) *options);
 struct MACH0_(obj_t) *MACH0_(new_buf)(RBuffer *buf, struct MACH0_(opts_t) *options);
 void *MACH0_(mach0_free)(struct MACH0_(obj_t) *bin);
-struct section_t *MACH0_(get_sections)(struct MACH0_(obj_t) *bin);
-RList *MACH0_(get_segments)(RBinFile *bf);
-const struct symbol_t *MACH0_(get_symbols)(struct MACH0_(obj_t) *bin);
+const RVector *MACH0_(load_sections)(struct MACH0_(obj_t) *bin);
+RList *MACH0_(get_segments)(RBinFile *bf, struct MACH0_(obj_t) *bin);
 const RVector *MACH0_(load_symbols)(RBinFile *bf, struct MACH0_(obj_t) *bin);
 void MACH0_(pull_symbols)(struct MACH0_(obj_t) *mo, RBinSymbolCallback cb, void *user);
 const RPVector *MACH0_(load_imports)(RBinFile* bf, struct MACH0_(obj_t) *bin);

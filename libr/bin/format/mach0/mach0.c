@@ -35,6 +35,17 @@ typedef struct {
 	RSkipList *relocs;
 } RWalkBindChainsContext;
 
+struct symbol_t {
+	ut64 offset;
+	ut64 addr;
+	ut64 size;
+	int bits;
+	int type;
+	bool is_imported;
+	char *name;
+};
+
+
 // OMG; THIS SHOULD BE KILLED; this var exposes the local native endian, which is completely unnecessary
 // USE THIS: int ws = bf->o->info->big_endian;
 #define mach0_endian 1
@@ -1724,6 +1735,7 @@ static int init_items(struct MACH0_(obj_t) *bin) {
 	bin->uuidn = 0;
 	bin->os = 0;
 	bin->has_crypto = 0;
+	bin->cached_segments = NULL;
 	r_pvector_init (&bin->libs_cache, (RPVectorFree) free);
 
 	if (bin->hdr.sizeofcmds > bin->size) {
@@ -2154,12 +2166,6 @@ void *MACH0_(mach0_free)(struct MACH0_(obj_t) *mo) {
 	}
 
 	size_t i;
-	if (mo->symbols) {
-		for (i = 0; !mo->symbols[i].last; i++) {
-			free (mo->symbols[i].name);
-		}
-		free (mo->symbols);
-	}
 	free (mo->segs);
 	free (mo->sects);
 	free (mo->symtab);
@@ -2177,15 +2183,17 @@ void *MACH0_(mach0_free)(struct MACH0_(obj_t) *mo) {
 	free (mo->signature);
 	free (mo->intrp);
 	free (mo->compiler);
-#if FEATURE_SYMLIST
 	if (mo->symbols_loaded) {
 		r_vector_fini (&mo->symbols_cache);
 	}
-#endif
-	r_list_free (mo->sections_cache);
 	if (mo->imports_loaded) {
 		r_pvector_fini (&mo->imports_cache);
 	}
+	if (mo->sections_loaded) {
+		r_vector_fini (&mo->sections_cache);
+	}
+	r_list_free (mo->cached_segments);
+	mo->cached_segments = NULL;
 	if (mo->chained_starts) {
 		for (i = 0; i < mo->nsegs && i < mo->segs_count; i++) {
 			if (mo->chained_starts[i]) {
@@ -2207,6 +2215,7 @@ void MACH0_(opts_set_default)(struct MACH0_(opts_t) *options, RBinFile *bf) {
 	options->symbols_off = 0;
 	options->verbose = bf->rbin->verbose;
 	options->maxsymlen = bf->rbin->maxsymlen;
+	options->parse_start_symbols = false;
 }
 
 static void *duplicate_ptr(void *p) {
@@ -2232,6 +2241,7 @@ struct MACH0_(obj_t) *MACH0_(mach0_new)(const char *file, struct MACH0_(opts_t) 
 		bin->verbose = options->verbose;
 		bin->header_at = options->header_at;
 		bin->symbols_off = options->symbols_off;
+		bin->parse_start_symbols = options->parse_start_symbols;
 	}
 	bin->file = file;
 	size_t binsz = 0;
@@ -2275,6 +2285,7 @@ struct MACH0_(obj_t) *MACH0_(new_buf)(RBuffer *buf, struct MACH0_(opts_t) *optio
 			bin->header_at = options->header_at;
 			bin->maxsymlen = options->maxsymlen;
 			bin->symbols_off = options->symbols_off;
+			bin->parse_start_symbols = options->parse_start_symbols;
 		}
 		bin->size = sz;
 		if (!init (bin)) {
@@ -2383,9 +2394,7 @@ static const char *macho_section_type_tostring(int flags) {
 	return "";
 }
 
-RList *MACH0_(get_segments)(RBinFile *bf) {
-	struct MACH0_(obj_t) *macho = bf->o->bin_obj;
-
+RList *MACH0_(get_segments)(RBinFile *bf, struct MACH0_(obj_t) *macho) {
 	if (macho->cached_segments) {
 		return r_list_clone (macho->cached_segments, (RListClone)r_bin_section_clone);
 	}
@@ -2465,36 +2474,40 @@ RList *MACH0_(get_segments)(RBinFile *bf) {
 	return list;
 }
 
-// XXX this function is called so many times, should return cached RList instead
-struct section_t *MACH0_(get_sections)(struct MACH0_(obj_t) *bin) {
+const RVector *MACH0_(load_sections)(struct MACH0_(obj_t) *bin) {
 	r_return_val_if_fail (bin, NULL);
-	struct section_t *sections;
+	if (bin->sections_loaded) {
+		return &bin->sections_cache;
+	}
+
+	bin->sections_loaded = true;
+	r_vector_init (&bin->sections_cache, sizeof (struct section_t), NULL, NULL);
+
 	char sectname[64], raw_segname[17];
 	size_t i, j, to;
+	struct MACH0_(segment_command) *seg;
 
 	/* for core files */
 	if (bin->nsects < 1 && bin->nsegs > 0) {
-		struct MACH0_(segment_command) *seg;
-		if (!(sections = calloc ((bin->nsegs + 1), sizeof (struct section_t)))) {
+		if (!r_vector_reserve (&bin->sections_cache, bin->nsegs)) {
 			return NULL;
 		}
 		for (i = 0; i < bin->nsegs; i++) {
+			struct section_t *section = r_vector_end (&bin->sections_cache);
 			seg = &bin->segs[i];
-			sections[i].addr = seg->vmaddr;
-			sections[i].offset = seg->fileoff;
-			sections[i].size = seg->vmsize;
-			sections[i].vsize = seg->vmsize;
-			sections[i].align = 4096;
-			sections[i].flags = seg->flags;
+			section->addr = seg->vmaddr;
+			section->offset = seg->fileoff;
+			section->size = seg->vmsize;
+			section->vsize = seg->vmsize;
+			section->align = 4096;
+			section->flags = seg->flags;
 			r_str_ncpy (sectname, seg->segname, 16);
 			sectname[16] = 0;
 			r_str_filter (sectname, -1);
 			// hack to support multiple sections with same name
-			sections[i].perm = prot2perm (seg->initprot);
-			sections[i].last = 0;
+			section->perm = prot2perm (seg->initprot);
 		}
-		sections[i].last = 1;
-		return sections;
+		return &bin->sections_cache;
 	}
 
 	if (!bin->sects) {
@@ -2504,32 +2517,31 @@ struct section_t *MACH0_(get_sections)(struct MACH0_(obj_t) *bin) {
 	if (to < 1) {
 		return NULL;
 	}
-	if (!(sections = calloc (to + 1, sizeof (struct section_t)))) {
+	if (!r_vector_reserve (&bin->sections_cache, to)) {
 		return NULL;
 	}
 	for (i = 0; i < to; i++) {
-		sections[i].offset = (ut64)bin->sects[i].offset;
-		sections[i].addr = (ut64)bin->sects[i].addr;
-		sections[i].size = (bin->sects[i].flags == S_ZEROFILL) ? 0 : (ut64)bin->sects[i].size;
-		sections[i].vsize = (ut64)bin->sects[i].size;
-		sections[i].align = bin->sects[i].align;
-		sections[i].flags = bin->sects[i].flags;
+		struct section_t *section = r_vector_end (&bin->sections_cache);
+		section->offset = (ut64)bin->sects[i].offset;
+		section->addr = (ut64)bin->sects[i].addr;
+		section->size = (bin->sects[i].flags == S_ZEROFILL) ? 0 : (ut64)bin->sects[i].size;
+		section->vsize = (ut64)bin->sects[i].size;
+		section->align = bin->sects[i].align;
+		section->flags = bin->sects[i].flags;
 		r_str_ncpy (sectname, bin->sects[i].sectname, 17);
 		r_str_filter (sectname, -1);
 		r_str_ncpy (raw_segname, bin->sects[i].segname, 16);
 		for (j = 0; j < bin->nsegs; j++) {
-			if (sections[i].addr >= bin->segs[j].vmaddr &&
-				sections[i].addr < (bin->segs[j].vmaddr + bin->segs[j].vmsize)) {
-				sections[i].perm = prot2perm (bin->segs[j].initprot);
+			if (section->addr >= bin->segs[j].vmaddr &&
+				section->addr < (bin->segs[j].vmaddr + bin->segs[j].vmsize)) {
+				section->perm = prot2perm (bin->segs[j].initprot);
 				break;
 			}
 		}
-		snprintf (sections[i].name, sizeof (sections[i].name),
+		snprintf (section->name, sizeof (section->name),
 			"%d.%s.%s", (int)i, raw_segname, sectname);
-		sections[i].last = false;
 	}
-	sections[i].last = true;
-	return sections;
+	return &bin->sections_cache;
 }
 
 static bool parse_import_stub(struct MACH0_(obj_t) *bin, struct symbol_t *symbol, int idx) {
@@ -3101,7 +3113,7 @@ static void _parse_function_start_symbols(RBinFile *bf, struct MACH0_(obj_t) *bi
 }
 
 static bool _check_if_debug_build(RBinFile *bf, struct MACH0_(obj_t) *bin) {
-	RList *sections = MACH0_(get_segments) (bf);
+	RList *sections = MACH0_(get_segments) (bf, bin);
 	if (!sections) {
 		return false;
 	}
@@ -3124,7 +3136,6 @@ static void _r_bin_symbol_fini(void *_sym, void *user) {
 		free (sym->name);
 		free (sym->libname);
 		free (sym->classname);
-		// TODO remove free (sym);
 	}
 }
 
@@ -3145,7 +3156,9 @@ const RVector *MACH0_(load_symbols)(RBinFile *bf, struct MACH0_(obj_t) *bin) {
 
 	bool is_debug = _check_if_debug_build (bf, bin);
 	_parse_symbols (bf, bin, symcache);
-	_parse_function_start_symbols (bf, bin, symcache);
+	if (bin->parse_start_symbols) {
+		_parse_function_start_symbols (bf, bin, symcache);
+	}
 	ht_pp_free (symcache);
 
 	if (is_debug) {
@@ -3153,219 +3166,6 @@ const RVector *MACH0_(load_symbols)(RBinFile *bf, struct MACH0_(obj_t) *bin) {
 	}
 
 	return &bin->symbols_cache;
-}
-
-static void assign_export_symbol_t(struct MACH0_(obj_t) *bin, const char *name, ut64 flags, ut64 offset, void *ctx) {
-	RSymCtx *sym_ctx = (RSymCtx*) ctx;
-	int j = sym_ctx->j;
-	if (j < sym_ctx->symbols_count) {
-		sym_ctx->symbols[j].offset = offset;
-		sym_ctx->symbols[j].addr = offset_to_vaddr (bin, offset);
-		if (hash_find_or_insert (sym_ctx->hash, name, sym_ctx->symbols[j].addr)) {
-			return;
-		}
-		sym_ctx->symbols[j].size = 0;
-		sym_ctx->symbols[j].type = R_BIN_MACH0_SYMBOL_TYPE_EXT;
-		sym_ctx->symbols[j].name = strdup (name);
-		sym_ctx->j++;
-	}
-}
-
-const struct symbol_t *MACH0_(get_symbols)(struct MACH0_(obj_t) *bin) {
-	r_return_val_if_fail (bin, NULL);
-	struct symbol_t *symbols;
-	int j = 0, s, stridx, symbols_size, symbols_count;
-	ut32 to = UT32_MAX;
-	ut32 from = UT32_MAX;
-	ut32 i;
-
-	if (bin->symbols) {
-		return bin->symbols;
-	}
-
-	HtPP *hash = ht_pp_new0 ();
-	if (!hash) {
-		return NULL;
-	}
-
-	int n_exports = walk_exports (bin, NULL, NULL);
-
-	symbols_count = n_exports;
-	j = 0; // symbol_idx
-
-	int bits = MACH0_(get_bits_from_hdr) (&bin->hdr);
-	if (bin->symtab && bin->symstr) {
-		int n0 = bin->dysymtab.nextdefsym;
-		int n1 = bin->dysymtab.nlocalsym;
-		int n2 = bin->dysymtab.nundefsym;
-		int n3 = bin->nsymtab;
-		symbols_count = R_MAX (n0, 0);
-		symbols_count += R_MAX (n1, 0);
-		symbols_count += R_MAX (n2, 0);
-		symbols_count += R_MAX (n3, 0);
-		/* parse dynamic symbol table */
-		if (symbols_count < 0 || ((st64)symbols_count * 2) > ST32_MAX) {
-			R_LOG_WARN ("Symbols count overflow");
-			ht_pp_free (hash);
-			return NULL;
-		}
-		symbols_size = (symbols_count + 1) * 2 * sizeof (struct symbol_t);
-
-		if (symbols_size < 1) {
-			ht_pp_free (hash);
-			return NULL;
-		}
-		if (!(symbols = calloc (1, symbols_size))) {
-			ht_pp_free (hash);
-			return NULL;
-		}
-		bin->main_addr = 0;
-		for (s = 0; s < 2; s++) {
-			switch (s) {
-			case 0:
-				from = bin->dysymtab.iextdefsym;
-				to = from + bin->dysymtab.nextdefsym;
-				break;
-			case 1:
-				from = bin->dysymtab.ilocalsym;
-				to = from + bin->dysymtab.nlocalsym;
-				break;
-#if NOT_USED
-			case 2:
-				from = bin->dysymtab.iundefsym;
-				to = from + bin->dysymtab.nundefsym;
-				break;
-#endif
-			}
-			if (from == to) {
-				continue;
-			}
-
-			from = R_MIN (from, symbols_size / sizeof (struct symbol_t));
-			to = R_MIN (R_MIN (to, bin->nsymtab), symbols_size / sizeof (struct symbol_t));
-
-			ut32 maxsymbols = symbols_size / sizeof (struct symbol_t);
-			if (symbols_count >= maxsymbols) {
-				symbols_count = maxsymbols - 1;
-				R_LOG_WARN ("Symbol table truncated");
-			}
-			for (i = from; i < to && j < symbols_count; i++, j++) {
-				symbols[j].offset = addr_to_offset (bin, bin->symtab[i].n_value);
-				symbols[j].addr = bin->symtab[i].n_value;
-				symbols[j].size = 0; /* TODO: Is it anywhere? */
-				symbols[j].bits = bin->symtab[i].n_desc & N_ARM_THUMB_DEF ? 16 : bits;
-				symbols[j].is_imported = false;
-				symbols[j].type = (bin->symtab[i].n_type & N_EXT)
-					? R_BIN_MACH0_SYMBOL_TYPE_EXT
-					: R_BIN_MACH0_SYMBOL_TYPE_LOCAL;
-				stridx = bin->symtab[i].n_strx;
-				symbols[j].name = get_name (bin, stridx, false);
-				if (!symbols[j].name) {
-					j--;
-					continue;
-				}
-				symbols[j].last = false;
-
-				const char *name = symbols[j].name;
-				if (bin->main_addr == 0 && name) {
-					if (!strcmp (name, "__Dmain")) {
-						bin->main_addr = symbols[j].addr;
-					} else if (strstr (name, "4main") && !strstr (name, "STATIC")) {
-						bin->main_addr = symbols[j].addr;
-					} else if (!strcmp (name, "_main")) {
-						bin->main_addr = symbols[j].addr;
-					} else if (!strcmp (name, "main")) {
-						bin->main_addr = symbols[j].addr;
-					}
-				}
-				if (hash_find_or_insert (hash, symbols[j].name, symbols[j].addr)) {
-					free (symbols[j].name);
-					symbols[j].name = NULL;
-					j--;
-				}
-			}
-		}
-		to = R_MIN ((ut32)bin->nsymtab, bin->dysymtab.iundefsym + bin->dysymtab.nundefsym);
-		for (i = bin->dysymtab.iundefsym; i < to; i++) {
-			if (j > symbols_count) {
-				R_LOG_WARN ("mach0-get-symbols: error");
-				break;
-			}
-			if (parse_import_stub (bin, &symbols[j], i)) {
-				symbols[j++].last = false;
-			}
-		}
-
-		for (i = 0; i < bin->nsymtab; i++) {
-			struct MACH0_(nlist) *st = &bin->symtab[i];
-			if (st->n_type & N_STAB) {
-				continue;
-			}
-			// 0 is for imports
-			// 1 is for symbols
-			// 2 is for func.eh (exception handlers?)
-			int section = st->n_sect;
-			if (section == 1 && j < symbols_count) {
-				// check if symbol exists already
-				/* is symbol */
-				symbols[j].addr = st->n_value;
-				symbols[j].offset = addr_to_offset (bin, symbols[j].addr);
-				symbols[j].size = 0; /* find next symbol and crop */
-				symbols[j].type = (st->n_type & N_EXT)
-					? R_BIN_MACH0_SYMBOL_TYPE_EXT
-					: R_BIN_MACH0_SYMBOL_TYPE_LOCAL;
-				char *sym_name = get_name (bin, st->n_strx, false);
-				if (sym_name) {
-					symbols[j].name = sym_name;
-				} else {
-					symbols[j].name = r_str_newf ("entry%d", i);
-				}
-				symbols[j].last = 0;
-				if (hash_find_or_insert (hash, symbols[j].name, symbols[j].addr)) {
-					R_FREE (symbols[j].name);
-				} else {
-					j++;
-				}
-
-				const char *name = symbols[i].name;
-				if (bin->main_addr == 0 && name) {
-					if (name && !strcmp (name, "__Dmain")) {
-						bin->main_addr = symbols[i].addr;
-					} else if (name && strstr (name, "4main") && !strstr (name, "STATIC")) {
-						bin->main_addr = symbols[i].addr;
-					} else if (symbols[i].name && !strcmp (symbols[i].name, "_main")) {
-						bin->main_addr = symbols[i].addr;
-					}
-				}
-			}
-		}
-	} else if (!n_exports) {
-		ht_pp_free (hash);
-		return NULL;
-	} else {
-		symbols_size = (symbols_count + 1) * sizeof (struct symbol_t);
-		if (symbols_size < 1) {
-			ht_pp_free (hash);
-			return NULL;
-		}
-		if (!(symbols = calloc (1, symbols_size))) {
-			ht_pp_free (hash);
-			return NULL;
-		}
-	}
-	if (n_exports && (symbols_count - j) >= n_exports) {
-		RSymCtx sym_ctx;
-		sym_ctx.symbols = symbols;
-		sym_ctx.j = j;
-		sym_ctx.symbols_count = symbols_count;
-		sym_ctx.hash = hash;
-		walk_exports (bin, assign_export_symbol_t, &sym_ctx);
-		j = sym_ctx.j;
-	}
-	ht_pp_free (hash);
-	symbols[j].last = true;
-	bin->symbols = symbols;
-	return symbols;
 }
 
 static int parse_import_ptr(struct MACH0_(obj_t) *bin, struct reloc_t *reloc, int idx) {
@@ -4524,11 +4324,7 @@ ut64 MACH0_(get_main)(RBinFile *bf, struct MACH0_(obj_t) *bin) {
 	// -1 = not scanned, so no main
 	// other = valid main addr
 	if (bin->main_addr == UT64_MAX) {
-#if FEATURE_SYMLIST
 		 (void)MACH0_(load_symbols) (bf, bin);
-#else
-		 (void)MACH0_(get_symbols) (bin);
-#endif
 	}
 	if (bin->main_addr != 0 && bin->main_addr != UT64_MAX) {
 		return bin->main_addr;

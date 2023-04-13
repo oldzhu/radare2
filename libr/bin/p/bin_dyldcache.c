@@ -543,46 +543,54 @@ static ut64 estimate_slide(RBinFile *bf, RDyldCache *cache, ut64 value_mask, ut6
 			goto beach;
 		}
 
-		struct section_t *sections = NULL;
-		if (!(sections = MACH0_(get_sections) (mach0))) {
+		const RVector *sections = MACH0_(load_sections) (mach0);
+		if (!sections) {
 			MACH0_(mach0_free) (mach0);
 			goto beach;
 		}
 
-		int i;
+		int i = 0;
 		int incomplete = 2;
 		int classlist_idx = 0, data_idx = 0;
-		for (i = 0; !sections[i].last && incomplete; i++) {
-			if (sections[i].size == 0) {
+		struct section_t *section;
+		r_vector_foreach (sections, section) {
+			if (incomplete == 0) {
+				break;
+			}
+			if (section->size == 0) {
+				i++;
 				continue;
 			}
-			if (strstr (sections[i].name, "__objc_classlist")) {
+			if (strstr (section->name, "__objc_classlist")) {
 				incomplete--;
-				classlist_idx = i;
+				classlist_idx = i++;
 				continue;
 			}
-			if (strstr (sections[i].name, "__objc_data")) {
+			if (strstr (section->name, "__objc_data")) {
 				incomplete--;
-				data_idx = i;
+				data_idx = i++;
 				continue;
 			}
+			i++;
 		}
 
 		if (incomplete) {
 			goto next_bin;
 		}
 
-		int classlist_sample_size = R_MIN (64, sections[classlist_idx].size);
+		struct section_t *classlist_section = r_vector_at (sections, classlist_idx);
+		int classlist_sample_size = R_MIN (64, classlist_section->size);
 		int n_classes = classlist_sample_size / 8;
-		ut64 sect_offset = sections[classlist_idx].offset + bin->hdr_offset;
+		ut64 sect_offset = classlist_section->offset + bin->hdr_offset;
 
 		if (r_buf_fread_at (cache->buf, sect_offset, (ut8*) classlist, "l", n_classes) != classlist_sample_size) {
 			goto next_bin;
 		}
 
-		ut64 data_addr = sections[data_idx].addr;
+		struct section_t *data_section = r_vector_at (sections, data_idx);
+		ut64 data_addr = data_section->addr;
 		ut64 data_tail = data_addr & 0xfff;
-		ut64 data_tail_end = (data_addr + sections[data_idx].size) & 0xfff;
+		ut64 data_tail_end = (data_addr + data_section->size) & 0xfff;
 		for (i = 0; i < n_classes; i++) {
 			ut64 cl_addr = (classlist[i] & value_mask) + value_add;
 			ut64 cl_tail = cl_addr & 0xfff;
@@ -596,7 +604,6 @@ static ut64 estimate_slide(RBinFile *bf, RDyldCache *cache, ut64 value_mask, ut6
 
 next_bin:
 		MACH0_(mach0_free) (mach0);
-		R_FREE (sections);
 
 		if (found_sample) {
 			break;
@@ -1798,13 +1805,12 @@ static objc_cache_opt_info *get_objc_opt_info(RBinFile *bf, RDyldCache *cache) {
 			goto beach;
 		}
 
-		struct section_t *sections = NULL;
-		if (!(sections = MACH0_(get_sections) (mach0))) {
+		const RVector *sections = MACH0_(load_sections) (mach0);
+		if (!sections) {
 			MACH0_(mach0_free) (mach0);
 			goto beach;
 		}
 
-		int i;
 		ut64 scoffs_offset = 0;
 		ut64 scoffs_size = 0;
 		ut64 selrefs_offset = 0;
@@ -1813,29 +1819,31 @@ static objc_cache_opt_info *get_objc_opt_info(RBinFile *bf, RDyldCache *cache) {
 		ut64 const_selrefs_size = 0;
 		ut8 remaining = 3;
 		ut64 slide = rebase_infos_get_slide (cache);
-		for (i = 0; !sections[i].last; i++) {
-			if (sections[i].size == 0) {
+
+		struct section_t *section;
+		r_vector_foreach (sections, section) {
+			if (section->size == 0) {
 				continue;
 			}
-			if (strstr (sections[i].name, "__objc_scoffs")) {
-				scoffs_offset = va2pa (sections[i].addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
-				scoffs_size = sections[i].size;
+			if (strstr (section->name, "__objc_scoffs")) {
+				scoffs_offset = va2pa (section->addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
+				scoffs_size = section->size;
 				remaining--;
 				if (remaining == 0) {
 					break;
 				}
 			}
-			if (strstr (sections[i].name, "__DATA.__objc_selrefs")) {
-				selrefs_offset = va2pa (sections[i].addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
-				selrefs_size = sections[i].size;
+			if (strstr (section->name, "__DATA.__objc_selrefs")) {
+				selrefs_offset = va2pa (section->addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
+				selrefs_size = section->size;
 				remaining--;
 				if (remaining == 0) {
 					break;
 				}
 			}
-			if (strstr (sections[i].name, "__DATA_CONST.__objc_selrefs")) {
-				const_selrefs_offset = va2pa (sections[i].addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
-				const_selrefs_size = sections[i].size;
+			if (strstr (section->name, "__DATA_CONST.__objc_selrefs")) {
+				const_selrefs_offset = va2pa (section->addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
+				const_selrefs_size = section->size;
 				remaining--;
 				if (remaining == 0) {
 					break;
@@ -1844,7 +1852,6 @@ static objc_cache_opt_info *get_objc_opt_info(RBinFile *bf, RDyldCache *cache) {
 		}
 
 		MACH0_(mach0_free) (mach0);
-		R_FREE (sections);
 
 		if (!selrefs_offset || !selrefs_size) {
 			selrefs_offset = const_selrefs_offset;
@@ -2015,34 +2022,35 @@ void symbols_from_bin(RDyldCache *cache, RList *ret, RBinFile *bf, RDyldBinImage
 		return;
 	}
 
-	// const RList *symbols = MACH0_(load_symbols) (mach0);
-	const struct symbol_t *symbols = MACH0_(get_symbols) (mach0);
+	const RVector *symbols = MACH0_(load_symbols) (bf, mach0);
 	if (!symbols) {
 		return;
 	}
-	int i;
-	for (i = 0; !symbols[i].last; i++) {
-		if (!symbols[i].name || !symbols[i].name[0] || symbols[i].addr < 100) {
+
+	int i = 0;
+	RBinSymbol *sym;
+	r_vector_foreach (symbols, sym) {
+		if (strstr (sym->name, "<redacted>")) {
+			i++;
 			continue;
 		}
-		if (strstr (symbols[i].name, "<redacted>")) {
-			continue;
-		}
-		RBinSymbol *sym = R_NEW0 (RBinSymbol);
-		if (!sym) {
+
+		RBinSymbol *ret_sym = R_NEW0 (RBinSymbol);
+		if (!ret_sym) {
 			break;
 		}
-		sym->name = strdup (symbols[i].name);
-		sym->vaddr = symbols[i].addr;
-		sym->forwarder = "NONE";
-		sym->bind = (symbols[i].type == R_BIN_MACH0_SYMBOL_TYPE_LOCAL)? R_BIN_BIND_LOCAL_STR: R_BIN_BIND_GLOBAL_STR;
-		sym->type = R_BIN_TYPE_FUNC_STR;
-		sym->paddr = symbols[i].offset + bf->o->boffset;
-		sym->size = symbols[i].size;
-		sym->ordinal = i;
 
-		set_u_add (hash, sym->vaddr);
-		r_list_append (ret, sym);
+		ret_sym->name = strdup (sym->name);
+		ret_sym->vaddr = sym->vaddr;
+		ret_sym->paddr = sym->paddr;
+		ret_sym->forwarder = "NONE";
+		ret_sym->bind = sym->bind;
+		ret_sym->type = R_BIN_TYPE_FUNC_STR;
+		ret_sym->size = sym->size;
+		ret_sym->ordinal = i;
+		set_u_add (hash, ret_sym->vaddr);
+		r_list_append (ret, ret_sym);
+		i++;
 	}
 	MACH0_(mach0_free) (mach0);
 }
@@ -2077,39 +2085,38 @@ static void sections_from_bin(RList *ret, RBinFile *bf, RDyldBinImage *bin) {
 		return;
 	}
 
-	struct section_t *sections = NULL;
-	if (!(sections = MACH0_(get_sections) (mach0))) {
+	const RVector *sections = MACH0_(load_sections) (mach0);
+	if (!sections) {
 		return;
 	}
 
 	ut64 slide = rebase_infos_get_slide (cache);
-	int i;
-	for (i = 0; !sections[i].last; i++) {
+	struct section_t *section;
+	r_vector_foreach (sections, section) {
 		RBinSection *ptr = R_NEW0 (RBinSection);
 		if (!ptr) {
 			break;
 		}
 		if (bin->file) {
-			ptr->name = r_str_newf ("%s.%s", bin->file, (char*)sections[i].name);
+			ptr->name = r_str_newf ("%s.%s", bin->file, (char*)section->name);
 		} else {
-			ptr->name = r_str_newf ("%s", (char*)sections[i].name);
+			ptr->name = r_str_newf ("%s", (char*)section->name);
 		}
 		if (strstr (ptr->name, "la_symbol_ptr")) {
-			int len = sections[i].size / 8;
+			int len = section->size / 8;
 			ptr->format = r_str_newf ("Cd %d[%d]", 8, len);
 		}
 		ptr->is_data = __is_data_section (ptr->name);
-		ptr->size = sections[i].size;
-		ptr->vsize = sections[i].vsize;
-		ptr->vaddr = sections[i].addr;
-		ptr->paddr = va2pa (sections[i].addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
+		ptr->size = section->size;
+		ptr->vsize = section->vsize;
+		ptr->vaddr = section->addr;
+		ptr->paddr = va2pa (section->addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
 		if (!ptr->vaddr) {
 			ptr->vaddr = ptr->paddr;
 		}
-		ptr->perm = sections[i].perm;
+		ptr->perm = section->perm;
 		r_list_append (ret, ptr);
 	}
-	free (sections);
 	MACH0_(mach0_free) (mach0);
 }
 
@@ -2171,7 +2178,7 @@ static RList *symbols(RBinFile *bf) {
 		return NULL;
 	}
 
-	RList *ret = r_list_newf (free);
+	RList *ret = r_list_newf (r_bin_symbol_free);
 	if (!ret) {
 		return NULL;
 	}
@@ -2258,37 +2265,37 @@ static RList *classes(RBinFile *bf) {
 			goto beach;
 		}
 
-		struct section_t *sections = NULL;
-		if (!(sections = MACH0_(get_sections) (mach0))) {
+		const RVector *sections = MACH0_(load_sections) (mach0);
+		if (!sections) {
 			MACH0_(mach0_free) (mach0);
 			goto beach;
 		}
 
-		int i;
-		for (i = 0; !sections[i].last; i++) {
-			if (sections[i].size == 0) {
+		struct section_t *section;
+		r_vector_foreach (sections, section) {
+			if (section->size == 0) {
 				continue;
 			}
 
-			bool is_classlist = strstr (sections[i].name, "__objc_classlist");
-			bool is_catlist = strstr (sections[i].name, "__objc_catlist");
+			bool is_classlist = strstr (section->name, "__objc_classlist");
+			bool is_catlist = strstr (section->name, "__objc_catlist");
 
 			if (!is_classlist && !is_catlist) {
 				continue;
 			}
 
-			ut8 *pointers = malloc (sections[i].size);
+			ut8 *pointers = malloc (section->size);
 			if (!pointers) {
 				continue;
 			}
 
-			ut64 offset = va2pa (sections[i].addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
-			if (r_buf_read_at (cache->buf, offset, pointers, sections[i].size) < sections[i].size) {
+			ut64 offset = va2pa (section->addr, cache->n_maps, cache->maps, cache->buf, slide, NULL, NULL);
+			if (r_buf_read_at (cache->buf, offset, pointers, section->size) < section->size) {
 				R_FREE (pointers);
 				continue;
 			}
 			ut8 *cursor = pointers;
-			ut8 *pointers_end = pointers + sections[i].size;
+			ut8 *pointers_end = pointers + section->size;
 
 			for (; cursor + 8 <= pointers_end; cursor += 8) {
 				ut64 pointer_to_class = r_read_le64 (cursor);
@@ -2299,7 +2306,6 @@ static RList *classes(RBinFile *bf) {
 					!(klass->fields = r_list_new ())) {
 					R_FREE (klass);
 					R_FREE (pointers);
-					R_FREE (sections);
 					MACH0_(mach0_free) (mach0);
 					goto beach;
 				}
@@ -2322,7 +2328,6 @@ static RList *classes(RBinFile *bf) {
 					if (!klass->name) {
 						R_FREE (klass);
 						R_FREE (pointers);
-						R_FREE (sections);
 						MACH0_(mach0_free) (mach0);
 						goto beach;
 					}
@@ -2334,7 +2339,6 @@ static RList *classes(RBinFile *bf) {
 			R_FREE (pointers);
 		}
 
-		R_FREE (sections);
 		MACH0_(mach0_free) (mach0);
 	}
 
