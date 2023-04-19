@@ -741,11 +741,11 @@ static int init_dynamic_section(ELFOBJ *bin) {
 }
 
 static RBinElfSection* get_section_by_name(ELFOBJ *bin, const char *section_name) {
-	if (bin->g_sections) {
-		size_t i;
-		for (i = 0; !bin->g_sections[i].last; i++) {
-			if (!strncmp (bin->g_sections[i].name, section_name, ELF_STRING_LENGTH - 1)) {
-				return &bin->g_sections[i];
+	if (bin->sections_loaded) {
+		RBinElfSection *section;
+		r_vector_foreach (&bin->g_sections, section) {
+			if (!strncmp (section->name, section_name, ELF_STRING_LENGTH - 1)) {
+				return section;
 			}
 		}
 	}
@@ -1379,6 +1379,8 @@ static HtUP *rel_cache_new(RBinElfReloc *relocs, ut32 reloc_num) {
 	return rel_cache;
 }
 
+static const RVector *_load_elf_sections(ELFOBJ *bin);
+
 static bool elf_init(ELFOBJ *bin) {
 	/* bin is not an ELF */
 	if (!init_ehdr (bin)) {
@@ -1406,7 +1408,7 @@ static bool elf_init(ELFOBJ *bin) {
 	bin->imports_by_ord = NULL;
 	bin->symbols_by_ord_size = 0;
 	bin->symbols_by_ord = NULL;
-	bin->g_sections = Elf_(r_bin_elf_get_sections) (bin);
+	(void) _load_elf_sections (bin);
 	bin->boffset = Elf_(r_bin_elf_get_boffset) (bin);
 	bin->g_relocs = Elf_(r_bin_elf_get_relocs) (bin);
 	bin->rel_cache = rel_cache_new (bin->g_relocs, bin->g_reloc_num);
@@ -2060,10 +2062,10 @@ bool Elf_(r_bin_elf_get_stripped)(ELFOBJ *bin) {
 	if (!bin->shdr) {
 		return true;
 	}
-	if (bin->g_sections) {
-		size_t i;
-		for (i = 0; !bin->g_sections[i].last; i++) {
-			if (!strcmp (bin->g_sections[i].name, ".gnu_debugdata")) {
+	if (bin->sections_loaded) {
+		RBinElfSection *section;
+		r_vector_foreach (&bin->g_sections, section) {
+			if (!strcmp (section->name, ".gnu_debugdata")) {
 				return false;
 			}
 		}
@@ -2761,12 +2763,14 @@ char *Elf_(r_bin_elf_get_rpath)(ELFOBJ *bin) {
 }
 
 static bool has_valid_section_header(ELFOBJ *bin, size_t pos) {
-	return bin->g_sections[pos].info < bin->ehdr.e_shnum && bin->shdr;
+	RBinElfSection *section = r_vector_at (&bin->g_sections, pos);
+	return section->info < bin->ehdr.e_shnum && bin->shdr;
 }
 
 static void fix_rva_and_offset_relocable_file(ELFOBJ *bin, RBinElfReloc *r, size_t pos) {
 	if (has_valid_section_header (bin, pos)) {
-		size_t idx = bin->g_sections[pos].info;
+		RBinElfSection *section = r_vector_at (&bin->g_sections, pos);
+		size_t idx = section->info;
 		if (idx < bin->ehdr.e_shnum) {
 			ut64 pa = bin->shdr[idx].sh_offset + r->offset;
 			r->offset = pa;
@@ -2841,15 +2845,16 @@ static size_t get_num_relocs_dynamic(ELFOBJ *bin) {
 	return res + get_num_relocs_dynamic_plt (bin);
 }
 
-static bool sectionIsValid(ELFOBJ *bin, RBinElfSection *sect) {
+static bool section_is_valid(ELFOBJ *bin, RBinElfSection *sect) {
 	return (sect->offset + sect->size <= bin->size);
 }
 
 static Elf_(Xword) get_section_mode(ELFOBJ *bin, size_t pos) {
-	if (r_str_startswith (bin->g_sections[pos].name, ".rela.")) {
+	RBinElfSection *section = r_vector_at (&bin->g_sections, pos);
+	if (r_str_startswith (section->name, ".rela.")) {
 		return DT_RELA;
 	}
-	if (r_str_startswith (bin->g_sections[pos].name, ".rel.")) {
+	if (r_str_startswith (section->name, ".rel.")) {
 		return DT_REL;
 	}
 	return 0;
@@ -2863,20 +2868,25 @@ static size_t get_num_relocs_sections(ELFOBJ *bin) {
 	size_t i, size, ret = 0;
 	Elf_(Xword) rel_mode;
 
-	if (!bin->g_sections) {
+	if (!bin->sections_loaded) {
 		return 0;
 	}
 
-	for (i = 0; !bin->g_sections[i].last; i++) {
-		if (!sectionIsValid (bin, &bin->g_sections[i])) {
+	i = 0;
+	RBinElfSection *section;
+	r_vector_foreach (&bin->g_sections, section) {
+		if (!section_is_valid (bin, section)) {
+			i++;
 			continue;
 		}
 		rel_mode = get_section_mode (bin, i);
 		if (!is_reloc_section (rel_mode)) {
+			i++;
 			continue;
 		}
 		size = get_size_rel_mode (rel_mode);
-		ret += NUMENTRIES_ROUNDUP (bin->g_sections[i].size, size);
+		ret += NUMENTRIES_ROUNDUP (section->size, size);
+		i++;
 	}
 
 	return ret;
@@ -2943,30 +2953,34 @@ static size_t populate_relocs_record_from_section(ELFOBJ *bin, RBinElfReloc *rel
 	size_t size, i, j;
 	Elf_(Xword) rel_mode;
 
-	if (!bin->g_sections) {
+	if (!bin->sections_loaded) {
 		return pos;
 	}
 
-	for (i = 0; !bin->g_sections[i].last; i++) {
+	RBinElfSection *section;
+	i = 0;
+	r_vector_foreach (&bin->g_sections, section) {
 		rel_mode = get_section_mode (bin, i);
 
-		if (!is_reloc_section (rel_mode) || bin->g_sections[i].size > bin->size || bin->g_sections[i].offset > bin->size) {
+		if (!is_reloc_section (rel_mode) || section->size > bin->size || section->offset > bin->size) {
+			i++;
 			continue;
 		}
 
 		size = get_size_rel_mode (rel_mode);
 
-		for (j = get_next_not_analysed_offset (bin, bin->g_sections[i].rva, 0);
-			j < bin->g_sections[i].size && pos < num_relocs;
-			j = get_next_not_analysed_offset (bin, bin->g_sections[i].rva, j + size)) {
+		for (j = get_next_not_analysed_offset (bin, section->rva, 0);
+			j < section->size && pos < num_relocs;
+			j = get_next_not_analysed_offset (bin, section->rva, j + size)) {
 
-			if (!read_reloc (bin, relocs + pos, rel_mode, bin->g_sections[i].rva + j)) {
+			if (!read_reloc (bin, relocs + pos, rel_mode, section->rva + j)) {
 				break;
 			}
 
 			fix_rva_and_offset (bin, relocs + pos, i);
 			pos++;
 		}
+		i++;
 	}
 
 	return pos;
@@ -3044,21 +3058,20 @@ RBinElfLib* Elf_(r_bin_elf_get_libs)(ELFOBJ *bin) {
 	return ret;
 }
 
-static void create_section_from_phdr(ELFOBJ *bin, RBinElfSection *ret, size_t *i, const char *name, ut64 addr, ut64 sz) {
-	r_return_if_fail (bin && ret && i);
+static void create_section_from_phdr(ELFOBJ *bin, const char *name, ut64 addr, ut64 sz) {
+	r_return_if_fail (bin);
 	if (!addr || addr == UT64_MAX) {
 		return;
 	}
-	ret[*i].offset = Elf_(r_bin_elf_v2p_new) (bin, addr);
-	ret[*i].rva = addr;
-	ret[*i].size = sz;
-	r_str_ncpy (ret[*i].name, name, R_ARRAY_SIZE (ret[*i].name) - 1);
-	ret[*i].last = 0;
-	*i = *i + 1;
+
+	RBinElfSection *section = r_vector_end (&bin->g_sections);
+	section->offset = Elf_(r_bin_elf_v2p_new) (bin, addr);
+	section->rva = addr;
+	section->size = sz;
+	r_str_ncpy (section->name, name, R_ARRAY_SIZE (section->name) - 1);
 }
 
-static RBinElfSection *get_sections_from_phdr(ELFOBJ *bin) {
-	RBinElfSection *ret;
+static const RVector *load_sections_from_phdr(ELFOBJ *bin) {
 	size_t num_sections = 0;
 	ut64 reldyn = 0, relava = 0, pltgotva = 0, relva = 0;
 	ut64 reldynsz = 0, relasz = 0, pltgotsz = 0;
@@ -3093,53 +3106,55 @@ static RBinElfSection *get_sections_from_phdr(ELFOBJ *bin) {
 		num_sections++;
 	}
 
-	ret = calloc (num_sections + 1, sizeof (RBinElfSection));
-	if (!ret) {
+	if (!r_vector_reserve (&bin->g_sections, num_sections)) {
 		return NULL;
 	}
 
-	size_t i = 0;
-	create_section_from_phdr (bin, ret, &i, ".rel.dyn", reldyn, reldynsz);
-	create_section_from_phdr (bin, ret, &i, ".rela.plt", relava, pltgotsz);
-	create_section_from_phdr (bin, ret, &i, ".rel.plt", relva, relasz);
-	create_section_from_phdr (bin, ret, &i, ".got.plt", pltgotva, pltgotsz);
-	ret[i].last = 1;
-
-	return ret;
+	create_section_from_phdr (bin, ".rel.dyn", reldyn, reldynsz);
+	create_section_from_phdr (bin, ".rela.plt", relava, pltgotsz);
+	create_section_from_phdr (bin, ".rel.plt", relva, relasz);
+	create_section_from_phdr (bin, ".got.plt", pltgotva, pltgotsz);
+	return &bin->g_sections;
 }
 
-RBinElfSection* Elf_(r_bin_elf_get_sections)(ELFOBJ *bin) {
-	RBinElfSection *ret = NULL;
+static const RVector *_load_elf_sections(ELFOBJ *bin) {
 	char unknown_s[32], invalid_s[32];
 	int i, nidx, unknown_c = 0, invalid_c = 0;
 
 	r_return_val_if_fail (bin, NULL);
-	if (bin->g_sections) {
-		return bin->g_sections;
+	if (bin->sections_loaded) {
+		return &bin->g_sections;
 	}
+
+	bin->sections_loaded = true;
+	r_vector_init (&bin->g_sections, sizeof (RBinElfSection), NULL, NULL);
+
 	if (!bin->shdr && bin->phdr) {
-		//we don't give up search in phdr section
-		return get_sections_from_phdr (bin);
+		// we don't give up search in phdr section
+		return load_sections_from_phdr (bin);
 	}
+
 	if (!bin->shdr) {
 		return NULL;
 	}
+
 	ut32 count = bin->ehdr.e_shnum;
-	if (!(ret = calloc ((count + 1), sizeof (RBinElfSection)))) {
+	if (!r_vector_reserve (&bin->g_sections, count)) {
 		return NULL;
 	}
 	for (i = 0; i < count; i++) {
-		ret[i].offset = bin->shdr[i].sh_offset;
-		ret[i].size = bin->shdr[i].sh_size;
-		ret[i].align = bin->shdr[i].sh_addralign;
-		ret[i].flags = bin->shdr[i].sh_flags;
-		ret[i].link = bin->shdr[i].sh_link;
-		ret[i].info = bin->shdr[i].sh_info;
-		ret[i].type = bin->shdr[i].sh_type;
+		RBinElfSection *section = r_vector_end (&bin->g_sections);
+		section->offset = bin->shdr[i].sh_offset;
+		section->size = bin->shdr[i].sh_size;
+		section->align = bin->shdr[i].sh_addralign;
+		section->flags = bin->shdr[i].sh_flags;
+		section->link = bin->shdr[i].sh_link;
+		section->info = bin->shdr[i].sh_info;
+		section->type = bin->shdr[i].sh_type;
 		if (is_bin_etrel (bin)) {
-			ret[i].rva = bin->baddr + bin->shdr[i].sh_offset;
+			section->rva = bin->baddr + bin->shdr[i].sh_offset;
 		} else {
-			ret[i].rva = bin->shdr[i].sh_addr;
+			section->rva = bin->shdr[i].sh_addr;
 		}
 
 		const int SHNAME = (int)bin->shdr[i].sh_name;
@@ -3147,23 +3162,459 @@ RBinElfSection* Elf_(r_bin_elf_get_sections)(ELFOBJ *bin) {
 		nidx = SHNAME;
 		if (nidx < 0 || !bin->shstrtab_section || !bin->shstrtab_size || nidx > bin->shstrtab_size) {
 			snprintf (invalid_s, sizeof (invalid_s), "invalid%d", invalid_c);
-			strncpy (ret[i].name, invalid_s, sizeof (ret[i].name) - 1);
+			strncpy (section->name, invalid_s, sizeof (section->name) - 1);
 			invalid_c++;
 		} else if (bin->shstrtab && (SHNAME > 0) && (SHNAME < SHSIZE)) {
-			strncpy (ret[i].name, &bin->shstrtab[SHNAME], sizeof (ret[i].name) - 1);
+			strncpy (section->name, &bin->shstrtab[SHNAME], sizeof (section->name) - 1);
 		} else if (bin->shdr[i].sh_type == SHT_NULL) {
 			//to follow the same behaviour as readelf
-			ret[i].name[0] = '\0';
+			section->name[0] = '\0';
 		} else {
 			snprintf (unknown_s, sizeof (unknown_s), "unknown%d", unknown_c);
-			strncpy (ret[i].name, unknown_s, sizeof (ret[i].name) - 1);
+			strncpy (section->name, unknown_s, sizeof (section->name) - 1);
 			unknown_c++;
 		}
-		ret[i].name[ELF_STRING_LENGTH - 1] = '\0';
-		ret[i].last = 0;
+		section->name[ELF_STRING_LENGTH - 1] = '\0';
 	}
-	ret[i].last = 1;
-	return ret;
+	return &bin->g_sections;
+}
+
+static int elf_flags_to_section_perms(int flags) {
+	int perm = 0;
+	if (R_BIN_ELF_SCN_IS_EXECUTABLE (flags)) {
+		perm |= R_PERM_X;
+	}
+	if (R_BIN_ELF_SCN_IS_WRITABLE (flags)) {
+		perm |= R_PERM_W;
+	}
+	if (R_BIN_ELF_SCN_IS_READABLE (flags)) {
+		perm |= R_PERM_R;
+	}
+	return perm;
+}
+
+static bool is_data_section(const char *name) {
+	if (strstr (name, "data") && !strstr (name, "rel") && !strstr (name, "pydata")) {
+		return true;
+	}
+	if (!strcmp (name, "C")) {
+		return true;
+	}
+	return false;
+}
+
+static bool is_wordable_section(const char *name) {
+	const char *sections[] = {".init_array", ".fini_array", ".data.rel.ro", ".dynamic", ".got"};
+	int i;
+	for (i = 0; i < R_ARRAY_SIZE (sections); i++) {
+		if (!strcmp (name, sections[i])) {
+			return true;
+		}
+	}
+	if (strstr (name, ".rela.")) {
+		return true;
+	}
+	return false;
+}
+
+static void dtproceed(RBinFile *bf, ut64 preinit_addr, ut64 preinit_size, int symtype) {
+	ELFOBJ *obj = R_UNWRAP3 (bf, o, bin_obj);
+	RListIter *iter;
+	RBinAddr *ba;
+	r_list_foreach (obj->inits, iter, ba) {
+		if (preinit_addr == ba->paddr) {
+			return;
+		}
+	}
+	int big_endian = Elf_(r_bin_elf_is_big_endian) (obj);
+	ut64 at;
+	ut64 from = Elf_(r_bin_elf_v2p) (obj, preinit_addr);
+	ut64 _baddr = Elf_(r_bin_elf_get_baddr) (bf->o->bin_obj);
+	ut64 to = from + preinit_size;
+	for (at = from; at < to ; at += R_BIN_ELF_WORDSIZE) {
+		ut64 addr = 0;
+		if (R_BIN_ELF_WORDSIZE == 8) {
+			addr = r_buf_read_ble64_at (bf->buf, at, big_endian);
+		} else {
+			addr = r_buf_read_ble32_at (bf->buf, at, big_endian);
+		}
+		if (!addr || addr == UT64_MAX) {
+			R_LOG_DEBUG ("invalid dynamic init address at 0x%08"PFMT64x, at);
+			break;
+		}
+		ut64 caddr = Elf_(r_bin_elf_v2p) (obj, addr);
+		if (!caddr) {
+			R_LOG_DEBUG ("v2p failed for 0x%08"PFMT64x, caddr);
+			break;
+		}
+		ba = R_NEW0 (RBinAddr);
+		if (ba) {
+			ba->paddr = caddr;
+			ba->vaddr = addr;
+			ba->hpaddr = at;
+			ba->hvaddr = at + _baddr;
+			ba->bits = R_BIN_ELF_WORDSIZE * 8;
+			ba->type = symtype;
+			r_list_append (obj->inits, ba);
+		}
+	}
+}
+
+static bool parse_pt_dynamic(RBinFile *bf, RBinSection *ptr) {
+	ELFOBJ *obj = R_UNWRAP3 (bf, o, bin_obj);
+	int big_endian = Elf_(r_bin_elf_is_big_endian) (obj);
+	Elf_(Dyn) entry;
+	ut64 paddr = ptr->paddr;
+	ut64 paddr_end = paddr + ptr->size;
+	ut64 at = paddr;
+	ut64 preinit_addr = UT64_MAX;
+	ut64 preinit_size = UT64_MAX;
+	ut64 init_addr = UT64_MAX;
+	ut64 init_size = UT64_MAX;
+	ut64 fini_addr = UT64_MAX;
+	ut64 fini_size = UT64_MAX;
+	for (at = paddr; at < paddr_end; at += sizeof (Elf_(Dyn))) {
+#if R_BIN_ELF64
+		entry.d_tag = r_buf_read_ble64_at (bf->buf, at, big_endian);
+		if (entry.d_tag == UT64_MAX) {
+			R_LOG_DEBUG ("Corrupted elf tag");
+			break;
+		}
+		entry.d_un.d_val = r_buf_read_ble64_at (bf->buf, at + sizeof (entry.d_tag), big_endian);
+#else
+		entry.d_tag = r_buf_read_ble32_at (bf->buf, at, big_endian);
+		if (entry.d_tag == UT32_MAX) {
+			R_LOG_DEBUG ("Corrupted elf tag");
+			break;
+		}
+		entry.d_un.d_val = r_buf_read_ble32_at (bf->buf, at + sizeof (entry.d_tag), big_endian);
+#endif
+		if (entry.d_tag == DT_NULL) {
+			break;
+		}
+		switch (entry.d_tag) {
+		case DT_INIT_ARRAY:
+			R_LOG_DEBUG ("init array");
+			init_addr = entry.d_un.d_val;
+			if (init_size != UT64_MAX) {
+				dtproceed (bf, init_addr, init_size, R_BIN_ENTRY_TYPE_INIT);
+				init_addr = UT64_MAX;
+				init_size = UT64_MAX;
+			}
+			break;
+		case DT_INIT_ARRAYSZ:
+			init_size = entry.d_un.d_val;
+			R_LOG_DEBUG ("init array size");
+			if (init_addr != UT64_MAX) {
+				dtproceed (bf, init_addr, init_size, R_BIN_ENTRY_TYPE_INIT);
+				init_addr = UT64_MAX;
+				init_size = UT64_MAX;
+			}
+			break;
+		case DT_FINI_ARRAY:
+			R_LOG_DEBUG ("fini array");
+			fini_addr = entry.d_un.d_val;
+			if (fini_size != UT64_MAX) {
+				dtproceed (bf, fini_addr, fini_size, R_BIN_ENTRY_TYPE_FINI);
+				fini_addr = UT64_MAX;
+				fini_size = UT64_MAX;
+			}
+			break;
+		case DT_FINI_ARRAYSZ:
+			fini_size = entry.d_un.d_val;
+			R_LOG_DEBUG ("fini array size");
+			if (fini_addr != UT64_MAX) {
+				dtproceed (bf, fini_addr, fini_size, R_BIN_ENTRY_TYPE_FINI);
+				fini_addr = UT64_MAX;
+				fini_size = UT64_MAX;
+			}
+			break;
+		case DT_PREINIT_ARRAY:
+			R_LOG_DEBUG ("preinit array");
+			preinit_addr = entry.d_un.d_val;
+			if (preinit_size != UT64_MAX) {
+				dtproceed (bf, preinit_addr, preinit_size, R_BIN_ENTRY_TYPE_PREINIT);
+				preinit_addr = UT64_MAX;
+				preinit_size = UT64_MAX;
+			}
+			break;
+		case DT_PREINIT_ARRAYSZ:
+			R_LOG_DEBUG ("preinit array size");
+			preinit_size = entry.d_un.d_val;
+			if (preinit_addr != UT64_MAX) {
+				dtproceed (bf, preinit_addr, preinit_size, R_BIN_ENTRY_TYPE_PREINIT);
+				preinit_addr = UT64_MAX;
+				preinit_size = UT64_MAX;
+			}
+			break;
+		default:
+			R_LOG_DEBUG ("add dt.dyn.entry tag=%d value=0x%08"PFMT64x, entry.d_tag, (ut64)entry.d_un.d_val);
+			break;
+		}
+	}
+	return true;
+}
+
+static const char *elf_section_type_tostring(int shtype) {
+	switch (shtype) {
+	case SHT_NULL: return "NULL";
+	case SHT_DYNAMIC: return "DYNAMIC";
+	case SHT_GNU_versym: return "GNU_VERSYM";
+	case SHT_GNU_verneed: return "GNU_VERNEED";
+	case SHT_GNU_verdef: return "GNU_VERDEF";
+	case SHT_GNU_ATTRIBUTES: return "GNU_ATTR";
+	case SHT_GNU_LIBLIST: return "GNU_LIBLIST";
+	case SHT_CHECKSUM: return "SHT_CHECKSUM";
+	case SHT_LOSUNW: return "SHT_LOSUNW";
+	case SHT_GNU_HASH: return "GNU_HASH";
+	case SHT_SYMTAB: return "SYMTAB";
+	case SHT_PROGBITS: return "PROGBITS";
+	case SHT_NOTE: return "NOTE";
+	case SHT_STRTAB: return "STRTAB";
+	case SHT_RELA: return "RELA";
+	case SHT_HASH: return "HASH";
+	case SHT_NOBITS: return "NOBITS";
+	case SHT_REL: return "REL";
+	case SHT_SHLIB: return "SHLIB";
+	case SHT_DYNSYM: return "DYNSYM";
+	case SHT_LOPROC: return "LOPROC";
+	case SHT_HIPROC: return "HIPROC";
+	case SHT_LOUSER: return "LOUSER";
+	case SHT_HIUSER: return "HIUSER";
+	case SHT_PREINIT_ARRAY: return "PREINIT_ARRAY";
+	case SHT_GROUP: return "GROUP";
+	case SHT_SYMTAB_SHNDX: return "SYMTAB_SHNDX";
+	case SHT_NUM: return "NUM";
+	case SHT_INIT_ARRAY: return "INIT_ARRAY";
+	case SHT_FINI_ARRAY: return "FINI_ARRAY";
+	}
+	return "";
+}
+
+static char *setphname(ut16 mach, Elf_(Word) ptyp) {
+	// TODO to complete over time
+	if (mach == EM_ARM) {
+		if (ptyp == SHT_ARM_EXIDX) {
+			return strdup ("EXIDX");
+		}
+	} else if (mach == EM_MIPS) {
+		if (ptyp == PT_MIPS_ABIFLAGS) {
+			return strdup ("ABIFLAGS");
+		} else if (ptyp == PT_MIPS_REGINFO) {
+			return strdup ("REGINFO");
+		}
+	}
+	return strdup ("UNKNOWN");
+}
+
+static void _cache_bin_sections(RBinFile *bf, ELFOBJ *bin, const RVector *elf_bin_sections) {
+	if (elf_bin_sections) {
+		r_vector_reserve (&bin->cached_sections, r_vector_length (elf_bin_sections));
+
+		RBinElfSection *section;
+		int i = 0;
+		r_vector_foreach (elf_bin_sections, section) {
+			RBinSection *ptr = r_vector_end (&bin->cached_sections);
+			if (!ptr) {
+				break;
+			}
+			ptr->name = strdup ((char*)section->name);
+			ptr->is_data = is_data_section (ptr->name);
+			if (is_wordable_section (ptr->name)) {
+				ptr->format = r_str_newf ("Cd %d[%"PFMT64d"]",
+					R_BIN_ELF_WORDSIZE, section->size / R_BIN_ELF_WORDSIZE);
+			}
+			ptr->size = section->type != SHT_NOBITS ? section->size : 0;
+			ptr->vsize = section->size;
+			ptr->paddr = section->offset;
+			ptr->vaddr = section->rva;
+			ptr->type = elf_section_type_tostring (section->type);
+			ptr->add = !bin->phdr; // Load sections if there is no PHDR
+			ptr->perm = elf_flags_to_section_perms (section->flags);
+#if 0
+TODO: ptr->flags = elf_flags_tostring (section->flags);
+#define SHF_WRITE	     (1 << 0)	/* Writable */
+#define SHF_ALLOC	     (1 << 1)	/* Occupies memory during execution */
+#define SHF_EXECINSTR	     (1 << 2)	/* Executable */
+#define SHF_MERGE	     (1 << 4)	/* Might be merged */
+#define SHF_STRINGS	     (1 << 5)	/* Contains nul-terminated strings */
+#define SHF_INFO_LINK	     (1 << 6)	/* `sh_info' contains SHT index */
+#define SHF_LINK_ORDER	     (1 << 7)	/* Preserve order after combining */
+#define SHF_OS_NONCONFORMING (1 << 8)	/* Non-standard OS specific handling
+					   required */
+#define SHF_GROUP	     (1 << 9)	/* Section is member of a group.  */
+#define SHF_TLS		     (1 << 10)	/* Section hold thread-local data.  */
+#define SHF_COMPRESSED	     (1 << 11)	/* Section with compressed data. */
+#define SHF_MASKOS	     0x0ff00000	/* OS-specific.  */
+#define SHF_MASKPROC	     0xf0000000	/* Processor-specific */
+#define SHF_ORDERED	     (1 << 30)	/* Special ordering requirement (Solaris) */
+#define SHF_EXCLUDE	     (1U << 31)	/* Section is excluded unless */
+#endif
+			i++;
+		}
+	}
+
+	// program headers is another section
+	ut16 mach = bin->ehdr.e_machine;
+	Elf_(Phdr) *phdr = bin->phdr;
+
+	r_list_free (bin->inits); // XXX remove, only invoked once now
+	bin->inits = r_list_newf ((RListFree)free); // r_bin_addr_free);
+
+	int found_load = 0;
+	if (phdr) {
+		ut64 num = Elf_(r_bin_elf_get_phnum) (bin);
+		r_vector_reserve (&bin->cached_sections, r_vector_length (&bin->cached_sections) + num);
+
+		int i = 0, n = 0;
+		for (i = 0; i < num; i++) {
+			RBinSection *ptr = r_vector_end (&bin->cached_sections);
+			if (!ptr) {
+				return;
+			}
+
+			ptr->add = false;
+			ptr->size = phdr[i].p_filesz;
+			ptr->vsize = phdr[i].p_memsz;
+			ptr->paddr = phdr[i].p_offset;
+			ptr->vaddr = phdr[i].p_vaddr;
+			ptr->perm = phdr[i].p_flags; // perm  are rwx like x=1, w=2, r=4, aka no need to convert from r2's R_PERM
+			ptr->is_segment = true;
+			switch (phdr[i].p_type) {
+			case PT_DYNAMIC:
+				ptr->name = strdup ("DYNAMIC");
+				parse_pt_dynamic (bf, ptr);
+				break;
+			case PT_LOOS:
+				ptr->name = r_str_newf ("LOOS");
+				break;
+			case PT_LOAD:
+				ptr->name = r_str_newf ("LOAD%d", n++);
+				ptr->perm |= R_PERM_R;
+				found_load = 1;
+				ptr->add = true;
+				break;
+			case PT_INTERP:
+				ptr->name = strdup ("INTERP");
+				break;
+			case PT_GNU_STACK:
+				ptr->name = strdup ("GNU_STACK");
+				break;
+			case PT_GNU_RELRO:
+				ptr->name = strdup ("GNU_RELRO");
+				break;
+			case PT_GNU_PROPERTY:
+				ptr->name = strdup ("GNU_PROPERTY");
+				break;
+			case PT_GNU_EH_FRAME:
+				ptr->name = strdup ("GNU_EH_FRAME");
+				break;
+			case PT_PHDR:
+				ptr->name = strdup ("PHDR");
+				break;
+			case PT_TLS:
+				ptr->name = strdup ("TLS");
+				break;
+			case PT_NOTE:
+				ptr->name = strdup ("NOTE");
+				break;
+			case PT_LOPROC:
+				ptr->name = strdup ("LOPROC");
+				break;
+			case PT_SUNWBSS:
+				ptr->name = strdup ("SUNWBSS");
+				break;
+			case PT_HISUNW:
+				ptr->name = strdup ("HISUNW");
+				break;
+			case PT_SUNWSTACK:
+				ptr->name = strdup ("SUNWSTACK");
+				break;
+			case PT_HIPROC:
+				ptr->name = strdup ("HIPROC");
+				break;
+			case PT_OPENBSD_RANDOMIZE:
+				ptr->name = strdup ("OPENBSD_RANDOMIZE");
+				break;
+			case PT_OPENBSD_WXNEEDED:
+				ptr->name = strdup ("OPENBSD_WXNEEDED");
+				break;
+			case PT_OPENBSD_BOOTDATA:
+				ptr->name = strdup ("OPENBSD_BOOTDATA");
+				break;
+			default:
+				if (ptr->size == 0 && ptr->vsize == 0) {
+					ptr->name = strdup ("NONE");
+				} else {
+					ptr->name = setphname (mach, phdr[i].p_type);
+				}
+				break;
+			}
+		}
+	}
+
+	if (r_vector_empty (&bin->cached_sections)) {
+		if (!bf->size) {
+			ELFOBJ *bin = bf->o->bin_obj;
+			bf->size = bin? bin->size: 0x9999;
+		}
+		if (found_load == 0) {
+			RBinSection *ptr = r_vector_end (&bin->cached_sections);
+			if (!ptr) {
+				return;
+			}
+
+			ptr->name = strdup ("uphdr");
+			ptr->size = bf->size;
+			ptr->vsize = bf->size;
+			ptr->paddr = 0;
+			ptr->vaddr = 0x10000;
+			ptr->add = true;
+			ptr->perm = R_PERM_RWX;
+		}
+	}
+	// add entry for ehdr
+	RBinSection *ptr = r_vector_end (&bin->cached_sections);
+	if (!ptr) {
+		return;
+	}
+
+	ut64 ehdr_size = sizeof (bin->ehdr);
+	if (bf->size < ehdr_size) {
+		ehdr_size = bf->size;
+	}
+	ptr->name = strdup ("ehdr");
+	ptr->paddr = 0;
+	ptr->vaddr = bin->baddr;
+	ptr->size = ehdr_size;
+	ptr->vsize = ehdr_size;
+	ptr->add = false;
+	if (bin->ehdr.e_type == ET_REL) {
+		ptr->add = true;
+	}
+	ptr->perm = R_PERM_RW;
+	ptr->is_segment = true;
+}
+
+static void _fini_bin_section(void *_section, void *user) {
+	RBinSection *section = _section;
+	if (section) {
+		free (section->name);
+		free (section->format);
+	}
+}
+
+const RVector* Elf_(r_bin_elf_load_sections)(RBinFile *bf, ELFOBJ *bin) {
+	r_return_val_if_fail (bf && bin, NULL);
+	if (bin->sections_cached) {
+		return &bin->cached_sections;
+	}
+
+	const RVector *elf_bin_sections = _load_elf_sections (bin);
+	r_vector_init (&bin->cached_sections, sizeof (RBinSection), (RVectorFree) _fini_bin_section, NULL);
+	_cache_bin_sections (bf, bin, elf_bin_sections);
+	bin->sections_cached = true;
+	return &bin->cached_sections;
 }
 
 static bool is_special_arm_symbol(ELFOBJ *bin, Elf_(Sym) *sym, const char *name) {
@@ -3616,12 +4067,13 @@ static RBinElfSymbol* parse_gnu_debugdata(ELFOBJ *bin, size_t *ret_size) {
 	if (ret_size) {
 		*ret_size = 0;
 	}
-	if (bin->g_sections) {
-		size_t i;
-		for (i = 0; !bin->g_sections[i].last; i++) {
-			if (!strcmp (bin->g_sections[i].name, ".gnu_debugdata")) {
-				ut64 addr = bin->g_sections[i].offset;
-				ut64 size = bin->g_sections[i].size;
+	if (bin->sections_loaded) {
+		size_t i = 0;
+		RBinElfSection *section;
+		r_vector_foreach (&bin->g_sections, section) {
+			if (!strcmp (section->name, ".gnu_debugdata")) {
+				ut64 addr = section->offset;
+				ut64 size = section->size;
 				if (size < 10) {
 					return NULL;
 				}
@@ -3654,6 +4106,7 @@ static RBinElfSymbol* parse_gnu_debugdata(ELFOBJ *bin, size_t *ret_size) {
 				free (data);
 				return NULL;
 			}
+			i++;
 		}
 	}
 	return NULL;
@@ -4016,7 +4469,12 @@ void Elf_(r_bin_elf_free)(ELFOBJ* bin) {
 	if (bin->g_imports != bin->phdr_imports) {
 		R_FREE (bin->phdr_imports);
 	}
-	R_FREE (bin->g_sections);
+	if (bin->sections_loaded) {
+		r_vector_fini (&bin->g_sections);
+	}
+	if (bin->sections_cached) {
+		r_vector_fini (&bin->cached_sections);
+	}
 	R_FREE (bin->g_symbols);
 	R_FREE (bin->g_imports);
 	R_FREE (bin->g_relocs);
