@@ -69,14 +69,12 @@ typedef struct r_bin_elf_reloc_t {
 	ut64 offset;
 	ut64 rva;
 	ut16 section;
-	int last;
 	ut64 sto;
 } RBinElfReloc;
 
 typedef struct r_bin_elf_field_t {
 	ut64 offset;
 	char name[ELF_STRING_LENGTH];
-	int last;
 } RBinElfField;
 
 typedef struct r_bin_elf_string_t {
@@ -115,7 +113,6 @@ typedef struct Elf_(r_bin_elf_dynamic_info) {
 
 typedef struct r_bin_elf_lib_t {
 	char name[ELF_STRING_LENGTH];
-	int last;
 } RBinElfLib;
 
 struct Elf_(r_bin_elf_obj_t) {
@@ -155,16 +152,21 @@ struct Elf_(r_bin_elf_obj_t) {
 	/*cache purpose*/
 	RBinElfSymbol *g_symbols;
 	RBinElfSymbol *g_imports;
-	RBinElfReloc *g_relocs;
 	ut32 g_reloc_num;
 	RBinElfSymbol *phdr_symbols;
 	RBinElfSymbol *phdr_imports;
 	HtUP *rel_cache;
 	RList *inits;
+	bool relocs_loaded;
+	RVector g_relocs;  // RBinElfReloc
 	bool sections_loaded;
 	bool sections_cached;
 	RVector g_sections; // RBinElfSection
 	RVector cached_sections; // RBinSection
+	bool libs_loaded;
+	RVector g_libs; // RBinElfLib
+	bool fields_loaded;
+	RVector g_fields;  // RBinElfField
 };
 
 int Elf_(r_bin_elf_has_va)(struct Elf_(r_bin_elf_obj_t) *bin);
@@ -195,12 +197,12 @@ char* Elf_(r_bin_elf_get_elf_class)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_get_bits)(struct Elf_(r_bin_elf_obj_t) *bin);
 char* Elf_(r_bin_elf_get_osabi_name)(struct Elf_(r_bin_elf_obj_t) *bin);
 int Elf_(r_bin_elf_is_big_endian)(struct Elf_(r_bin_elf_obj_t) *bin);
-RBinElfReloc* Elf_(r_bin_elf_get_relocs)(struct Elf_(r_bin_elf_obj_t) *bin);
-RBinElfLib* Elf_(r_bin_elf_get_libs)(struct Elf_(r_bin_elf_obj_t) *bin);
+const RVector *Elf_(r_bin_elf_load_relocs)(struct Elf_(r_bin_elf_obj_t) *bin);  // RBinElfReloc
+const RVector* Elf_(r_bin_elf_load_libs)(struct Elf_(r_bin_elf_obj_t) *bin);  // RBinElfLib
 const RVector* Elf_(r_bin_elf_load_sections)(RBinFile *bf, struct Elf_(r_bin_elf_obj_t) *bin);
 RBinElfSymbol* Elf_(r_bin_elf_get_symbols)(struct Elf_(r_bin_elf_obj_t) *bin);
 RBinElfSymbol* Elf_(r_bin_elf_get_imports)(struct Elf_(r_bin_elf_obj_t) *bin);
-struct r_bin_elf_field_t* Elf_(r_bin_elf_get_fields)(struct Elf_(r_bin_elf_obj_t) *bin);
+const RVector* Elf_(r_bin_elf_load_fields)(struct Elf_(r_bin_elf_obj_t) *bin);  // RBinElfField
 char *Elf_(r_bin_elf_get_rpath)(struct Elf_(r_bin_elf_obj_t) *bin);
 
 struct Elf_(r_bin_elf_obj_t)* Elf_(r_bin_elf_new)(const char* file, bool verbose);

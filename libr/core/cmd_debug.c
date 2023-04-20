@@ -480,8 +480,8 @@ static RCoreHelpMessage help_msg_dt = {
 	"Usage: dt", "", "Trace commands",
 	"dt", "", "list all traces ",
 	"dt", " [addr]", "show trace info at address",
-	"dt%", "", "TODO",
 	"dt*", "", "list all traced opcode offsets",
+	"dtj", "", "list instruction trace logs in json",
 	"dt+"," [addr] [times]", "add trace for address N times",
 	"dt-", "", "reset traces (instruction/calls)",
 	"dt=", "", "show ascii-art color bars with the debug trace ranges",
@@ -4544,18 +4544,30 @@ static bool cmd_dcu(RCore *core, const char *input) {
 			r_cons_break_pop ();
 			return true;
 		}
+		RBreakpointItem *bp = r_bp_get_at (core->dbg->bp, addr);
+		bool bpset = false;
+		if (bp) {
+			// theres a breakpoint already so no need to set
+		} else {
+			if (r_bp_add_sw (core->dbg->bp, addr, core->dbg->bpsize, R_BP_PROT_EXEC)) {
+				bpset = true;
+				// ok go on!
+			} else {
+				R_LOG_ERROR ("Cannot set breakpoint of size %d at 0x%08"PFMT64x,
+					core->dbg->bpsize, addr);
+				return false;
+			}
+		}
 		R_LOG_INFO ("Continue until 0x%08"PFMT64x" using %d bpsize", addr, core->dbg->bpsize);
 		r_reg_arena_swap (core->dbg->reg, true);
-		if (r_bp_add_sw (core->dbg->bp, addr, core->dbg->bpsize, R_BP_PROT_EXEC)) {
-			if (r_debug_is_dead (core->dbg)) {
-				R_LOG_ERROR ("Cannot continue, run ood?");
-			} else {
-				r_debug_continue (core->dbg);
-			}
-			r_bp_del (core->dbg->bp, addr);
+
+		if (r_debug_is_dead (core->dbg)) {
+			R_LOG_ERROR ("Cannot continue, run ood?");
 		} else {
-			R_LOG_ERROR ("Cannot set breakpoint of size %d at 0x%08"PFMT64x,
-				core->dbg->bpsize, addr);
+			r_debug_continue (core->dbg);
+		}
+		if (bpset) {
+			r_bp_del (core->dbg->bp, addr);
 		}
 	}
 	return true;
@@ -5328,6 +5340,9 @@ static int cmd_debug(void *data, const char *input) {
 		case 'q': // "dtq"
 			r_debug_trace_list (core->dbg, 'q', core->offset);
 			break;
+		case 'j': // "dtj"
+			r_debug_trace_list (core->dbg, 'j', core->offset);
+			break;
 		case '*': // "dt*"
 			r_debug_trace_list (core->dbg, 1, core->offset);
 			break;
@@ -5381,7 +5396,8 @@ static int cmd_debug(void *data, const char *input) {
 				r_list_foreach (core->dbg->trace->traces, iter, trace) {
 					op = r_core_anal_op (core, trace->addr, R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_DISASM);
 					if (n >= min) {
-						r_cons_printf ("0x%08"PFMT64x" %s\n", trace->addr, op->mnemonic);
+						const char *opstr = op? op->mnemonic: "?";
+						r_cons_printf ("0x%08"PFMT64x" %s\n", trace->addr, opstr);
 					}
 					n++;
 					r_anal_op_free (op);
@@ -5391,7 +5407,8 @@ static int cmd_debug(void *data, const char *input) {
 				//r_core_cmd0 (core, "pd 1 @@= `dtq`");
 				r_list_foreach (core->dbg->trace->traces, iter, trace) {
 					op = r_core_anal_op (core, trace->addr, R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_DISASM);
-					r_cons_printf ("0x%08"PFMT64x" %s\n", trace->addr, op->mnemonic);
+					const char *opstr = op? op->mnemonic: "?";
+					r_cons_printf ("0x%08"PFMT64x" %s\n", trace->addr, opstr);
 					r_anal_op_free (op);
 				}
 			}
