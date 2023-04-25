@@ -641,13 +641,11 @@ static int showreg(RCore *core, const char *str) {
 		}
 		return r->size;
 	}
-	char *arg = strchr (str + 1, ' ');
+	const char *arg = strchr (str + 1, ' ');
 	if (arg && size == 0) {
-		size = atoi (arg + 1);
-	} else {
-		size = atoi (str + 1);
+		str = arg;
 	}
-	return size;
+	return atoi (str + 1);
 }
 
 static RGraphNode *get_graphtrace_node(RGraph *g, Sdb *nodes, struct trace_node *tn) {
@@ -3366,7 +3364,7 @@ static void get_backtrace_info(RCore* core, RDebugFrame* frame, ut64 addr, char*
 			*flagdesc2 = r_str_newf ("%s", f->name);
 		}
 	}
-	if (!r_str_cmp (*flagdesc, *flagdesc2, -1)) {
+	if (!strcmp (*flagdesc, *flagdesc2)) {
 		free (*flagdesc2);
 		*flagdesc2 = NULL;
 	}
