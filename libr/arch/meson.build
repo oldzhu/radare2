@@ -36,6 +36,8 @@ r_arch_sources = [
   'p/m68k_gnu/plugin.c',
   'p/m68k_gnu/m68k-dis.c',
   'p/m68k_gnu/m68k-opc.c',
+  'p/m68k_cs/plugin.c',
+  'p/m680x_cs/plugin.c',
   'p/arm/gnu/floatformat.c',
 # fails on windows
 # error LNK2005: SocketNotificationRetrieveEvents already defined in p_hppa_gnu_hppa-dis.c.obj
@@ -72,6 +74,7 @@ r_arch_sources = [
   'p/riscv_cs/plugin.c',
   'p/xap/plugin.c',
   'p/6502/plugin.c',
+  'p/6502_cs/plugin.c',
   'p/snes/plugin.c',
   'p/sh/plugin.c',
   'p/sh/gnu/sh-dis.c',
@@ -110,6 +113,7 @@ r_arch_sources = [
   'p/msp430/msp430_disas.c',
   'p/h8300/plugin.c',
   'p/h8300/h8300_disas.c',
+  'p/xcore_cs/plugin.c',
   # python
   'p/pyc/plugin.c',
   'p/pyc/opcode_all.c',

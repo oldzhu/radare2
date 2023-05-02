@@ -156,7 +156,6 @@ endif
 if no_user_plugins
 
 anal_plugins += [
-  '6502_cs',
   '8051',
   'arm_cs',
   'avr',
@@ -165,19 +164,20 @@ anal_plugins += [
   'gb',
   'i8080',
   'java',
-  'm68k_cs',
-  'm680x_cs',
   'mips_cs',
   'ppc_cs',
   'sparc_cs',
   'tms320',
   'x86_cs',
-  'xcore_cs'
 ]
 
 arch_plugins += [
+  '6502_cs',
   'loongarch_gnu',
   's390_cs',
+  'm68k_cs',
+  'm680x_cs',
+  'xcore_cs'
 ]
 
 if no_user_plugins
@@ -196,7 +196,6 @@ if no_user_plugins
       'sparc_gnu',
       'lanai',
       's390_gnu',
-      'm68k_gnu',
     ]
   endif
 endif
