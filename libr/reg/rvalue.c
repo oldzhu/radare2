@@ -107,6 +107,12 @@ R_API ut64 r_reg_get_value(RReg *reg, RRegItem *item) {
 			return r_read_me27 (regset->arena->bytes + off, 0);
 		}
 		break;
+	case 24:
+		if (off + 3 <= regset->arena->size) {
+			return r_read_ble24 (regset->arena->bytes + off, be);
+		}
+		R_LOG_WARN ("24bit oob read %d", off);
+		break;
 	case 32:
 		if (off + 4 <= regset->arena->size) {
 			return r_read_ble32 (regset->arena->bytes + off, be);
@@ -131,10 +137,13 @@ R_API ut64 r_reg_get_value(RReg *reg, RRegItem *item) {
 		// XXX 128 & 256 bit
 		{
 			long double ld = r_reg_get_longdouble (reg, item);
-			if (ld < 0 || ld > UT64_MAX) {
+			if (isnan (ld)) {
 				return UT64_MAX;
 			}
-			return isnan (ld)? UT64_MAX: (ut64)ld;
+			if (ld >= (long double)UT64_MIN && fmaxl (ld, (long double) UT64_MAX) != ld) {
+				return (ut64) ld;
+			}
+			return UT64_MAX;
 		}
 	default:
 		R_LOG_WARN ("Bit size %d not supported", item->size);

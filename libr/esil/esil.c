@@ -1445,8 +1445,12 @@ static bool esil_asr(REsil *esil) {
 				ut64 left_bits = 0;
 				if (regsize <= 64) {
 					if (op_num & (1ULL << (regsize - 1))) {
-						left_bits = (1ULL << param_num) - 1;
-						left_bits <<= regsize - param_num;
+						if (regsize - param_num >= 64) {
+							left_bits = 0;
+						} else {
+							left_bits = (1ULL << param_num) - 1;
+							left_bits <<= regsize - param_num;
+						}
 					}
 				}
 				op_num = left_bits | (op_num >> param_num);
@@ -3101,7 +3105,7 @@ static bool esil_double_to_int(REsil *esil) {
 			if (isnan (s.f64) || isinf (s.f64)) {
 				R_LOG_DEBUG ("esil_float_to_int: nan or inf detected");
 			}
-			if (s.f64 > (double)ST64_MIN || s.f64 < (double)ST64_MAX) {
+			if (s.f64 > (double)ST64_MIN && s.f64 < (double)ST64_MAX) {
 				ret = r_esil_pushnum (esil, (st64)(s.f64));
 			} else {
 				R_LOG_DEBUG ("double-to-int out of range");
