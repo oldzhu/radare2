@@ -2910,13 +2910,13 @@ static void do_section_search(RCore *core, struct search_parameters *param, cons
 static void do_asm_search(RCore *core, struct search_parameters *param, const char *input, int mode, RInterval search_itv) {
 	RCoreAsmHit *hit; // WTF LOL must use RSearchHit in here!
 	RListIter *iter, *itermap;
-	int count = 0, maxhits = 0;
+	int count = 0;
 	RList *hits;
 	RIOMap *map;
-	bool regexp = input[1] == '/'; // "/c/"
-	bool everyByte = regexp && input[2] == 'a';
+	bool regexp = input[0] && input[1] == '/'; // "/c/"
+	bool everyByte = regexp && input[0] && input[1] && input[2] == 'a';
 	char *end_cmd = strchr (input, ' ');
-	switch ((end_cmd ? *(end_cmd - 1) : input[1])) {
+	switch ((end_cmd ? *(end_cmd - 1) : input[0]? input[1]: 0)) {
 	case 'j':
 		param->outmode = R_MODE_JSON;
 		break;
@@ -2936,7 +2936,7 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 		everyByte = true;
 	}
 
-	maxhits = (int) r_config_get_i (core->config, "search.maxhits");
+	int maxhits = (int) r_config_get_i (core->config, "search.maxhits");
 	if (param->outmode == R_MODE_JSON) {
 		pj_a (param->pj);
 	}
@@ -3796,7 +3796,7 @@ static int cmd_search(void *data, const char *input) {
 	core->search->overlap = r_config_get_i (core->config, "search.overlap");
 	core->search->bckwrds = false;
 
-	int param_offset = 2;
+	int param_offset = r_str_nlen (input, 2);
 	if (is_json_command (input, &param_offset)) {
 		param.outmode = R_MODE_JSON;
 	}
