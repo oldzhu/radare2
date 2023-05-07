@@ -5401,10 +5401,11 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 		/* workaround for thumb */
 		if (!strcmp (arch_name, "arm") && bits == 16) {
 			bits = 32;
-		}
-		int defsz = r_reg_default_bits (core->anal->reg);
-		if (defsz) {
-			bits = defsz;
+		} else {
+			const int defsz = r_reg_default_bits (core->anal->reg);
+			if (defsz > 0) {
+				bits = defsz;
+			}
 		}
 		/* workaround for 6502 and avr*/
 		if ((!strcmp (arch_name, "6502") && bits == 8)
@@ -5417,7 +5418,7 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, 16, pj, mode2, use_color);
 		}
 	}
-
+#if 0
 	if (mode == '=') {
 		int pcbits = 0;
 		const char *pcname = r_reg_get_name (core->anal->reg, R_REG_NAME_PC);
@@ -5427,10 +5428,11 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 				pcbits = reg->size;
 			}
 			if (pcbits) {
-				r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, pcbits, NULL, mode, use_color); // XXX detect which one is current usage
+				// r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, pcbits, NULL, mode, use_color); // XXX detect which one is current usage
 			}
 		}
 	}
+#endif
 	r_debug_reg_list (core->dbg, type, bits, pj, mode2, use_color);
 	if (mode == 'j') {
 		if (mode2 == 'J') {
