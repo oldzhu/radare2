@@ -150,6 +150,7 @@ static char *r2pm_pkgdir(void) {
 
 typedef enum {
 	TT_TEXTLINE,
+	TT_TEXTLINE_LIST,
 	TT_CODEBLOCK,
 	TT_ENDQUOTE,
 } R2pmTokenType;
@@ -221,6 +222,14 @@ static char *r2pm_get(const char *file, const char *token, R2pmTokenType type) {
 			descptr = (char *)r_str_trim_head_ro (descptr);
 			if (*descptr == '"') {
 				descptr++;
+			}
+			res = strdup (descptr);
+			break;
+		case TT_TEXTLINE_LIST:
+			descptr += strlen (needle);
+			nl = strchr (descptr, '\n');
+			if (nl) {
+				*nl = 0;
 			}
 			res = strdup (descptr);
 			break;
@@ -600,17 +609,18 @@ static int r2pm_clone(const char *pkg) {
 	if (r_file_is_directory (srcdir)) {
 		git_pull (srcdir, 0);
 	} else {
-		char *url = r2pm_get (pkg, "\nR2PM_GIT ", TT_TEXTLINE);
-		if (url) {
-			char *dir = strchr (url, ' ');
-			if (dir) {
-				*dir++ = 0;
-				if (strcmp (dir, pkg)) {
-					R_LOG_WARN ("pkgname != clonedir");
+		char *url_list = r2pm_get (pkg, "\nR2PM_GIT ", TT_TEXTLINE_LIST);
+		if (url_list) {
+			r_str_replace_ch (url_list, ',', ' ', true);
+			int url_ct, i;
+			char **urls = r_str_argv (url_list, &url_ct);
+			for (i = 0; i < url_ct; i++) {
+				if (!git_clone (srcdir, urls[i])) {
+					break;
 				}
 			}
-			git_clone (srcdir, url);
-			free (url);
+			r_str_argv_free (urls);
+			free (url_list);
 		} else {
 			char *url = r2pm_get (pkg, "\nR2PM_TGZ", TT_TEXTLINE);
 			if (!url) {
@@ -965,10 +975,10 @@ static char *r2pm_search(const char *grep) {
 	RStrBuf *sb = r_strbuf_new ("");
 	r_list_foreach (files, iter, file) {
 		if (*file != '.') {
-			bool match = R_STR_ISEMPTY (grep) || strstr (file, grep);
+			bool match = R_STR_ISEMPTY (grep) || r_str_casestr (file, grep);
 			char *desc = r2pm_desc (file);
 			if (desc) {
-				if (match || strstr (desc, grep)) {
+				if (match || r_str_casestr (desc, grep)) {
 					r_strbuf_appendf (sb, "%s%s%s\n", file, r_str_pad (' ', 20 - strlen (file)), desc);
 				}
 				free (desc);
