@@ -14,7 +14,7 @@ else
 WITHOUT_PULL=0
 
 # Build against last capstone release or next
-ifeq ($(shell test -d ../.git && echo 1),1)
+ifeq ($(shell test -e ../.git && echo 1),1)
 CS_RELEASE=0
 else
 ifeq ($(shell test -d capstone/.git && echo 1),1)
@@ -52,7 +52,7 @@ ifeq ($(USE_CS4),1)
 CS_TIP=1d230532840a37ac032c6ab80128238fc930c6c1
 CS_BRA=v4
 else
-CS_TIP=59153d3af2f74fccfddd5368feba20b8290b11cf
+CS_TIP=798f81420fbe497668a8203ca7ca4fcf62bbae39
 CS_BRA=next
 endif
 ifeq ($(CS_COMMIT_ARCHIVE),1)

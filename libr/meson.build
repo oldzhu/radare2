@@ -13,6 +13,7 @@ arch_plugins = [ 'null',
   'msp430',
   'h8300',
   'sh',
+  'sh_cs',
   'x86_nz',
   'alpha',
   'pic',
@@ -44,6 +45,7 @@ arch_plugins = [ 'null',
   'amd29k',
   'vax',
   'tricore',
+  'tricore_cs',
   'cris',
   'cr16',
   'bf',
@@ -114,6 +116,7 @@ if not no_user_plugins
     parse_plugins += [ 'v850_pseudo' ]
   endif
   if user_plugins.contains('wasm')
+    bin_plugins += [ 'wasm' ]
     arch_plugins += [ 'wasm' ]
     parse_plugins += [ 'wasm_pseudo' ]
   endif
@@ -159,12 +162,12 @@ anal_plugins += [
   'i8080',
   'java',
   'mips_cs',
-  'ppc_cs',
   'x86_cs',
 ]
 
 arch_plugins += [
   'chip8',
+  'wasm',
   '6502_cs',
   'loongarch_gnu',
   's390_cs',
@@ -173,6 +176,7 @@ arch_plugins += [
   'xcore_cs',
   'tms320',
   'sparc_cs',
+  'ppc_cs',
 ]
 
 if no_user_plugins
@@ -211,6 +215,7 @@ bin_plugins += [
   'coff',
   'dex',
   'dis',
+  'wasm',
   'dmp64',
   'dol',
   'dyldcache',
@@ -248,7 +253,6 @@ bin_plugins += [
   'symbols',
   'te',
   'vsf',
-  'wasm',
   'xbe',
   'xcoff64',
   'xnu_kernelcache',
@@ -407,9 +411,9 @@ parse_plugins += [
   'sh_pseudo',
   'tms320_pseudo',
   'v850_pseudo',
-  'wasm_pseudo',
   'x86_pseudo',
-  'z80_pseudo'
+  'z80_pseudo',
+  'wasm_pseudo'
 ]
 
 endif

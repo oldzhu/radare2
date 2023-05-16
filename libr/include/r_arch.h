@@ -286,6 +286,7 @@ extern RArchPlugin r_arch_plugin_jdh8;
 extern RArchPlugin r_arch_plugin_kvx;
 extern RArchPlugin r_arch_plugin_pickle;
 extern RArchPlugin r_arch_plugin_sh;
+extern RArchPlugin r_arch_plugin_sh_cs;
 extern RArchPlugin r_arch_plugin_v810;
 extern RArchPlugin r_arch_plugin_rsp;
 extern RArchPlugin r_arch_plugin_riscv;
@@ -318,6 +319,7 @@ extern RArchPlugin r_arch_plugin_bpf_cs;
 extern RArchPlugin r_arch_plugin_alpha;
 extern RArchPlugin r_arch_plugin_vax;
 extern RArchPlugin r_arch_plugin_tricore;
+extern RArchPlugin r_arch_plugin_tricore_cs;
 extern RArchPlugin r_arch_plugin_pic;
 extern RArchPlugin r_arch_plugin_arm_v35;
 extern RArchPlugin r_arch_plugin_cris;
@@ -346,6 +348,7 @@ extern RArchPlugin r_arch_plugin_chip8;
 extern RArchPlugin r_arch_plugin_mips_gnu;
 extern RArchPlugin r_arch_plugin_sm5xx;
 extern RArchPlugin r_arch_plugin_tms320;
+extern RArchPlugin r_arch_plugin_ppc_cs;
 
 #ifdef __cplusplus
 }

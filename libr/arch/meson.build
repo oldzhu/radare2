@@ -20,6 +20,9 @@ r_arch_sources = [
   'p/ppc/plugin_gnu.c',
   'p/ppc/gnu/ppc-dis.c',
   'p/ppc/gnu/ppc-opc.c',
+  'p/ppc/libvle/vle.c',
+  'p/ppc/libps/libps.c',
+  'p/ppc_cs/plugin.c',
   'p/null/plugin.c',
   'p/lm32/plugin.c',
   'p/s390/plugin.c',
@@ -129,6 +132,8 @@ r_arch_sources = [
   'p/mips_gnu/mips16-opc.c',
   'p/mips_gnu/micromips-opc.c',
   'p/mips_gnu/mips-opc.c',
+  'p/sh_cs/plugin.c',
+  'p/tricore_cs/plugin.c',
   # python
   'p/pyc/plugin.c',
   'p/pyc/opcode_all.c',
