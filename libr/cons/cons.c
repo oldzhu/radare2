@@ -1071,6 +1071,10 @@ R_API void r_cons_flush(void) {
 		}
 	}
 	r_cons_filter ();
+	if (C->buffer_len < 1) {
+		r_cons_reset ();
+		return;
+	}
 	if (r_cons_is_interactive () && I->fdout == 1) {
 		/* Use a pager if the output doesn't fit on the terminal window. */
 		if (C->pageable && C->buffer && I->pager && *I->pager && C->buffer_len > 0 && r_str_char_count (C->buffer, '\n') >= I->rows) {
@@ -1111,7 +1115,7 @@ R_API void r_cons_flush(void) {
 			r_cons_set_raw (true);
 		}
 	}
-	if (tee && *tee) {
+	if (R_STR_ISNOTEMPTY (tee)) {
 		FILE *d = r_sandbox_fopen (tee, "a+");
 		if (d) {
 			if (C->buffer_len != fwrite (C->buffer, 1, C->buffer_len, d)) {
@@ -1354,7 +1358,7 @@ R_API int r_cons_get_column(void) {
 /* final entrypoint for adding stuff in the buffer screen */
 R_API int r_cons_write(const char *str, int len) {
 	r_return_val_if_fail (str && len >= 0, -1);
-	if (len == 0) {
+	if (len < 1) {
 		return 0;
 	}
 	if (I->echo) {
@@ -2149,7 +2153,7 @@ R_API void r_cons_thready(void) {
 }
 
 #if WITH_STATIC_THEMES
-#include "d_themes.inc"
+#include "d_themes.inc.c"
 
 R_API const RConsTheme* r_cons_themes(void) {
 	return (const RConsTheme *)d_themes;
