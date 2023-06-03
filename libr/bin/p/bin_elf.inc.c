@@ -565,6 +565,17 @@ static RBinReloc *reloc_convert(ELFOBJ* bin, RBinElfReloc *rel, ut64 got_addr) {
 		case R_PPC_NONE:        break;
 		case R_PPC_GLOB_DAT:    ADD (32, 0); break;
 		case R_PPC_JMP_SLOT:    ADD (32, 0); break;
+		case R_PPC_COPY: ADD(32, 0); break; // copy symbol at runtime
+		case R_PPC_REL24: ADD(24, -(st64)P); break;
+		case R_PPC_REL14: ADD(16, -(st64)P); break;
+		case R_PPC_REL32: ADD(32, -(st64)P); break;
+		case R_PPC_RELATIVE: ADD(32, -(st64)P); break;
+		case R_PPC_PLT32: ADD(32, -(st64)P); break;
+		case R_PPC_ADDR16: ADD(16, 0); break;
+		case R_PPC_ADDR32: ADD(32, 0); break;
+		case R_PPC_ADDR16_LO: ADD(16, 0); break;  // XXX extract lower 16 bits of (target - vaddr - addend)
+		case R_PPC_ADDR16_HI: ADD(16, 0); break;  // XXX extract upper 16 bits of (target - vaddr - addend)
+		case R_PPC_ADDR16_HA: ADD(16, 0); break;  // XXX extract high adjusted 16 bits of (target - vaddr - addend)
 		default:
 			R_LOG_DEBUG ("unimplemented ELF/PPC reloc type %d", rel->type);
 		}
