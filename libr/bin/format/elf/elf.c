@@ -3386,6 +3386,12 @@ static bool is_data_section(const char *name) {
 	if (strstr (name, "data") && !strstr (name, "rel") && !strstr (name, "pydata")) {
 		return true;
 	}
+#if 0
+	// we use Css in this section->format to avoid the flags and just add the meta
+	if (!strcmp (name, ".dynstr")) {
+		return true;
+	}
+#endif
 	if (!strcmp (name, "C")) {
 		return true;
 	}
@@ -3610,6 +3616,8 @@ static void _store_bin_sections(ELFOBJ *eo, const RVector *elf_bin_sections) {
 		if (is_wordable_section (ptr->name)) {
 			ptr->format = r_str_newf ("Cd %d[%"PFMT64d"]",
 				R_BIN_ELF_WORDSIZE, section->size / R_BIN_ELF_WORDSIZE);
+		} else if (!strcmp (ptr->name, ".dynstr")) {
+			ptr->format = r_str_newf ("Css %"PFMT64d, section->size);
 		}
 		ptr->size = section->type != SHT_NOBITS ? section->size : 0;
 		ptr->vsize = section->size;
