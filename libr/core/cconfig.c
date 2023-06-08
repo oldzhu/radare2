@@ -1071,10 +1071,6 @@ static bool cb_jsonencoding_numbers(void *user, void *data) {
 	return true;
 }
 
-static bool cb_asm_armimm(void *user, void *data) {	//TODO: Remove this for 5.8.
-	return true;
-}
-
 static bool cb_asm_invhex(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
@@ -2579,11 +2575,7 @@ static bool cb_scrstrconv(void *user, void *data) {
 		}
 		return false;
 	} else {
-#if R2_590
 		free (core->print->strconv_mode);
-#else
-		free ((char *)core->print->strconv_mode);
-#endif
 		core->print->strconv_mode = strdup (node->value);
 	}
 	return true;
@@ -3387,11 +3379,7 @@ static bool cb_dbg_verbose(void *user, void *data) {
 static bool cb_prjvctype(void *user, void *data) {
 	RConfigNode *node = data;
 	char *git = r_file_path ("git");
-#if R2_590
-	bool have_git = (bool)git;
-#else
-	bool have_git = strcmp (git, "git");
-#endif
+	bool have_git = git != NULL;
 	free (git);
 	if (*node->value == '?') {
 		if (have_git) {
@@ -3648,7 +3636,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETI ("asm.hint.pos", 1, "shortcut hint position (-1, 0, 1)");
 	SETBPREF ("asm.slow", "true", "perform slow analysis operations in disasm");
 	SETBPREF ("asm.decode", "false", "use code analysis as a disassembler");
-	SETICB ("asm.imm.arm", false,  &cb_asm_armimm, "DEPRECATED, has no effect");	//TODO: Remove this for 5.8.
 	SETBPREF ("asm.imm.str", "true", "show immediates values as strings");
 	SETBPREF ("asm.imm.trim", "false", "remove all offsets and constants from disassembly");
 	SETBPREF ("asm.indent", "false", "indent disassembly based on reflines depth");
@@ -4104,21 +4091,13 @@ R_API int r_core_config_init(RCore *core) {
 		 * standard locations */
 		for (i = 0; bin_data[i]; i += 3) {
 			const char *bin_name = bin_data[i];
-			const char *standard_path = bin_data[i+1];
-			const char *browser_override = bin_data[i+2];
+			const char *standard_path = bin_data[i + 1];
+			const char *browser_override = bin_data[i + 2];
 			const char *path;
 
 			/* Try to find bin in path */
 			char *bin_path = r_file_path (bin_name);
 			path = bin_path;
-
-#if !R2_590
-			/* Not in path, old API returns strdup (arg) */
-			if (!strcmp (bin_name, bin_path)) {
-				R_FREE (bin_path);
-				path = NULL;
-			}
-#endif
 
 			/* Not in path, but expected location exists */
 			if (!path && r_file_exists (standard_path)) {
@@ -4269,7 +4248,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("scr.wheel", "true", "mouse wheel in Visual; temporaryly disable/reenable by right click/Enter)");
 	SETBPREF ("scr.cursor", "false", "keyboard controlled cursor in visual and panels");
 	SETPREF ("scr.layout", "", "name of the selected panels layout to load as default");
-	// DEPRECATED: USES hex.cols now SETI ("scr.colpos", 80, "Column position of cmd.cprompt in visual");
 	SETCB ("scr.breakword", "", &cb_scrbreakword, "emulate console break (^C) when a word is printed (useful for pD)");
 	SETCB ("scr.breaklines", "false", &cb_breaklines, "break lines in Visual instead of truncating them");
 	SETCB ("scr.gadgets", "true", &cb_scr_gadgets, "run pg in prompt, visual and panels");

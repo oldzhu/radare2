@@ -427,7 +427,6 @@ static RCoreHelpMessage help_detail_ae = {
 	"$ds", "", "internal flag: delay-slot",
 	"$jt", "", "internal flag: jump-target",
 	"$js", "", "internal flag: jump-target-set",
-	// DEPRECATED "$r", "", "internal flag: jump-sign",
 	"$$", "", "internal flag: pc address",
 	NULL
 };
@@ -8508,7 +8507,7 @@ static void cmd_anal_aftertraps(RCore *core, const char *input) {
 	RAnalOp op = {0};
 	ut64 addr, addr_end;
 	ut64 len = r_num_math (core->num, input);
-	if (len > 0xffffff) {
+	if (len > ALLOC_SIZE_LIMIT) {
 		R_LOG_ERROR ("Length is too large");
 		return;
 	}
@@ -10129,11 +10128,7 @@ static char *getViewerPath(void) {
 	};
 	for (i = 0; viewers[i]; i++) {
 		char *viewerPath = r_file_path (viewers[i]);
-#if R2_590
 		if (viewerPath) {
-#else
-		if (strcmp (viewerPath, viewers[i])) {
-#endif
 			return viewerPath;
 		}
 		free (viewerPath);
@@ -10142,14 +10137,8 @@ static char *getViewerPath(void) {
 }
 
 static char *dot_executable_path(void) {
-	const char *dot = "dot";
-	char *dotPath = r_file_path (dot);
-#if R2_590
+	char *dotPath = r_file_path ("dot");
 	if (!dotPath) {
-#else
-	if (!strcmp (dotPath, dot)) {
-		free (dotPath);
-#endif
 		dotPath = r_file_path ("xdot");
 	}
 	return dotPath;
