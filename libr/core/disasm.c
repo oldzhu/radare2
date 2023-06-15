@@ -1729,6 +1729,9 @@ static void ds_print_show_cursor(RDisasmState *ds) {
 		res[1] = '~';
 	}
 	if (q) {
+#if R2_590
+		r_cons_mark (UT64_MAX, "cursor");
+#endif
 		if (cursor_addr == ds->at) {
 			res[2] = '*';
 		} else {
@@ -3160,6 +3163,9 @@ static bool ds_print_data_type(RDisasmState *ds, const ut8 *obuf, int ib, int si
 				int diff = ds->cursor - ds->index;
 				r_cons_printf ("%d  ", diff);
 			} else if (ds->cursor == ds->index) {
+#if R2_590
+				r_cons_mark (ds->at, "cursor");
+#endif
 				r_cons_printf ("*  ");
 			} else {
 				r_cons_printf ("   ");
@@ -7217,13 +7223,12 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 		}
 	}
 	REsil *esil = core->anal->esil;
-	r_io_cache_init (core->io);
-	RIOCache *cache_clone = r_io_cache_clone (core->io);
 	r_reg_arena_push (reg);
 	RConfigHold *chold = r_config_hold_new (core->config);
 	r_config_hold (chold, "io.cache", "asm.lines", NULL);
 	r_config_set_b (core->config, "io.cache", true);
 	r_config_set_b (core->config, "asm.lines", false);
+	r_io_cache_push (core->io);
 	const char *strip = r_config_get (core->config, "asm.strip");
 	const int max_op_size = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MAX_OP_SIZE);
 	int min_op_size = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
@@ -7231,8 +7236,11 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 	const ut64 read_len = max_op_size > 0 ? max_op_size : 32;
 	size_t buf_sz = 0x100, block_sz = 0, block_instr = 0;
 	ut64 block_start = r_reg_get_value (reg, pc);
+	size_t i = 0;
 	ut8 *buf = malloc (buf_sz);
-	size_t i;
+	if (!buf) {
+		goto leave;
+	}
 	for (i = 0; i < nb_opcodes; i++) {
 		const ut64 op_addr = r_reg_get_value (reg, pc);
 		if (!read_ahead (core->io, &buf, &buf_sz, op_addr, block_sz, read_len)) {
@@ -7254,11 +7262,7 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 		if (R_STR_ISNOTEMPTY (strip) && strstr (strip, r_anal_optype_tostring (op.type))) {
 			i--;
 		} else {
-			if (invalid_instr) {
-				block_sz += min_op_size;
-			} else {
-				block_sz += op.size;
-			}
+			block_sz += invalid_instr? min_op_size: op.size;
 			if (invalid_instr || (i + 1 >= nb_opcodes)) {
 				end_of_block = true;
 			}
@@ -7316,9 +7320,10 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 		r_cons_print (pj_string (pj));
 		pj_free (pj);
 	}
+leave:
 	free (buf);
 	r_reg_arena_pop (reg);
-	r_io_cache_replace (core->io, cache_clone);
+	r_io_cache_pop (core->io);
 	r_config_hold_restore (chold);
 	r_config_hold_free (chold);
 	return i;

@@ -158,7 +158,6 @@ anal_plugins += [
   'arm_cs',
   'avr',
   'dalvik',
-  'gb',
   'mips_cs',
   'x86_cs',
 ]
@@ -177,15 +176,14 @@ arch_plugins += [
   'tms320',
   'sparc_cs',
   'ppc_cs',
+  'gb',
 ]
 
 if no_user_plugins
   if use_gpl
-    anal_plugins += [
-      'arm_gnu',
-    ]
     arch_plugins += [
       'loongarch_gnu',
+      'arm_gnu',
       'z80',
       'pdp11',
       'ppc_gnu',

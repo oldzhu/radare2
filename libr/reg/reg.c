@@ -54,23 +54,20 @@ R_API bool r_reg_hasbits_use(RReg *reg, int size) {
 // If there is no equivalent 64 bit register return NULL.
 // SLOW
 R_API const char *r_reg_32_to_64(RReg *reg, const char *rreg32) {
-	int i, j = -1;
+	int j = -1;
 	RListIter *iter;
 	RRegItem *item;
-	for (i = 0; i < R_REG_TYPE_LAST; i++) {
-		r_list_foreach (reg->regset[i].regs, iter, item) {
-			if (item->size == 32 && !r_str_casecmp (rreg32, item->name)) {
-				j = item->offset;
-				break;
-			}
+	const int i = R_REG_TYPE_GPR;
+	r_list_foreach (reg->regset[i].regs, iter, item) {
+		if (item->size == 32 && !r_str_casecmp (rreg32, item->name)) {
+			j = item->offset;
+			break;
 		}
 	}
 	if (j != -1) {
-		for (i = 0; i < R_REG_TYPE_LAST; i++) {
-			r_list_foreach (reg->regset[i].regs, iter, item) {
-				if (item->offset == j && item->size == 64) {
-					return item->name;
-				}
+		r_list_foreach (reg->regset[i].regs, iter, item) {
+			if (item->offset == j && item->size == 64) {
+				return item->name;
 			}
 		}
 	}
@@ -81,23 +78,20 @@ R_API const char *r_reg_32_to_64(RReg *reg, const char *rreg32) {
 // If there is no equivalent 32 bit register return NULL.
 // SLOW
 R_API const char *r_reg_64_to_32(RReg *reg, const char *rreg64) {
-	int i, j = -1;
+	int j = -1;
 	RListIter *iter;
 	RRegItem *item;
-	for (i = 0; i < R_REG_TYPE_LAST; i++) {
-		r_list_foreach (reg->regset[i].regs, iter, item) {
-			if (item->size == 64 && !r_str_casecmp (rreg64, item->name)) {
-				j = item->offset;
-				break;
-			}
+	const int i = R_REG_TYPE_GPR;
+	r_list_foreach (reg->regset[i].regs, iter, item) {
+		if (item->size == 64 && !r_str_casecmp (rreg64, item->name)) {
+			j = item->offset;
+			break;
 		}
 	}
 	if (j != -1) {
-		for (i = 0; i < R_REG_TYPE_LAST; i++) {
-			r_list_foreach (reg->regset[i].regs, iter, item) {
-				if (item->offset == j && item->size == 32) {
-					return item->name;
-				}
+		r_list_foreach (reg->regset[i].regs, iter, item) {
+			if (item->offset == j && item->size == 32) {
+				return item->name;
 			}
 		}
 	}
@@ -228,14 +222,9 @@ R_API const char *r_reg_get_role(int role) {
 R_API void r_reg_free_internal(RReg *reg, bool init) {
 	r_return_if_fail (reg);
 	ut32 i;
-#if R2_590
-	// no global roregs
-#else
-	r_list_free (reg->roregs);
-	reg->roregs = NULL;
-#endif
 	R_FREE (reg->reg_profile_str);
 	R_FREE (reg->reg_profile_cmt);
+	R_FREE (reg->roregs);
 
 	for (i = 0; i < R_REG_NAME_LAST; i++) {
 		if (reg->name[i]) {
@@ -432,37 +421,37 @@ R_API RReg *r_reg_clone(RReg *r) {
 		RRegItem *ri = r_reg_item_clone (reg);
 		r_list_append (rr->allregs, ri);
 	}
-#if R2_590
 	// nothing to clone
-#else
-	r->roregs = r_list_newf (NULL);
-	r_list_foreach (r->roregs, iter, reg) {
-		RRegItem *ri = r_reg_item_clone (reg);
-		r_list_append (rr->roregs, ri);
-	}
-#endif
 	r_reg_arena_push (rr);
 	r_reg_hasbits_clear (rr);
 	return rr;
 }
 
-R_API bool r_reg_is_readonly(RReg *reg, RRegItem *item) {
-	if (!reg->roregs) {
-		return false;
-	}
-#if R2_590
-	return item->ro;
-#else
-	const char *name;
+R_API bool r_reg_ro_reset(RReg *reg, const char *arg) {
+	free (reg->roregs);
+	reg->roregs = arg? strdup (arg): NULL;
+	RRegItem *ri;
+	const char *regname;
 	RListIter *iter;
-	// XXX O(n)
-	r_list_foreach (reg->roregs, iter, name) {
-		if (!strcmp (item->name, name)) {
-			return true;
+	int i;
+	for (i = 0; i < R_REG_TYPE_LAST; i++) {
+		r_list_foreach (reg->regset[i].regs, iter, ri) {
+			ri->ro = false;
 		}
 	}
-	return false;
-#endif
+	bool res = true;
+	if (reg->roregs) {
+		RList *roregs = r_str_split_duplist (arg, ",", true);
+		r_list_foreach (roregs, iter, regname) {
+			RRegItem *ri = r_reg_get (reg, regname, -1);
+			if (ri) {
+				ri->ro = true;
+			} else {
+				res = false;
+			}
+		}
+	}
+	return res;
 }
 
 R_API bool r_reg_setv(RReg *reg, const char *name, ut64 val) {
@@ -490,10 +479,6 @@ R_API ut64 r_reg_getv(RReg *reg, const char *name) {
 R_API RRegItem *r_reg_get(RReg *reg, const char *name, int type) {
 	int i, e;
 	r_return_val_if_fail (reg && name, NULL);
-	//TODO: define flag register as R_REG_TYPE_FLG
-	if (type == R_REG_TYPE_FLG) {
-		type = R_REG_TYPE_GPR;
-	}
 	if (type == -1) {
 		i = 0;
 		e = R_REG_TYPE_LAST;
@@ -505,8 +490,9 @@ R_API RRegItem *r_reg_get(RReg *reg, const char *name, int type) {
 			}
 		}
 	} else {
-		i = type;
-		e = type + 1;
+		//TODO: define flag register as R_REG_TYPE_FLG
+		i = (type == R_REG_TYPE_FLG)? R_REG_TYPE_GPR: type;
+		e = i + 1;
 	}
 	for (; i < e; i++) {
 		HtPP *pp = reg->regset[i].ht_regs;
