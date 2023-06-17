@@ -1,8 +1,8 @@
 /* radare - LGPL - Copyright 2010-2023 - pancake */
 
 #include <r_arch.h>
-#include "disas-asm.h"
-#include "opcode/mips.h"
+#include "../../include/disas-asm.h"
+#include "../../include/opcode/mips.h"
 
 typedef struct plugin_data_t {
 	char *pre_cpu;
@@ -1544,7 +1544,7 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 				break;
 			case 17: // bal  bgezal
 				if (rs == 0) {
-					op->jump = addr + (imm << 2) + 4;
+					op->jump = addr + ((ut64)imm << 2) + 4;
 					snprintf ((char *)insn.i_reg.jump, REG_BUF_MAX, "0x%" PFMT64x, op->jump);
 					insn.id = MIPS_INS_BAL;
 				} else {
@@ -1584,7 +1584,7 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 				insn.id = MIPS_INS_BGTZ;
 			}
 			op->type = R_ANAL_OP_TYPE_CJMP;
-			op->jump = addr + (imm << 2) + 4;
+			op->jump = addr + ((ut64)imm << 2) + 4;
 			op->fail = addr + 8;
 			op->delay = 1;
 

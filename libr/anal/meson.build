@@ -40,14 +40,11 @@ r_anal_sources = [
   'vtable.c',
   'xrefs.c',
   '../arch/p/6502_cs/plugin.c',
-  'p/anal_8051.c',
-  'p/anal_arm_cs.c',
   '../arch/p/avr/plugin.c',
   '../arch/p/avr/avr_disasm.c',
   '../arch/p/avr/format.c',
   '../arch/p/avr/disasm.c',
   '../arch/p/avr/assemble.c',
-  'p/anal_dalvik.c',
   '../arch/p/ebc/plugin.c',
   '../arch/p/ebc/ebc_disas.c',
   '../arch/p/gb/plugin.c',
@@ -59,13 +56,6 @@ r_anal_sources = [
   '../arch/p/m68k_gnu/plugin.c',
   '../arch/p/m68k_gnu/m68k-dis.c',
   '../arch/p/m68k_gnu/m68k-opc.c',
-  'p/anal_mips_cs.c',
-  '../asm/arch/mips/mipsasm.c',
-  '../arch/p/mips_gnu/mips-dis.c',
-  '../arch/p/mips_gnu/mips16-opc.c',
-  '../arch/p/mips_gnu/micromips-opc.c',
-  '../arch/p/mips_gnu/mips-opc.c',
-  '../arch/p/mips_gnu/plugin.c',
   '../arch/p/loongarch/plugin.c',
   '../arch/p/loongarch/loongarch-coder.c',
   '../arch/p/loongarch/loongarch-dis.c',
@@ -93,9 +83,6 @@ r_anal_sources = [
   '../arch/p/tms320/c55x_plus/hashtable.c',
   '../arch/p/tms320/c55x_plus/utils.c',
 ]
-incdirs = [
-    'arch'
-]
 
 r_anal_sources += r_anal_d_sources
 
@@ -106,10 +93,7 @@ tcc_files = [
   'c/tccpp.c'
 ]
 
-r_anal_inc = [
-  platform_inc,
-  include_directories(incdirs)
-]
+r_anal_inc = [ platform_inc ]
 
 r_anal = library('r_anal', r_anal_sources,
   include_directories: r_anal_inc,

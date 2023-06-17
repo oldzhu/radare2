@@ -7,12 +7,12 @@
 // R2R db/anal/arm.gnu_16 db/tools/rasm2 db/anal/arm
 
 /* DEPRECATE ?? */
-#include "wine-arm.h"
-#include "../arch/p/arm/asm-arm.h"
-#include "../arch/p/arm/winedbg/be_arm.h"
-#include "../arch/p/arm/anal_arm_hacks.inc.c"
-#include "disas-asm.h"
-#include "../arch/p/arm/gnu/opcode-arm.h"
+#include "../../include/wine-arm.h"
+#include "../../include/disas-asm.h"
+#include "asm-arm.h"
+#include "winedbg/be_arm.h"
+#include "anal_arm_hacks.inc.c"
+#include "gnu/opcode-arm.h"
 
 // R2_590 - eliminate those globals!
 static R_TH_LOCAL char *oldcpu = NULL;
@@ -509,13 +509,9 @@ static int arm_op64(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *d, int 
 	if (d[3] == 0) {
 		return -1; // invalid
 	}
-	RAnal *anal = R_UNWRAP4 (as, arch, esil, anal);
-	if (anal) {
-		// XXX always nul because hackyarm must be moved to arch
-		int haa = hackyArmAnal (anal, op, d, len);
-		if (haa > 0) {
-			return haa;
-		}
+	int haa = hacky_arm_anal (as, op, d, len);
+	if (haa > 0) {
+		return haa;
 	}
 	op->size = 4;
 	op->type = R_ANAL_OP_TYPE_NULL;

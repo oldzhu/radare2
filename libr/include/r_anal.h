@@ -1049,7 +1049,6 @@ R_API bool r_anal_op_is_eob(RAnalOp *op);
 R_API RList *r_anal_op_list_new(void);
 R_API int r_anal_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len, RAnalOpMask mask);
 R_API int r_anal_opasm(RAnal *anal, ut64 pc, const char *s, ut8 *outbuf, int outlen);
-R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *hexstr);
 R_API char *r_anal_op_tostring(RAnal *anal, RAnalOp *op);
 
 
@@ -1600,10 +1599,6 @@ R_API bool r_anal_tid_select(RAnal *anal, int tid);
 
 /* plugin pointers */
 extern RAnalPlugin r_anal_plugin_null;
-extern RAnalPlugin r_anal_plugin_8051;
-extern RAnalPlugin r_anal_plugin_arm_cs;
-extern RAnalPlugin r_anal_plugin_dalvik;
-extern RAnalPlugin r_anal_plugin_mips_cs;
 extern RAnalPlugin r_anal_plugin_x86;
 extern RAnalPlugin r_anal_plugin_x86_cs;
 

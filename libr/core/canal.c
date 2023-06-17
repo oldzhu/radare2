@@ -5133,12 +5133,12 @@ static bool esilbreak_reg_write(REsil *esil, const char *name, ut64 *val) {
 	RAnalOp *op = ctx->op;
 	RCore *core = anal->coreb.core;
 	handle_var_stack_access (esil, *val, R_ANAL_VAR_ACCESS_TYPE_PTR, esil->anal->config->bits / 8);
+	const bool is_arm = !strcmp (core->anal->config->arch, "arm");
 	//specific case to handle blx/bx cases in arm through emulation
 	// XXX this thing creates a lot of false positives
 	ut64 at = *val;
 	if (anal && anal->opt.armthumb) {
-		if (anal->cur && anal->cur->arch && anal->config->bits < 33 &&
-			strstr (anal->cur->arch, "arm") && !strcmp (name, "pc") && op) {
+		if (anal->config->bits < 33 && is_arm && !strcmp (name, "pc") && op) {
 			switch (op->type) {
 			case R_ANAL_OP_TYPE_UCALL: // BLX
 			case R_ANAL_OP_TYPE_UJMP: // BX
@@ -5531,6 +5531,12 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 	}
 
 	r_reg_arena_push (core->anal->reg);
+	char *sn = (char *)r_reg_get_name (core->anal->reg, R_REG_NAME_SN);
+	if (sn) {
+		sn = strdup (sn);
+	} else {
+		R_LOG_WARN ("No SN reg alias for '%s'", r_config_get (core->config, "asm.arch"));
+	}
 
 	IterCtx ictx = { start, end, fcn, NULL };
 	size_t i = addr - start;
@@ -5597,6 +5603,7 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 		if (newstack) {
 			opflags |= R_ARCH_OP_MASK_DISASM;
 		}
+		opflags |= R_ARCH_OP_MASK_DISASM;
 		if (!r_anal_op (core->anal, &op, cur, buf + i, iend - i, opflags)) {
 			i += minopsize - 1; // XXX dupe in op.size below
 			r_anal_op_fini (&op);
@@ -5646,10 +5653,6 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 				goto repeat;
 			}
 		}
-		const char *sn = r_reg_get_name (core->anal->reg, R_REG_NAME_SN);
-		if (!sn) {
-			R_LOG_WARN ("No SN reg alias for '%s'", r_config_get (core->config, "asm.arch"));
-		}
 		if (sn && op.type == R_ANAL_OP_TYPE_SWI) {
 			r_strf_buffer (64);
 			r_flag_space_set (core->flags, R_FLAGS_FS_SYSCALLS);
@@ -5673,6 +5676,7 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 			goto repeat;
 		}
 		r_esil_set_pc (ESIL, cur);
+		// R2_590 - if roregs is set we dont need to set that value everytime
 		r_reg_setv (core->anal->reg, pcname, cur + op.size);
 		if (gp_fixed && gp_reg) {
 			r_reg_setv (core->anal->reg, gp_reg, gp);
@@ -5710,7 +5714,7 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 			break;
 		case R_ANAL_OP_TYPE_ADD:
 			/* TODO: test if this is valid for other archs too */
-			if (core->anal->cur && archIsArm) {
+			if (archIsArm) {
 				/* This code is known to work on Thumb, ARM and ARM64 */
 				ut64 dst = ESIL->cur;
 				if ((target && dst == ntarget) || !target) {
@@ -5722,7 +5726,7 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 				if (cfg_anal_strings) {
 					add_string_ref (core, op.addr, dst);
 				}
-			} else if ((core->anal->config->bits == 32 && core->anal->cur && arch == R2_ARCH_MIPS)) {
+			} else if ((core->anal->config->bits == 32 && arch == R2_ARCH_MIPS)) {
 				ut64 dst = ESIL->cur;
 				RAnalValue *opsrc0 = r_vector_at (&op.srcs, 0);
 				RAnalValue *opsrc1 = r_vector_at (&op.srcs, 1);
@@ -5759,6 +5763,13 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 						}
 					}
 				}
+#if 0
+			} else {
+				R_LOG_DEBUG ("add aae string refs for this arch here");
+				if (cfg_anal_strings) {
+					add_string_ref (core, op.addr, dst);
+				}
+#endif
 			}
 			break;
 		case R_ANAL_OP_TYPE_LOAD:
@@ -5852,6 +5863,7 @@ repeat:
 			break;
 		}
 	} while (get_next_i (&ictx, &i));
+	free (sn);
 	free (pcname);
 	free (spname);
 	r_list_free (ictx.bbl);

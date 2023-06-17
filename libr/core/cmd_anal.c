@@ -1061,13 +1061,9 @@ static RCoreHelpMessage help_msg_axf= {
 	"axf*", " [addr]", "same as axt, but prints as r2 commands",
 	NULL
 };
-static const char *get_arch_name(RCore *core) {
-	const char *an = core->anal->cur? core->anal->cur->arch:
-		core->anal->arch->cfg->arch;
-	if (!an) {
-		return r_config_get (core->config, "asm.arch");
-	}
-	return an;
+
+static inline const char *get_arch_name(RCore *core) {
+	return r_config_get (core->config, "asm.arch");
 }
 
 static int cmpname(const void *_a, const void *_b) {
@@ -5413,28 +5409,26 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 		bits = core->anal->config->bits;
 	}
 	int mode2 = mode;
-	if (core->anal) {
-		const char *arch_name = get_arch_name (core);
-		core->dbg->reg = core->anal->reg;
-		/* workaround for thumb */
-		if (!strcmp (arch_name, "arm") && bits == 16) {
-			bits = 32;
-		} else {
-			const int defsz = r_reg_default_bits (core->anal->reg);
-			if (defsz > 0) {
-				bits = defsz;
-			}
+	const char *arch_name = get_arch_name (core);
+	core->dbg->reg = core->anal->reg;
+	/* workaround for thumb */
+	if (r_str_startswith (arch_name, "arm") && bits == 16) {
+		bits = 32;
+	} else {
+		const int defsz = r_reg_default_bits (core->anal->reg);
+		if (defsz > 0) {
+			bits = defsz;
 		}
-		/* workaround for 6502 and avr*/
-		if ((!strcmp (arch_name, "6502") && bits == 8)
-			|| (!strcmp (arch_name, "avr") && bits == 8)) {
-			if (mode == 'j') {
-				mode2 = 'J';
-				pj_o (pj);
-			}
-			// XXX detect which one is current usage
-			r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, 16, pj, mode2, use_color);
+	}
+	/* workaround for 6502 and avr*/
+	if ((!strcmp (arch_name, "6502") && bits == 8)
+		|| (!strcmp (arch_name, "avr") && bits == 8)) {
+		if (mode == 'j') {
+			mode2 = 'J';
+			pj_o (pj);
 		}
+		// XXX detect which one is current usage
+		r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, 16, pj, mode2, use_color);
 	}
 #if 0
 	if (mode == '=') {
@@ -5821,6 +5815,9 @@ void cmd_anal_reg(RCore *core, const char *str) {
 						core->dbg->q_regs = q_regs;
 					}
 				}
+			}
+			if (size < 32 && r_str_startswith (r_config_get (core->config, "asm.arch"), "arm")) {
+				size = 32;
 			}
 			__anal_reg_list (core, type, size, str[0]);
 			if (!r_list_empty (core->dbg->q_regs)) {
@@ -10034,8 +10031,8 @@ static void cmd_anal_hint(RCore *core, const char *input) {
 			ut8 code[128] = {0};
 			(void)r_io_read_at (core->io, core->offset, code, sizeof (code));
 			r_asm_set_pc (core->rasm, addr);
-			(void)r_asm_disassemble (core->rasm, &asmop, code, core->blocksize);
-			int ret = r_anal_op (core->anal, &op, core->offset, code, core->blocksize, R_ARCH_OP_MASK_VAL);
+			(void)r_asm_disassemble (core->rasm, &asmop, code, sizeof (code));
+			int ret = r_anal_op (core->anal, &op, core->offset, code, sizeof (code), R_ARCH_OP_MASK_VAL);
 			if (ret >= 0) {
 				// HACK: Just convert only the first imm seen
 				RAnalValue *src = NULL;
@@ -11651,12 +11648,6 @@ static bool archIsThumbable(RCore *core) {
 		if (!strcmp (ac->arch, "arm")) {
 			return true;
 		}
-#if 0
-		const char *an = get_arch_name (core);
-		if (an && !strcmp (core->anal->cur->arch, "arm")) {
-			return true;
-		}
-#endif
 	}
 	return false;
 }

@@ -167,6 +167,7 @@ R_API void r_anal_free(RAnal *a) {
 	r_th_lock_free (a->lock);
 	r_interval_tree_fini (&a->meta);
 	r_unref (a->config);
+	a->arch->esil = NULL;
 	r_arch_free (a->arch);
 	free (a->zign_path);
 	r_list_free (a->plugins);
@@ -181,10 +182,7 @@ R_API void r_anal_free(RAnal *a) {
 	r_list_free (a->threads);
 	r_list_free (a->leaddrs);
 	sdb_free (a->sdb);
-	if (a->esil) {
-		r_esil_free (a->esil);
-		a->esil = NULL;
-	}
+	r_esil_free (a->esil);
 	free (a->last_disasm_reg);
 	r_list_free (a->imports);
 	r_str_constpool_fini (&a->constpool);
@@ -434,40 +432,17 @@ R_API ut8 *r_anal_mask(RAnal *anal, int size, const ut8 *data, ut64 at) {
 
 R_API void r_anal_trace_bb(RAnal *anal, ut64 addr) {
 	r_return_if_fail (anal);
-	RAnalBlock *bbi;
-	RListIter *iter2;
-	RAnalFunction *fcni = r_anal_get_fcn_in (anal, addr, 0);
-	if (fcni) {
-		r_list_foreach (fcni->bbs, iter2, bbi) {
-			if (addr >= bbi->addr && addr < (bbi->addr + bbi->size)) {
-				bbi->traced = true;
-				break;
-			}
-		}
+	RAnalBlock *bb = r_anal_get_block_at (anal, addr);
+	if (bb && !bb->traced) {
+		bb->traced = true;
+		R_DIRTY (anal);
 	}
-	R_DIRTY (anal);
 }
 
 R_API RList* r_anal_get_fcns(RAnal *anal) {
 	// avoid received to free this thing
 	anal->fcns->free = NULL;
 	return anal->fcns;
-}
-
-R_API RAnalOp *r_anal_op_hexstr(RAnal *anal, ut64 addr, const char *str) {
-	RAnalOp *op = R_NEW0 (RAnalOp);
-	if (!op) {
-		return NULL;
-	}
-	ut8 *buf = calloc (1, strlen (str) + 1);
-	if (!buf) {
-		free (op);
-		return NULL;
-	}
-	int len = r_hex_str2bin (str, buf);
-	r_anal_op (anal, op, addr, buf, len, R_ARCH_OP_MASK_BASIC);
-	free (buf);
-	return op;
 }
 
 R_API bool r_anal_op_is_eob(RAnalOp *op) {

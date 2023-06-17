@@ -106,8 +106,8 @@ if not no_user_plugins
     io_plugins += [ 'r2web' ]
   endif
   if user_plugins.contains('arm')
-    anal_plugins += [ 'arm_cs' ]
-    arch_plugins += [ 'arm' ]
+    anal_plugins += []
+    arch_plugins += [ 'arm', 'arm_cs'  ]
     bp_plugins += [ 'arm' ]
     parse_plugins += [ 'arm_pseudo' ]
   endif
@@ -126,7 +126,7 @@ if not no_user_plugins
     # missing parse_plugins += [ 'sparc_pseudo' ]
   endif
   if user_plugins.contains('mips')
-    anal_plugins += [ 'mips_cs' ]
+    arch_plugins += [ 'mips_cs' ]
     if use_gpl
       arch_plugins += [ 'mips_gnu' ]
     endif
@@ -135,7 +135,7 @@ if not no_user_plugins
   endif
   if user_plugins.contains('dalvik')
     bin_plugins += [ 'dex' ]
-    anal_plugins += [ 'dalvik' ]
+    arch_plugins += [ 'dalvik' ]
     parse_plugins += [ 'dalvik_pseudo' ]
   endif
   if user_plugins.contains('loongarch')
@@ -154,19 +154,19 @@ endif
 if no_user_plugins
 
 anal_plugins += [
-  '8051',
-  'arm_cs',
-  'dalvik',
-  'mips_cs',
   'x86_cs',
 ]
 
 arch_plugins += [
+  '8051',
   'avr',
+  'dalvik',
+  'arm_cs',
   'java',
   'chip8',
   'wasm',
   'i8080',
+  'mips_cs',
   '6502_cs',
   'loongarch_gnu',
   's390_cs',

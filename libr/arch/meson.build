@@ -69,6 +69,7 @@ r_arch_sources = [
   'p/arm/plugin.c',
   'p/arm/armass.c',
   'p/arm/armass64.c',
+  'p/arm/plugin_cs.c',
 
 	'p/arm/plugin_gnu.c',
 	'p/arm/winedbg/be_arm.c',
@@ -137,6 +138,8 @@ r_arch_sources = [
   'p/h8300/plugin.c',
   'p/h8300/h8300_disas.c',
   'p/xcore_cs/plugin.c',
+  'p/mips/plugin_cs.c',
+  'p/mips/mipsasm.c',
   'p/mips_gnu/plugin.c',
   'p/mips_gnu/mips-dis.c',
   'p/mips_gnu/mips16-opc.c',
@@ -159,6 +162,8 @@ r_arch_sources = [
   'p/avr/format.c',
   'p/avr/disasm.c',
   'p/avr/assemble.c',
+  'p/8051/plugin.c',
+  'p/dalvik/plugin.c',
 ]
 
 if arch_plugins.contains('x86_nz')
@@ -188,10 +193,9 @@ r_arch_sources += [
 endif
 
 # must be deleted when anal refactor is done
-arch_inc = include_directories('../asm/arch/include')
 
 r_arch = library('r_arch', r_arch_sources,
-  include_directories: [platform_inc, arch_inc],
+  include_directories: [platform_inc],
   c_args: library_cflags,
   dependencies: [
     r_util_dep,
@@ -207,12 +211,11 @@ r_arch = library('r_arch', r_arch_sources,
   soversion: r2_libversion
 )
 
-r_arch_dep = declare_dependency(link_with: r_arch,
-                              include_directories: [platform_inc])
+r_arch_dep = declare_dependency(link_with: r_arch, include_directories: [platform_inc])
 
 if get_option('blob')
 r_arch_static = static_library('r_arch_static', r_arch_sources,
-  include_directories: [platform_inc, arch_inc],
+  include_directories: [platform_inc],
   c_args: library_cflags,
   dependencies: [
     r_util_static_dep,
@@ -235,6 +238,7 @@ pkgconfig_mod.generate(r_arch,
   requires: [
     'r_util',
     'r_esil',
+    'r_crypto',
     'r_reg',
   ],
   description: 'radare foundation libraries'
