@@ -294,7 +294,6 @@ static void r_core_file_info(RCore *core, PJ *pj, int mode) {
 		if (desc && desc->referer && *desc->referer) {
 			pair ("referer", desc->referer);
 		}
-
 		if (info) {
 			pair ("type", info->type);
 		}
@@ -312,6 +311,9 @@ static int bin_is_executable(RBinObject *obj) {
 			if (sec->perm & R_PERM_X) {
 				return true;
 			}
+		}
+		if (obj->info && obj->info->bclass) {
+			return true;
 		}
 	}
 	return false;
