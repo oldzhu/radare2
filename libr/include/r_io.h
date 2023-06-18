@@ -15,16 +15,16 @@
 
 #define R_IO_UNDOS 64
 
-#define r_io_map_begin(map) r_itv_begin (map->itv)
-#define r_io_map_to(map) ( r_itv_end (map->itv) - 1 )
+#define r_io_map_begin(map) r_itv_begin ((map)->itv)
+#define r_io_map_to(map) ( r_itv_end ((map)->itv) - 1 )
 #define r_io_map_from r_io_map_begin
 #define r_io_submap_from(sm) (r_io_map_begin (sm))
 #define r_io_submap_to(sm) (r_io_map_to (sm))
-#define r_io_map_end(map) r_itv_end (map->itv)
-#define r_io_map_size(map) r_itv_size (map->itv)
-#define r_io_map_contain(map, addr) r_itv_contain (map->itv, addr)
+#define r_io_map_end(map) r_itv_end ((map)->itv)
+#define r_io_map_size(map) r_itv_size ((map)->itv)
+#define r_io_map_contain(map, addr) r_itv_contain ((map)->itv, addr)
 #define r_io_submap_contain(sm, addr) r_io_map_contain (sm, addr)
-#define r_io_submap_overlap(bd, sm) r_itv_overlap(bd->itv, sm->itv)
+#define r_io_submap_overlap(bd, sm) r_itv_overlap((bd)->itv, (sm)->itv)
 
 #define r_io_map_set_begin(map, new_addr)	\
 	do {					\
@@ -140,6 +140,7 @@ typedef struct r_io_t {
 	size_t addrbytes; // XXX also available in RArchConfig.addrbytes
 	bool aslr;
 	bool autofd;
+	bool overlay;
 	// moved into cache.mode // ut32 cached; // uses R_PERM_RWX // wtf cache for exec?
 	bool cachemode; // write in cache all the read operations (EXPERIMENTAL)
 	ut32 p_cache; // uses 1, 2, 4.. probably R_PERM_RWX :D
@@ -252,6 +253,11 @@ typedef struct r_io_bank_t {
 	ut32 id;	// for fast selection with RIDStorage
 	bool drain_me;	// speedup r_io_nread_at
 } RIOBank;
+
+typedef struct r_io_region_t {
+	RInterval itv;
+	ut32 perm;
+} RIORegion;
 
 #define R_IO_DESC_CACHE_SIZE (sizeof (ut64) * 8)
 typedef struct r_io_desc_cache_t {
@@ -408,6 +414,7 @@ R_API bool r_io_bank_write_to_overlay_at(RIO *io, const ut32 bankid, ut64 addr, 
 R_API int r_io_bank_read_from_submap_at(RIO *io, const ut32 bankid, ut64 addr, ut8 *buf, int len);
 R_API int r_io_bank_write_to_submap_at(RIO *io, const ut32 bankid, ut64 addr, const ut8 *buf, int len);
 R_API void r_io_bank_drain(RIO *io, const ut32 bankid);
+R_API bool r_io_bank_get_region_at(RIO *io, const ut32 bankid, RIORegion *region, ut64 addr);
 
 //io.c
 R_API RIO *r_io_new(void);
@@ -440,6 +447,7 @@ R_API void r_io_bind(RIO *io, RIOBind *bnd);
 R_API bool r_io_shift(RIO *io, ut64 start, ut64 end, st64 move);
 R_API ut64 r_io_seek(RIO *io, ut64 offset, int whence);
 R_API void r_io_drain_overlay(RIO *io);
+R_API bool r_io_get_region_at(RIO *io, RIORegion *region, ut64 addr);
 R_API void r_io_fini(RIO *io);
 R_API void r_io_free(RIO *io);
 #define r_io_bind_init(x) memset (&(x), 0, sizeof (x))

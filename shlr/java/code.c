@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2007-2022 - pancake */
+/* radare - LGPL - Copyright 2007-2023 - pancake */
 
 #include <r_anal.h>
 #include "ops.h"
@@ -14,13 +14,12 @@
 #define R_API
 #endif
 
-static void init_switch_op(void);
 static int enter_switch_op(ut64 addr, const ut8 * bytes, int len);
 static int update_switch_op(ut64 addr, const ut8 * bytes);
 static int update_bytes_consumed(int sz);
-static int handle_switch_op(ut64 addr, const ut8 * bytes, char *output, int outlen);
 
 static R_TH_LOCAL ut8 IN_SWITCH_OP = 0;
+
 typedef struct current_table_switch_t {
 	ut64 addr;
 	int def_jmp;
@@ -93,7 +92,11 @@ static int update_switch_op(ut64 addr, const ut8 * bytes) {
 	return update_bytes_consumed (sz);
 }
 
-static int handle_switch_op(ut64 addr, const ut8 * bytes, char *output, int outlen) {
+static int handle_switch_op(ut64 addr, const ut8 * bytes, int bytes_len, char *output, int outlen) {
+	if (bytes_len < 4) {
+		R_LOG_DEBUG ("truncated switch opcode");
+		return bytes_len;
+	}
 	int sz = 4;
 	ut32 jmp = (int)(UINT (bytes, 0)) + SWITCH_OP.addr;
 	update_switch_op (addr, bytes);
@@ -112,22 +115,25 @@ R_API int java_print_opcode(RBinJavaObj *obj, ut64 addr, int idx, const ut8 *byt
 	ut32 val_two = 0;
 	ut8 op_byte = JAVA_OPS[idx].byte;
 	if (IN_SWITCH_OP) {
-		return handle_switch_op (addr, bytes, output, outlen);
+		return handle_switch_op (addr, bytes, len, output, outlen);
 	}
-
-#if 0
-	IFDBG eprintf ("Handling the following opcode %s expects: %d byte(s), BYTES_CONSUMED: 0x%04"PFMT64x"\n",
+	R_LOG_DEBUG ("Handling the following opcode %s expects: %d byte(s), BYTES_CONSUMED: 0x%04"PFMT64x,
 			JAVA_OPS[idx].name, JAVA_OPS[idx].size, BYTES_CONSUMED);
-#endif
 	switch (op_byte) {
 	case 0x10: // "bipush"
-		snprintf (output, outlen, "%s %d", JAVA_OPS[idx].name, (char) bytes[1]);
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		if (len > 1) {
+			snprintf (output, outlen, "%s %d", JAVA_OPS[idx].name, (char) bytes[1]);
+			output[outlen-1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
+		}
+		return -1;
 	case 0x11:
-		snprintf (output, outlen, "%s %d", JAVA_OPS[idx].name, (int)USHORT (bytes, 1));
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		if (len > 1) {
+			snprintf (output, outlen, "%s %d", JAVA_OPS[idx].name, (int)USHORT (bytes, 1));
+			output[outlen-1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
+		}
+		return -1;
 	case 0x15: // "iload"
 	case 0x16: // "lload"
 	case 0x17: // "fload"
@@ -149,32 +155,41 @@ R_API int java_print_opcode(RBinJavaObj *obj, ut64 addr, int idx, const ut8 *byt
 		}
 		break;
 	case 0x12: // ldc
-		arg = r_bin_java_resolve_without_space (obj, (ut16)bytes[1]);
-		if (arg) {
-			snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
-			free (arg);
-		} else {
-			snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1));
+		if (len > 1) {
+			arg = r_bin_java_resolve_without_space (obj, (ut16)bytes[1]);
+			if (arg) {
+				snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
+				free (arg);
+			} else {
+				snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1));
+			}
+			output[outlen - 1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
 		}
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		return -1;
 	case 0x13:
 	case 0x14:
-		arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
-		if (arg) {
-			snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
-			free (arg);
-		} else {
-			snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1));
+		if (len > 2) {
+			arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
+			if (arg) {
+				snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
+				free (arg);
+			} else {
+				snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1));
+			}
+			output[outlen-1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
 		}
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		return -1;
 	case 0x84: // iinc
-		val_one = (ut32)bytes[1];
-		val_two = (ut32) bytes[2];
-		snprintf (output, outlen, "%s %d %d", JAVA_OPS[idx].name, val_one, val_two);
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		if (len > 2) {
+			val_one = (ut32)bytes[1];
+			val_two = (ut32) bytes[2];
+			snprintf (output, outlen, "%s %d %d", JAVA_OPS[idx].name, val_one, val_two);
+			output[outlen-1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
+		}
+		return -1;
 	case 0x99: // ifeq
 	case 0x9a: // ifne
 	case 0x9b: // iflt
@@ -191,10 +206,13 @@ R_API int java_print_opcode(RBinJavaObj *obj, ut64 addr, int idx, const ut8 *byt
 	case 0xa6: // if_acmpne
 	case 0xa7: // goto
 	case 0xa8: // jsr
-		snprintf (output, outlen, "%s 0x%04"PFMT64x, JAVA_OPS[idx].name,
-				(addr+(short)USHORT (bytes, 1)));
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		if (len > 1) {
+			snprintf (output, outlen, "%s 0x%04"PFMT64x, JAVA_OPS[idx].name,
+					(addr + (short)USHORT (bytes, 1)));
+			output[outlen - 1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
+		}
+		return -1;
 		// XXX - Figure out what constitutes the [<high>] value
 	case 0xab: // tableswitch
 	case 0xaa: // tableswitch
@@ -208,44 +226,57 @@ R_API int java_print_opcode(RBinJavaObj *obj, ut64 addr, int idx, const ut8 *byt
 	case 0xb8: // invokestatic
 	case 0xb9: // invokeinterface
 	case 0xba: // invokedynamic
-		arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
-		if (arg) {
-			snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
-			free (arg);
-		} else {
-			snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+		if (len > 2) {
+			arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
+			if (arg) {
+				snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
+				free (arg);
+			} else {
+				snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+			}
+			output[outlen - 1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
 		}
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		return -1;
 	case 0xbb: // new
 	case 0xbd: // anewarray
 	case 0xc0: // checkcast
 	case 0xc1: // instance of
-		arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
-		if (arg) {
-			snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
-			free (arg);
-		} else {
-			snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+		if (len > 2) {
+			arg = r_bin_java_resolve_without_space (obj, (int)USHORT (bytes, 1));
+			if (arg) {
+				snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
+				free (arg);
+			} else {
+				snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+			}
+			output[outlen-1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
 		}
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		return -1;
 	case 0xb2: // getstatic
 	case 0xb3: // putstatic
 	case 0xb4: // getfield
 	case 0xb5: // putfield
-		arg = r_bin_java_resolve_with_space (obj, (int)USHORT (bytes, 1));
-		if (arg) {
-			snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
-			free (arg);
-		} else {
-			snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+		if (len > 2) {
+			arg = r_bin_java_resolve_with_space (obj, (int)USHORT (bytes, 1));
+			if (arg) {
+				snprintf (output, outlen, "%s %s", JAVA_OPS[idx].name, arg);
+				free (arg);
+			} else {
+				snprintf (output, outlen, "%s #%d", JAVA_OPS[idx].name, USHORT (bytes, 1) );
+			}
+			output[outlen - 1] = 0;
+			return update_bytes_consumed (JAVA_OPS[idx].size);
 		}
-		output[outlen-1] = 0;
-		return update_bytes_consumed (JAVA_OPS[idx].size);
+		return -1;
 	}
 
 	/* process arguments */
+	if (JAVA_OPS[idx].size > len) {
+		snprintf (output, outlen, "truncated");
+		return -1;
+	}
 	switch (JAVA_OPS[idx].size) {
 	case 1: snprintf (output, outlen, "%s", JAVA_OPS[idx].name);
 		break;
@@ -304,18 +335,14 @@ static int parseJavaArgs(char *str, ut64 *args, int args_sz) {
 }
 
 R_API int r_java_assemble(ut64 addr, ut8 *bytes, const char *string) {
+	char *name = strdup (string);
+
 	ut64 args[4] = {0};
-	int i, a, b, c, d;
-	char name[128];
-
-	strncpy (name, string, sizeof (name) - 1);
-	name[sizeof (name) - 1] = 0;
-
-	int nargs = parseJavaArgs (name, args, 4);
-	a = args[0];
-	b = args[1];
-	c = args[2];
-	d = args[3];
+	int i, nargs = parseJavaArgs (name, args, 4);
+	int a = args[0];
+	int b = args[1];
+	int c = args[2];
+	int d = args[3];
 	for (i = 0; JAVA_OPS[i].name != NULL; i++) {
 		if (!strcmp (name, JAVA_OPS[i].name)) {
 			bytes[0] = JAVA_OPS[i].byte;
@@ -341,8 +368,10 @@ R_API int r_java_assemble(ut64 addr, ut8 *bytes, const char *string) {
 				bytes[4] = d;
 				break;
 			}
+			free (name);
 			return JAVA_OPS[i].size;
 		}
 	}
+	free (name);
 	return 0;
 }
