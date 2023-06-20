@@ -351,9 +351,7 @@ static RBinInfo *info(RBinFile *bf) {
 		ret->has_canary = mo->has_canary;
 		ret->has_retguard = -1;
 		ret->has_sanitizers = mo->has_sanitizers;
-#if R2_590
 		ret->has_libinjprot = mo->has_libinjprot;
-#endif
 		ret->dbg_info = mo->dbg_info;
 		ret->lang = mo->lang;
 		if (mo->dyld_info) {
@@ -440,14 +438,15 @@ static bool _patch_reloc(struct MACH0_(obj_t) *mo, RIOBind *iob, struct reloc_t 
 	return true;
 }
 
-static RList* patch_relocs(RBin *b) {
-	r_return_val_if_fail (b, NULL);
+static RList* patch_relocs(RBinFile *bf) {
+	r_return_val_if_fail (bf && bf->rbin, NULL);
 
 	RList *ret = NULL;
 	RIOMap *g = NULL;
 	HtUU *relocs_by_sym = NULL;
 	RIODesc *gotr2desc = NULL;
 
+	RBin *b = bf->rbin;
 	RIO *io = b->iob.io;
 	if (!io || !io->desc) {
 		return NULL;

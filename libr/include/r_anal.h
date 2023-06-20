@@ -582,7 +582,7 @@ R_DEPRECATE typedef struct r_anal_var_field_t {
 	bool field;
 } RAnalVarField;
 
-// TO DEPRECATE R2_580
+// TO DEPRECATE R2_590
 // Use r_anal_get_functions_in¿() instead
 R_DEPRECATE R_API RAnalFunction *r_anal_get_fcn_in(RAnal *anal, ut64 addr, int type);
 R_DEPRECATE R_API RAnalFunction *r_anal_get_fcn_in_bounds(RAnal *anal, ut64 addr, int type);
@@ -860,7 +860,7 @@ R_API void r_anal_block_reset(RAnal *a);
 R_API RAnalBlock *r_anal_create_block(RAnal *anal, ut64 addr, ut64 size);
 
 static inline bool r_anal_block_contains(RAnalBlock *bb, ut64 addr) {
-	return addr >= bb->addr && addr < bb->addr + bb->size;
+	return (addr >= bb->addr) && (addr < bb->addr + bb->size);
 }
 
 // Split the block at the given address into two blocks.
