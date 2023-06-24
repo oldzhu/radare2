@@ -2757,11 +2757,28 @@ static void __fcn_print_default(RCore *core, RAnalFunction *fcn, bool quiet) {
 	if (quiet) {
 		r_cons_printf ("0x%08"PFMT64x" ", fcn->addr);
 	} else {
+#if 1
 		char *name = r_core_anal_fcn_name (core, fcn);
 		ut64 realsize = r_anal_function_realsize (fcn);
 		r_cons_printf ("0x%08"PFMT64x" %4d %6"PFMT64d" %s\n",
 				fcn->addr, r_list_length (fcn->bbs), realsize, name);
 		free (name);
+#else
+		// R2_590 -- trace color functionlisting
+		char *name = r_core_anal_fcn_name (core, fcn);
+		ut64 realsize = r_anal_function_realsize (fcn);
+		RAnalBlock *firstBlock = r_list_first (fcn->bbs);
+		char *color = firstBlock? r_cons_rgb_str (NULL, 0, &firstBlock->color): "";
+		int coverage = r_anal_function_coverage (fcn);
+		if (firstBlock->traced) {
+			color = strdup (Color_RED);
+		}
+		r_cons_printf ("%s0x%08"PFMT64x" %4d cov=%d%% %6"PFMT64d" %s%s\n",
+				color, fcn->addr, r_list_length (fcn->bbs),
+				coverage, realsize, name, Color_RESET);
+		free (color);
+		free (name);
+#endif
 	}
 }
 
@@ -2915,6 +2932,7 @@ static int fcn_print_json(RCore *core, RAnalFunction *fcn, bool dorefs, PJ *pj) 
 	pj_ki (pj, "bits", fcn->bits);
 	pj_ks (pj, "type", r_anal_functiontype_tostring (fcn->type));
 	pj_ki (pj, "nbbs", r_list_length (fcn->bbs));
+	pj_ki (pj, "tracecov", r_anal_function_coverage(fcn));
 	pj_kb (pj, "is-lineal", r_anal_function_islineal (fcn));
 	pj_ki (pj, "ninstrs", r_anal_function_instrcount (fcn));
 	pj_ki (pj, "edges", r_anal_function_count_edges (fcn, &ebbs));
@@ -3194,6 +3212,10 @@ static int fcn_print_legacy(RCore *core, RAnalFunction *fcn, bool dorefs) {
 	r_cons_printf ("\nmaxbound: 0x%08" PFMT64x, r_anal_function_max_addr (fcn));
 	r_cons_printf ("\nis-lineal: %s" , r_str_bool (r_anal_function_islineal (fcn)));
 	r_cons_printf ("\nend-bbs: %d", ebbs);
+	const int coverage = r_anal_function_coverage (fcn);
+	if (coverage > 0) {
+		r_cons_printf ("\ntrace-coverage: %d", coverage);
+	}
 	int outdegree = 0;
 	int indegree = 0;
 	if (dorefs) {
@@ -3466,7 +3488,9 @@ R_API int r_core_anal_fcn_list(RCore *core, const char *input, const char *rad) 
 		RTable *table = r_core_table (core, "functions");
 		r_table_visual_list (table, flist, core->offset, core->blocksize,
 			r_cons_get_size (NULL), r_config_get_i (core->config, "scr.color"));
-		r_cons_printf ("\n%s\n", r_table_tostring (table));
+		char *s = r_table_tostring (table);
+		r_cons_printf ("\n%s\n", s);
+		free (s);
 		r_table_free (table);
 		r_list_free (flist);
 		break;

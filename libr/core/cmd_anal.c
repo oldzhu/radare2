@@ -231,17 +231,19 @@ static RCoreHelpMessage help_msg_aar = {
 static RCoreHelpMessage help_msg_ab = {
 	"Usage:", "ab", "# analyze basic block",
 	"ab", " [addr]", "show basic block information at given address",
-	"ab.", "", "same as: ab $$",
 	"ab-", "[addr]", "delete basic block at given address",
+	"ab.", "", "same as: ab $$",
 	"aba", " [addr]", "analyze esil accesses in basic block (see aea?)",
 	"abb", " [length]", "analyze N bytes and extract basic blocks",
 	"abe", " [addr]", "emulate basic block (alias for aeb)",
 	"abf", " [addr]", "address of incoming (from) basic blocks",
+	"abi", "", "same as ab. or ab",
 	"abj", " [addr]", "display basic block information in JSON",
 	"abl", "[?] [.-cqj]", "list all basic blocks",
 	"abo", "", "list opcode offsets of current basic block",
+	"abp", "[?] [addr] [num]", "follow basic blocks paths from current offset to addr",
+	"abt", "[tag] ([color])", "trace tags are bitfields, 0 means nontraced, withuot arguments show current value",
 	"abx", " [hexpair-bytes]", "analyze N bytes",
-	"abt", "[?] [addr] [num]", "find num paths from current offset to addr",
 	NULL
 };
 
@@ -255,11 +257,11 @@ static RCoreHelpMessage help_msg_abl = {
 	NULL
 };
 
-static RCoreHelpMessage help_msg_abt = {
-	"Usage:", "abt", "[addr] [num] # find num paths from current offset to addr",
-	"abt", " [addr] [num]", "find num paths from current offset to addr",
-	"abte", " [addr]", "emulate from beginning of function to the given address",
-	"abtj", " [addr] [num]", "display paths in JSON",
+static RCoreHelpMessage help_msg_abp = {
+	"Usage:", "abp", "[addr] [num] # find num paths from current offset to addr",
+	"abp", " [addr] [num]", "find num paths from current offset to addr",
+	"abpe", " [addr]", "emulate from beginning of function to the given address",
+	"abpj", " [addr] [num]", "display paths in JSON",
 	NULL
 };
 
@@ -2893,7 +2895,7 @@ static void anal_bb_list(RCore *core, const char *input) {
 			char *addr = r_str_newf ("0x%" PFMT64x, block->addr);
 			pj_ks (pj, "addr", addr);
 			free (addr);
-			pj_kb (pj, "traced", block->traced);
+			pj_kn (pj, "traced", block->traced);
 			pj_kn (pj, "ninstr", block->ninstr);
 			pj_kn (pj, "size", block->size);
 			if (block->jump != UT64_MAX) {
@@ -2961,35 +2963,38 @@ static void anal_bb_list(RCore *core, const char *input) {
 		default:
 			r_cons_printf ("0x%08" PFMT64x , block->addr);
 			if (block->jump != UT64_MAX) {
-				r_cons_printf (" .j 0x%08" PFMT64x, block->jump);
+				r_cons_printf (" jump=0x%08" PFMT64x, block->jump);
 			}
 			if (block->fail != UT64_MAX) {
-				r_cons_printf (" .f 0x%08" PFMT64x, block->fail);
+				r_cons_printf (" fail=0x%08" PFMT64x, block->fail);
 			}
-			if (xrefs) {
+			if (block->traced) {
+				r_cons_printf (" trace=0x%08" PFMT64x, block->traced);
+			}
+			if (xrefs && !r_list_empty (xrefs)) {
 				RListIter *iter2;
-				r_cons_printf (" .x");
+				r_cons_printf (" xrefs=");
 				ut64 *addr;
 				r_list_foreach (xrefs, iter2, addr) {
 					r_cons_printf (" 0x%08" PFMT64x, *addr);
 				}
 			}
-			if (calls) {
-				r_cons_printf (" .c");
+			if (calls && !r_list_empty (calls)) {
+				r_cons_printf (" calls=");
 				RListIter *iter2;
 				ut64 *addr;
 				r_list_foreach (calls, iter2, addr) {
 					r_cons_printf (" 0x%08" PFMT64x, *addr);
 				}
 			}
-			if (block->fcns) {
+			if (block->fcns && !r_list_empty (block->fcns)) {
 				RListIter *iter2;
 				RAnalFunction *fcn;
 				r_list_foreach (block->fcns, iter2, fcn) {
-					r_cons_printf (" .u 0x%" PFMT64x, fcn->addr);
+					r_cons_printf (" func=0x%" PFMT64x, fcn->addr);
 				}
 			}
-			r_cons_printf (" .s %" PFMT64d "\n", block->size);
+			r_cons_printf (" size=%" PFMT64d "\n", block->size);
 		}
 		r_list_free (calls);
 		r_list_free (xrefs);
@@ -3070,7 +3075,7 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 			}
 		}
 		pj_end (pj);
-		pj_kb (pj, "traced", b->traced);
+		pj_kn (pj, "traced", b->traced);
 		pj_end (pj);
 	} else {
 		if (b->switch_op) {
@@ -3084,8 +3089,8 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 			r_cons_printf ("fail: 0x%08"PFMT64x"\n", b->fail);
 		}
 		r_cons_printf ("opaddr: 0x%08"PFMT64x"\n", opaddr);
-		r_cons_printf ("addr: 0x%08" PFMT64x "\nsize: %" PFMT64d "\ninputs: %d\noutputs: %d\nninstr: %d\ntraced: %s\n",
-			b->addr, b->size, inputs, outputs, b->ninstr, r_str_bool (b->traced));
+		r_cons_printf ("addr: 0x%08" PFMT64x "\nsize: %" PFMT64d "\ninputs: %d\noutputs: %d\nninstr: %d\ntraced: 0x%"PFMT64x"\n",
+			b->addr, b->size, inputs, outputs, b->ninstr, b->traced);
 	}
 }
 
@@ -3162,9 +3167,14 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 			r_list_append (flist, info);
 		}
 		RTable *table = r_core_table (core, "fcnbbs");
+		if (!table) {
+			return false;
+		}
 		r_table_visual_list (table, flist, core->offset, core->blocksize,
 			r_cons_get_size (NULL), r_config_get_i (core->config, "scr.color"));
-		r_cons_printf ("\n%s\n", r_table_tostring (table));
+		char *s = r_table_tostring (table);
+		r_cons_printf ("\n%s\n", s);
+		free (s);
 		r_table_free (table);
 		r_list_free (flist);
 		return true;
@@ -11806,14 +11816,45 @@ beach:
 }
 
 static void cmd_anal_abt(RCore *core, const char *input) {
+	RAnalBlock *bb = r_anal_get_block_at (core->anal, core->offset);
+	if (bb) {
+		if (R_STR_ISEMPTY (input)) {
+			r_cons_printf ("0x%"PFMT64x"\n", bb->traced);
+		} else if (*input == ' ') {
+			char *first = (char *)r_str_trim_head_ro (input);
+			char *arg = strchr (first, ' ');
+			int tag = atoi (first);
+			if (tag < 0 || tag > 63) {
+				R_LOG_ERROR ("Invalid trace tag number");
+				return;
+			}
+			if (arg) {
+				RColor k = {0};
+				char *s = r_cons_pal_parse (arg + 1, &k);
+				if (s)  {
+					core->anal->tracetagcolors[tag] = k;
+					free (s);
+				} else {
+					R_LOG_ERROR ("Invalid error");
+				}
+			} else {
+				bb->traced = tag;
+			}
+		}
+	} else {
+		R_LOG_ERROR ("Cannot find any basic block here");
+	}
+}
+
+static void cmd_anal_abp(RCore *core, const char *input) {
 	switch (*input) {
-	case 'e': // "abte"
+	case 'e': // "abpe"
 		{
 		int n = 1;
 		char *p = strchr (input + 1, ' ');
 		if (!p) {
 			// TODO use r_cons_cmd_help_match () instead
-			r_core_cmd_help (core, help_msg_abt);
+			r_core_cmd_help (core, help_msg_abp);
 			return;
 		}
 		ut64 addr = r_num_math (core->num, p + 1);
@@ -11846,9 +11887,9 @@ static void cmd_anal_abt(RCore *core, const char *input) {
 		}
 		break;
 	case '?':
-		r_core_cmd_help (core, help_msg_abt);
+		r_core_cmd_help (core, help_msg_abp);
 		break;
-	case 'j': { // "aetj"
+	case 'j': { // "abpj"
 		ut64 addr = r_num_math (core->num, input + 1);
 		RAnalBlock *block = r_anal_get_block_at (core->anal, core->offset);
 		if (!block) {
@@ -13188,7 +13229,7 @@ static void cmd_anal_aC(RCore *core, const char *input) {
 	ut64 pcv = r_num_math (core->num, iarg);
 	if (input[0] == 'e') { // "aCe"
 		is_aCer = (input[1] == '*');
-		r_core_cmdf (core, ".abte 0x%08"PFMT64x, pcv);
+		r_core_cmdf (core, ".abpe 0x%08"PFMT64x, pcv);
 	}
 	RAnalOp* op = r_core_anal_op (core, pcv, -1);
 	if (!op) {
@@ -13468,14 +13509,17 @@ static int cmd_anal(void *data, const char *input) {
 		case 'a': // "aba"
 			r_core_cmdf (core, "aeab%s", input + 1);
 			break;
+		case 'b': // "abb"
+			core_anal_bbs (core, input + 2);
+			break;
+		case 'c': // "abc"
+			cmd_afbc (core, r_str_trim_head_ro (input + 2));
+			break;
 		case 'o': // "abo"
 			abo (core);
 			break;
 		case 'e': // "aeb"
 			r_core_cmdf (core, "aeb%s", input + 2);
-			break;
-		case 'b': // "abb"
-			core_anal_bbs (core, input + 2);
 			break;
 		case 'f': // "abf"
 			core_anal_abf (core, input + 2);
@@ -13483,9 +13527,12 @@ static int cmd_anal(void *data, const char *input) {
 		case 'r': // "abr"
 			core_anal_bbs_range (core, input + 2);
 			break;
-		case ',': // "ab,"
-		case 't': // "abt"
+		case 't':
 			cmd_anal_abt (core, input + 2);
+			break;
+		case ',': // "ab,"
+		case 'p': // "abp"
+			cmd_anal_abp (core, input + 2);
 			break;
 		case 'l': // "abl"
 			if (input[2] == '?') {
