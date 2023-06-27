@@ -171,13 +171,12 @@ typedef struct r_arch_plugin_t {
 	RSysBits bits;
 	RSysBits addr_bits;
 
-	// R2_590 figure out a way to make init and decode const (better perf)
-	RArchPluginInitCallback init;
+	const RArchPluginInitCallback init;
 	const RArchPluginFiniCallback fini;
 	const RArchPluginInfoCallback info;
 	const RArchPluginRegistersCallback regs;
 	const RArchPluginEncodeCallback encode;
-	RArchPluginDecodeCallback decode;
+	const RArchPluginDecodeCallback decode;
 	const RArchPluginModifyCallback patch;
 	const RArchPluginMnemonicsCallback mnemonics;
 	const RArchPluginPreludesCallback preludes;
@@ -209,7 +208,8 @@ R_API RArch *r_arch_new(void);
 R_API bool r_arch_use(RArch *arch, RArchConfig *config, const char *name);
 
 // arch plugins management apis
-R_API bool r_arch_add(RArch *arch, RArchPlugin *ap);
+R_API bool r_arch_plugin_add(RArch *arch, RArchPlugin *ap);
+R_API bool r_arch_plugin_remove(RArch *arch, RArchPlugin *ap);
 R_API bool r_arch_del(RArch *arch, const char *name);
 R_API void r_arch_free(RArch *arch);
 
