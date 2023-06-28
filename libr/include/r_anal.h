@@ -659,8 +659,9 @@ typedef enum {
 	R_ANAL_REF_TYPE_CALL = 'C', // code ref (call) -- maybe use 'k' for kall?
 	R_ANAL_REF_TYPE_JUMP = 'j', // code ref (call)
 	R_ANAL_REF_TYPE_DATA = 'd', // mem ref
-	R_ANAL_REF_TYPE_STRING = 's',  // string ref // R_DEPRECATE
-	R_ANAL_REF_TYPE_STRN = 's',  // string ref
+	R_ANAL_REF_TYPE_ICOD = 'i', // indirect code reference
+	R_ANAL_REF_TYPE_STRING = 's', // string ref // R_DEPRECATE
+	R_ANAL_REF_TYPE_STRN = 's', // string ref
 	// perm / direction
 	R_ANAL_REF_TYPE_READ = 4 << 8,
 	R_ANAL_REF_TYPE_WRITE = 2 << 8,
@@ -670,7 +671,8 @@ typedef enum {
 } RAnalRefType;
 
 #define R_ANAL_REF_TYPE_PERM(x) (((x)>>8) & 0xff)
-#define R_ANAL_REF_TYPE_MASK(x) ((x) & 0xff)
+// #define R_ANAL_REF_TYPE_MASK(x) ((x) & 0xff)
+#define R_ANAL_REF_TYPE_MASK(x) r_anal_ref_typemask((x))
 
 typedef struct r_anal_ref_t {
 	ut64 addr;
@@ -1279,6 +1281,7 @@ typedef struct r_anal_data_t {
 
 R_API RAnalData *r_anal_data(RAnal *anal, ut64 addr, const ut8 *buf, int size, int wordsize);
 R_API const char *r_anal_data_kind(RAnal *anal, ut64 addr, const ut8 *buf, int len);
+R_API int r_anal_data_type(RAnal *a, ut64 da);
 R_API RAnalData *r_anal_data_new_string(ut64 addr, const char *p, int size, int wide);
 R_API RAnalData *r_anal_data_new(ut64 addr, int type, ut64 n, const ut8 *buf, int len);
 R_API void r_anal_data_free(RAnalData *d);
