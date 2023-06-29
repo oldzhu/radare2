@@ -2653,7 +2653,7 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 			}
 #if 0
 // no opex here to avoid lot of tests broken..and having json in here is not much useful imho
-			if (opexstr && *opexstr) {
+			if (R_STR_ISNOTEMPTY (opexstr)) {
 				printline ("opex", "%s\n", opexstr);
 			}
 #endif
@@ -2671,7 +2671,8 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 				printline ("ptr", "0x%08" PFMT64x "\n", op.ptr);
 			}
 			if (op.disp && op.disp != UT64_MAX) {
-				printline ("disp", "0x%08" PFMT64x "\n", op.disp);
+				// printline ("disp", "0x%08" PFMT64x "\n", op.disp);
+				printline ("disp", "%" PFMT64d "\n", op.disp);
 			}
 			if (op.refptr != -1 && op.refptr > 0) {
 				printline ("refptr", "%d\n", op.refptr);
@@ -2970,23 +2971,21 @@ static void anal_bb_list(RCore *core, const char *input) {
 			if (block->traced) {
 				r_cons_printf (" trace=0x%08" PFMT64x, block->traced);
 			}
-			if (xrefs && !r_list_empty (xrefs)) {
+			if (xrefs) {
 				RListIter *iter2;
-				r_cons_printf (" xrefs=");
 				ut64 *addr;
 				r_list_foreach (xrefs, iter2, addr) {
-					r_cons_printf (" 0x%08" PFMT64x, *addr);
+					r_cons_printf (" xref=0x%08" PFMT64x, *addr);
 				}
 			}
-			if (calls && !r_list_empty (calls)) {
-				r_cons_printf (" calls=");
+			if (calls) {
 				RListIter *iter2;
 				ut64 *addr;
 				r_list_foreach (calls, iter2, addr) {
-					r_cons_printf (" 0x%08" PFMT64x, *addr);
+					r_cons_printf (" call=0x%08" PFMT64x, *addr);
 				}
 			}
-			if (block->fcns && !r_list_empty (block->fcns)) {
+			if (block->fcns) {
 				RListIter *iter2;
 				RAnalFunction *fcn;
 				r_list_foreach (block->fcns, iter2, fcn) {
