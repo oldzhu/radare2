@@ -297,6 +297,7 @@ typedef struct r_bin_file_t {
 	ut64 offset; // XXX
 	RBinObject *o;
 	void *xtr_obj;
+	ut64 user_baddr; // XXX
 	ut64 loadaddr; // XXX
 	/* values used when searching the strings */
 	int minstrlen;
@@ -323,6 +324,18 @@ typedef struct r_bin_file_options_t {
 	int fd;
 	const char *filename;
 } RBinFileOptions;
+
+typedef struct r_bin_create_options_t {
+	const char *pluginname;
+	ut64 baseaddr; // where the linker maps the binary in memory
+	ut64 loadaddr; // starting physical address to read from the target file
+	ut8 *code;
+	int codelen;
+	ut8 *data;
+	int datalen;
+	const char *arch;
+	int bits;
+} RBinCreateOptions;
 
 struct r_bin_t {
 	const char *file;
@@ -479,6 +492,7 @@ typedef struct r_bin_plugin_t {
 	const char* (*get_name)(RBinFile *bf, int type, int idx, bool simplified);
 	ut64 (*get_vaddr)(RBinFile *bf, ut64 baddr, ut64 paddr, ut64 vaddr);
 	RBuffer* (*create)(RBin *bin, const ut8 *code, int codelen, const ut8 *data, int datalen, RBinArchOptions *opt);
+	// TODO: R2_600 RBuffer* (*create)(RBin *bin, RBinCreateOptions *opt);
 	char* (*demangle)(const char *str);
 	char* (*regstate)(RBinFile *bf);
 	int (*file_type)(RBinFile *bf);
@@ -548,8 +562,6 @@ typedef struct r_bin_symbol_t {
 	bool is_imported;
 	/* only used by java */
 	const char *visibility_str;
-	// ----------------
-	//char descriptor[R_BIN_SIZEOF_STRINGS+1];
 	ut64 vaddr;
 	ut64 paddr;
 	ut32 size;
@@ -578,6 +590,8 @@ typedef struct r_bin_reloc_t {
 	ut8 additive;
 	RBinSymbol *symbol;
 	RBinImport *import;
+	ut64 laddr; // local symbol address | UT64_MAX
+	// RBinSymbol *lsymbol; // still unused
 	st64 addend;
 	ut64 vaddr;
 	ut64 paddr;
@@ -683,6 +697,7 @@ typedef void (*RBinSymbolCallback)(RBinObject *obj, RBinSymbol *symbol);
 // options functions
 R_API void r_bin_file_options_init(RBinFileOptions *opt, int fd, ut64 baseaddr, ut64 loadaddr, int rawstr);
 R_API void r_bin_arch_options_init(RBinArchOptions *opt, const char *arch, int bits);
+// R_API void r_bin_create_options_init(RBinCreateOptions *opt, const char *arch, int bits);
 
 // open/close/reload functions
 R_API RBin *r_bin_new(void);
@@ -738,7 +753,6 @@ R_API int r_bin_is_big_endian(RBin *bin);
 R_API int r_bin_is_static(RBin *bin);
 R_API ut64 r_bin_get_vaddr(RBin *bin, ut64 paddr, ut64 vaddr);
 R_API ut64 r_bin_file_get_vaddr(RBinFile *bf, ut64 paddr, ut64 vaddr);
-R_API ut64 r_bin_a2b(RBin *bin, ut64 addr);
 
 R_API int r_bin_load_languages(RBinFile *binfile);
 R_API RBinFile *r_bin_cur(RBin *bin);

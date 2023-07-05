@@ -881,7 +881,7 @@ static int bin_info(RCore *r, PJ *pj, int mode, ut64 laddr) {
 				info->bits,
 				r_str_bool (R_BIN_DBG_STRIPPED &info->dbg_info));
 			int v = r_anal_archinfo (r->anal, R_ANAL_ARCHINFO_ALIGN);
-			r_cons_printf ("e asm.pcalign=%d\n", (v > 0)? v: 0);
+			r_cons_printf ("e asm.codealign=%d\n", (v > 0)? v: 0);
 			if (R_STR_ISNOTEMPTY (info->lang) && info->lang[0] != '?') {
 				r_cons_printf ("e bin.lang=%s\n", info->lang);
 			}
@@ -1362,9 +1362,17 @@ static int bin_source(RCore *r, PJ *pj, int mode) {
 	return true;
 }
 
+static ut64 a2b(RBin *bin, ut64 addr) {
+	r_return_val_if_fail (bin, UT64_MAX);
+	RBinObject *o = r_bin_cur_object (bin);
+	if (o) {
+		return o->baddr_shift + addr;
+	}
+	return addr;
+}
+
 static int bin_main(RCore *r, PJ *pj, int mode, int va) {
 	RBinAddr *binmain = r_bin_get_sym (r->bin, R_BIN_SYM_MAIN);
-	ut64 addr;
 	if (!binmain) {
 		if (IS_MODE_JSON (mode)) {
 			pj_o (pj);
@@ -1372,7 +1380,7 @@ static int bin_main(RCore *r, PJ *pj, int mode, int va) {
 		}
 		return false;
 	}
-	addr = va ? r_bin_a2b (r->bin, binmain->vaddr) : binmain->paddr;
+	ut64 addr = va ? a2b (r->bin, binmain->vaddr) : binmain->paddr;
 
 	if (IS_MODE_SET (mode)) {
 		r_flag_space_set (r->flags, R_FLAGS_FS_SYMBOLS);
@@ -1619,19 +1627,7 @@ typedef struct {
 	const char *lang;
 	bool is_sandbox;
 	bool is_pe;
-	bool is_elf;
 	bool is32;
-
-	// section boundaries and availability
-	bool got;
-	ut64 got_min;
-	ut64 got_max;
-	ut64 got_va;
-
-	bool plt;
-	ut64 plt_min;
-	ut64 plt_max;
-	ut64 plt_va;
 } RelocInfo;
 
 static void ri_init(RCore *core, RelocInfo *ri) {
@@ -1643,27 +1639,6 @@ static void ri_init(RCore *core, RelocInfo *ri) {
 	const char *rclass = info->rclass;
 	ri->is32 = r_config_get_i (core->config, "asm.bits") <= 32;
 	ri->is_pe = rclass && r_str_startswith (rclass, "pe");
-	ri->is_elf = rclass && r_str_startswith (rclass, "elf");
-	RBinSection *s;
-	RListIter *iter;
-	RList *sections = r_bin_get_sections (core->bin);
-	r_list_foreach (sections, iter, s) {
-		if (!strcmp (s->name, ".got")) {
-			ri->got = true;
-			ri->got_min = s->paddr;
-			ri->got_max = s->paddr + s->size;
-			ri->got_va = s->vaddr;
-		}
-		if (!strcmp (s->name, ".plt")) {
-			ri->plt_min = s->paddr;
-			ri->plt_max = s->paddr + s->size;
-			ri->plt_va = s->vaddr;
-			ri->plt = true;
-		}
-		if (ri->got && ri->plt) {
-			break;
-		}
-	}
 }
 
 static void set_bin_relocs(RelocInfo *ri, RBinReloc *reloc, ut64 addr, Sdb **db, char **sdb_module) {
@@ -1733,34 +1708,10 @@ static void set_bin_relocs(RelocInfo *ri, RBinReloc *reloc, ut64 addr, Sdb **db,
 	} else {
 		snprintf (flagname, R_FLAG_NAME_SIZE, "reloc.%s", reloc_name);
 	}
-	// R2_590 - move this logic into rbinelf, requires RBinReloc to hold a plt address if the symbol is internal
-	if (ri->is_elf && reloc->symbol && ri->got && ri->plt) {
-		ut64 raddr = reloc->paddr;
-		if (raddr >= ri->got_min && raddr < ri->got_max) {
-			ut64 rvaddr = rva (r->bin, reloc->paddr, reloc->vaddr, true);
-			ut64 pltptr = 0; // relocated buf tells the section to look at
-			if (ri->is32) {
-				ut32 n32;
-				r_io_read_at (r->io, rvaddr, (ut8*)&n32, 4);
-				pltptr = n32;
-			} else {
-				r_io_read_at (r->io, rvaddr, (ut8*)&pltptr, 8);
-			}
-			if (pltptr != 0 && pltptr != -1) {
-				if (pltptr >= ri->plt_min && pltptr < ri->plt_max) {
-					ut64 saddr = reloc->vaddr - ri->got_va;
-					int index = (saddr / 4) - 4;
-					ut64 naddr = r_bin_a2b (r->bin, ri->plt_va + (index * 12) + 0x20);
-					if (naddr == UT64_MAX) {
-						R_LOG_DEBUG ("Cannot resolve reloc reference %s", reloc_name);
-					} else {
-						char *internal_reloc = r_str_newf ("rsym.%s", reloc_name);
-						(void)r_flag_set (r->flags, internal_reloc, naddr, bin_reloc_size (reloc));
-						free (internal_reloc);
-					}
-				}
-			}
-		}
+	if (reloc->laddr) {
+		char *internal_reloc = r_str_newf ("rsym.%s", reloc_name);
+		(void)r_flag_set (r->flags, internal_reloc, reloc->laddr, bin_reloc_size (reloc));
+		free (internal_reloc);
 	}
 	free (reloc_name);
 	char *demname = NULL;
@@ -1797,7 +1748,6 @@ static void add_metadata(RCore *r, RBinReloc *reloc, ut64 addr, int mode) {
 	if (cdsz == 0) {
 		return;
 	}
-
 	RIOMap *map = r_io_map_get_at (r->io, addr);
 	if (!map || map ->perm & R_PERM_X) {
 		return;
@@ -1835,7 +1785,7 @@ static bool is_file_reloc(RBinReloc *r) {
 }
 
 static int bin_relocs(RCore *r, PJ *pj, int mode, int va) {
-	bool bin_demangle = r_config_get_i (r->config, "bin.demangle");
+	bool bin_demangle = r_config_get_b (r->config, "bin.demangle");
 	bool keep_lib = r_config_get_i (r->config, "bin.demangle.libs");
 	const char *lang = r_config_get (r->config, "bin.lang");
 	RTable *table = r_core_table (r, "relocs");
@@ -4192,9 +4142,7 @@ static void bin_elf_versioninfo(RCore *r, PJ *pj, int mode) {
 		} else {
 			r_cons_printf ("Version need section '%s' contains %d entries:\n",
 				section_name, (int)sdb_num_get (sdb, "num_entries", 0));
-
 			r_cons_printf (" Addr: 0x%08"PFMT64x, address);
-
 			r_cons_printf ("  Offset: 0x%08"PFMT64x"  Link to section: %"PFMT64d" (%s)\n",
 				offset, link, link_section_name);
 		}

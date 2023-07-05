@@ -338,7 +338,7 @@ static RCoreHelpMessage help_msg_ae = {
 	"aegf", " [expr] [register]", "esil data flow graph filter",
 	"aei", "[?]", "initialize ESIL VM state (aei- to deinitialize)",
 	"aek", "[?] [query]", "perform sdb query on ESIL.info",
-	"aeL", "", "list ESIL plugins",
+	"aeL", "[?][-] [name]", "list ESIL plugins",
 	"aep", "[?] [addr]", "manage esil pin hooks (see 'e cmd.esil.pin')",
 	"aepc", " [addr]", "change esil PC to this address",
 	"aer", "[?] [..]", "handle ESIL registers like 'ar' or 'dr' does",
@@ -6149,8 +6149,8 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 			R_LOG_ERROR ("Invalid program counter PC=-1 coming from 0x%08"PFMT64x, addr);
 			break;
 		}
-		if (core->anal->config->pcalign > 0) {
-			pc -= (pc % core->anal->config->pcalign);
+		if (core->anal->config->codealign > 0) {
+			pc -= (pc % core->anal->config->codealign);
 			r_reg_setv (core->anal->reg, pcname, pc);
 			r_reg_setv (core->dbg->reg, pcname, pc);
 		}
@@ -6319,7 +6319,7 @@ static void cmd_anal_info(RCore *core, const char *input) {
 			v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_DATA_ALIGN);
 			pj_ki (pj, "dtalign", v);
 			v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
-			pj_ki (pj, "pcalign", v);
+			pj_ki (pj, "codealign", v);
 			pj_end (pj);
 			char *s = pj_drain (pj);
 			r_cons_printf ("%s\n", s);
@@ -6334,7 +6334,7 @@ static void cmd_anal_info(RCore *core, const char *input) {
 			v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_DATA_ALIGN);
 			r_cons_printf ("dtalign %d\n", v);
 			v = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_ALIGN);
-			r_cons_printf ("pcalign %d\n", v);
+			r_cons_printf ("codealign %d\n", v);
 		}
 		break;
 	case 'i': // "aii"
@@ -7883,12 +7883,22 @@ static void cmd_anal_esil(RCore *core, const char *input, bool verbose) {
 			break;
 		}
 		break;
-	case 'L': // aeL commands
-		{
+	case 'L': // "aeL" esil plugins
+		if (input[1] == ' ') { // "aeL"
+			const char *name = r_str_trim_head_ro (input + 2);
+			r_esil_plugin_activate (core->anal->esil, name);
+		} else if (input[1] == '-') { // "aeL-"
+			const char *name = r_str_trim_head_ro (input + 2);
+			r_esil_plugin_deactivate (core->anal->esil, name);
+		} else {
 			REsilPlugin *p;
 			RListIter *iter;
-			r_list_foreach (core->anal->esil_plugins, iter, p) {
-				r_cons_printf ("%s\n", p->name);
+			if (core->anal->esil) {
+				r_list_foreach (core->anal->esil->plugins, iter, p) {
+					r_cons_printf ("%s\n", p->name);
+				}
+			} else {
+				R_LOG_WARN ("Run 'aei'");
 			}
 		}
 		break;
@@ -12402,7 +12412,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			// Run pending analysis immediately after analysis
 			// Usefull when running commands with ";" or via r2 -c,-i
 			dh_orig = core->dbg->h
-				? strdup (core->dbg->h->name)
+				? strdup (core->dbg->h->meta.name)
 				: strdup ("esil");
 			if (core->io->desc && core->io->desc->plugin && !core->io->desc->plugin->isdbg) {
 				//use dh_origin if we are debugging
