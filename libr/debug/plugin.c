@@ -3,51 +3,67 @@
 #include <r_debug.h>
 #include <config.h>
 
+R_GENERATE_VEC_IMPL_FOR(DebugPluginSession, RDebugPluginSession);
+
 static RDebugPlugin *debug_static_plugins[] = {
 	R_DEBUG_STATIC_PLUGINS
 };
 
-R_API void r_debug_plugin_init(RDebug *dbg) {
+static inline void debug_plugin_session_fini(RDebugPluginSession *ds, void *user) {
+	RDebug *dbg = user;
+	if (ds->plugin.fini_plugin && !ds->plugin.fini_plugin (dbg, ds)) {
+		R_LOG_DEBUG ("Failed to finalize debug plugin");
+	}
+	R_FREE (ds->plugin_data);
+}
+
+R_API void r_debug_init_plugins(RDebug *dbg) {
 	int i;
-	dbg->plugins = r_list_newf (free);
+	dbg->plugins = RVecDebugPluginSession_new ();
 	for (i = 0; debug_static_plugins[i]; i++) {
 		r_debug_plugin_add (dbg, debug_static_plugins[i]);
 	}
 }
 
+R_API void r_debug_fini_plugins(RDebug *dbg) {
+	RVecDebugPluginSession_free (dbg->plugins, debug_plugin_session_fini, dbg);
+}
+
+static inline int find_plugin_by_name(RDebugPluginSession *ds, void *name) {
+	return strcmp (ds->plugin.meta.name, name);
+}
+
 R_API bool r_debug_use(RDebug *dbg, const char *str) {
+	RDebugPluginSession *ds = NULL;
 	if (dbg && str) {
-		RDebugPlugin *h;
-		RListIter *iter;
-		r_list_foreach (dbg->plugins, iter, h) {
-			if (h->meta.name && !strcmp (str, h->meta.name)) {
-				dbg->h = h;
-				if (dbg->anal && dbg->anal->cur) {
-					r_debug_set_arch (dbg, dbg->anal->cur->arch, dbg->bits);
-				}
-				dbg->bp->breakpoint = dbg->h->breakpoint;
-				dbg->bp->user = dbg;
+		ds = RVecDebugPluginSession_find (dbg->plugins, (void*)str, find_plugin_by_name);
+		if (ds) {
+			dbg->current = ds;
+			if (dbg->anal && dbg->anal->cur) {
+				r_debug_set_arch (dbg, dbg->anal->cur->arch, dbg->bits);
 			}
+			dbg->bp->breakpoint = dbg->current->plugin.breakpoint;
+			dbg->bp->user = dbg;
 		}
 	}
-	if (dbg && dbg->h && dbg->h->reg_profile) {
-		char *p = dbg->h->reg_profile (dbg);
+	if (dbg && dbg->current && dbg->current->plugin.reg_profile) {
+		char *p = dbg->current->plugin.reg_profile (dbg);
 		if (p) {
 			r_reg_set_profile_string (dbg->reg, p);
 			if (dbg->anal && dbg->reg != dbg->anal->reg) {
 				r_reg_free (dbg->anal->reg);
 				dbg->anal->reg = dbg->reg;
 			}
-			if (dbg->h->init) {
-				dbg->h->init (dbg);
+			if (dbg->current->plugin.init_debugger) {
+				dbg->current->plugin.init_debugger (dbg);
 			}
 			r_reg_set_profile_string (dbg->reg, p);
 			free (p);
 		} else {
-			R_LOG_ERROR ("Cannot retrieve reg profile from debug plugin (%s)", dbg->h->meta.name);
+			R_LOG_ERROR ("Cannot retrieve reg profile from debug plugin (%s)", dbg->current->plugin.meta.name);
 		}
 	}
-	return (dbg && dbg->h);
+	return (dbg && dbg->current);
 }
 
 R_API bool r_debug_plugin_list(RDebug *dbg, int mode) {
@@ -55,8 +71,6 @@ R_API bool r_debug_plugin_list(RDebug *dbg, int mode) {
 	int count = 0;
 	memset (spaces, ' ', 15);
 	spaces[15] = 0;
-	RDebugPlugin *h;
-	RListIter *iter;
 	PJ *pj = NULL;
 	if (mode == 'j') {
 		pj = dbg->pj;
@@ -65,20 +79,22 @@ R_API bool r_debug_plugin_list(RDebug *dbg, int mode) {
 		}
 		pj_a (pj);
 	}
-	r_list_foreach (dbg->plugins, iter, h) {
-		int sp = 8 - strlen (h->meta.name);
+
+	RDebugPluginSession *ds;
+	R_VEC_FOREACH (dbg->plugins, ds) {
+		int sp = 8 - strlen (ds->plugin.meta.name);
 		spaces[sp] = 0;
 		if (mode == 'q') {
-			dbg->cb_printf ("%s\n", h->meta.name);
+			dbg->cb_printf ("%s\n", ds->plugin.meta.name);
 		} else if (mode == 'j') {
 			pj_o (pj);
-			pj_ks (pj, "name", h->meta.name);
-			pj_ks (pj, "license", h->meta.license);
+			pj_ks (pj, "name", ds->plugin.meta.name);
+			pj_ks (pj, "license", ds->plugin.meta.license);
 			pj_end (pj);
 		} else {
 			dbg->cb_printf ("%d  %s  %s %s%s\n",
-					count, (h == dbg->h)? "dbg": "---",
-					h->meta.name, spaces, h->meta.license);
+					count, (ds == dbg->current)? "dbg": "---",
+					ds->plugin.meta.name, spaces, ds->plugin.meta.license);
 		}
 		spaces[sp] = ' ';
 		count++;
@@ -90,18 +106,40 @@ R_API bool r_debug_plugin_list(RDebug *dbg, int mode) {
 	return true;
 }
 
-R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *foo) {
-	if (!dbg || !foo || !foo->meta.name) {
+R_API bool r_debug_plugin_add(RDebug *dbg, RDebugPlugin *plugin) {
+	r_return_val_if_fail (dbg && plugin, false);
+	if (!plugin->meta.name) {
 		return false;
 	}
-	RDebugPlugin *dp = R_NEW (RDebugPlugin);
-	memcpy (dp, foo, sizeof (RDebugPlugin));
-	r_list_append (dbg->plugins, dp);
+
+	RDebugPluginSession *ds = RVecDebugPluginSession_emplace_back (dbg->plugins);
+	if (!ds) {
+		return false;
+	}
+
+	memcpy (&ds->plugin, plugin, sizeof (RDebugPlugin));
+	ds->plugin_data = NULL;
+
+	if (ds->plugin.init_plugin && !ds->plugin.init_plugin (dbg, ds)) {
+		R_LOG_DEBUG ("Failed to initialize debug plugin");
+		return false;
+	}
+
 	return true;
 }
 
 R_API bool r_debug_plugin_remove(RDebug *dbg, RDebugPlugin *plugin) {
-	// R2_590 TODO
+	if (!dbg || !plugin) {
+		return false;
+	}
+
+	RDebugPluginSession *ds = RVecDebugPluginSession_find (dbg->plugins,
+		(void*)plugin->meta.name, find_plugin_by_name);
+	if (!ds) {
+		return false;
+	}
+
+	RVecDebugPluginSession_pop_back (dbg->plugins, debug_plugin_session_fini, dbg);
 	return true;
 }
 
@@ -111,8 +149,8 @@ R_API bool r_debug_plugin_set_reg_profile(RDebug *dbg, const char *profile) {
 		R_LOG_ERROR ("r_debug_plugin_set_reg_profile: Cannot find '%s'", profile);
 		return false;
 	}
-	if (dbg && dbg->h && dbg->h->set_reg_profile) {
-		return dbg->h->set_reg_profile (str);
+	if (dbg && dbg->current && dbg->current->plugin.set_reg_profile) {
+		return dbg->current->plugin.set_reg_profile (dbg, str);
 	}
 	free (str);
 	return false;

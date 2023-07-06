@@ -1256,7 +1256,7 @@ static bool r_debug_native_kill(RDebug *dbg, int pid, int tid, int sig) {
 }
 
 static bool r_debug_native_init(RDebug *dbg) {
-	dbg->h->desc = r_debug_desc_plugin_native;
+	dbg->current->plugin.desc = r_debug_desc_plugin_native;
 #if R2__WINDOWS__
 	r_w32_init ();
 	if (!dbg->user && dbg->iob.io->dbgwrap) {
@@ -1694,7 +1694,7 @@ RDebugPlugin r_debug_plugin_native = {
 #warning Unsupported architecture
 #endif
 #endif
-	.init = &r_debug_native_init,
+	.init_debugger = &r_debug_native_init,
 	.step = &r_debug_native_step,
 	.cont = &r_debug_native_continue,
 	.stop = &r_debug_native_stop,

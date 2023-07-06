@@ -942,7 +942,7 @@ static bool cb_asmbits(void *user, void *data) {
 	r_debug_set_arch (core->dbg, core->anal->config->arch, bits);
 	const bool load_from_debug = r_config_get_b (core->config, "cfg.debug");
 	if (load_from_debug) {
-		if (core->dbg->h && core->dbg->h->reg_profile) {
+		if (core->dbg->current && core->dbg->current->plugin.reg_profile) {
 // XXX. that should depend on the plugin, not the host os
 #if R2__WINDOWS__
 #if !defined(_WIN64)
@@ -951,7 +951,7 @@ static bool cb_asmbits(void *user, void *data) {
 			core->dbg->bits = R_SYS_BITS_64;
 #endif
 #endif
-			char *rp = core->dbg->h->reg_profile (core->dbg);
+			char *rp = core->dbg->current->plugin.reg_profile (core->dbg);
 			if (rp) {
 				r_reg_set_profile_string (core->dbg->reg, rp);
 				r_reg_set_profile_string (core->anal->reg, rp);
@@ -3653,6 +3653,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("asm.lbytes", "true", "align disasm bytes to left");
 	SETBPREF ("asm.lines", "true", "show ASCII-art lines at disassembly");
 	SETBPREF ("asm.lines.jmp", "true", "show flow lines at jumps");
+	SETI ("asm.lines.limit", 4096*4, "dont show control flow lines if function is larger than X bytes");
 	SETBPREF ("asm.lines.bb", "false", "show empty line after every basic block");
 	SETBPREF ("asm.lines.call", "false", "enable call lines");
 	SETBPREF ("asm.lines.ret", "false", "show separator lines after ret");
