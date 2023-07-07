@@ -1222,6 +1222,13 @@ static bool cb_usextr(void *user, void *data) {
 	return true;
 }
 
+static bool cb_binlimit(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	core->bin->limit = node->i_value;
+	return true;
+}
+
 static bool cb_strpurge(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
@@ -3466,6 +3473,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETICB ("anal.graph_depth", 256, &cb_analgraphdepth, "max depth for path search");
 	SETICB ("anal.sleep", 0, &cb_analsleep, "sleep N usecs every so often during analysis. Avoid 100% CPU usage");
 	SETCB ("anal.ignbithints", "false", &cb_anal_ignbithints, "ignore the ahb hints (only obey asm.bits)");
+	SETBPREF ("anal.imports", "true", "run af@@@i in aa for better noreturn propagation");
 	SETBPREF ("anal.calls", "false", "make basic af analysis walk into calls");
 	SETBPREF ("anal.autoname", "false", "speculatively set a name for the functions, may result in some false positives");
 	SETBPREF ("anal.hasnext", "false", "continue analysis after each function");
@@ -3750,6 +3758,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("bin.usextr", "true", &cb_usextr, "use extract plugins when loading files");
 	SETCB ("bin.useldr", "true", &cb_useldr, "use loader plugins when loading files");
 	SETPREF ("bin.types", "true", "parse and load filetype and language file header structs");
+	SETICB ("bin.limit", 0, &cb_binlimit, "stop parsing after finding N symbols/relocs/strings");
 	SETCB ("bin.str.purge", "", &cb_strpurge, "purge strings (e bin.str.purge=? provides more detail)");
 	SETPREF ("bin.str.real", "false", "set the realname in rbin.strings for better disasm (EXPERIMENTAL)");
 	SETCB ("bin.str.nofp", "false", &cb_nofp, "set to true to reduce the false positive strings (EXPERIMENTAL)");

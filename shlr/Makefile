@@ -37,7 +37,7 @@ WGET?=curl -o
 endif
 
 ifeq ($(CS_RELEASE),1)
-CS_VER=4.0.2
+CS_VER=5.0
 CS_TAR=https://codeload.github.com/capstone-engine/capstone/tar.gz/$(CS_VER)
 #CS_TAR=http://capstone-engine.org/download/$(CS_VER)/capstone-$(CS_VER).tgz
 CS_PATCHES=0
@@ -52,7 +52,7 @@ ifeq ($(USE_CS4),1)
 CS_TIP=1d230532840a37ac032c6ab80128238fc930c6c1
 CS_BRA=v4
 else
-CS_TIP=53e68142050957e278d1a7f31b6ab52cbe9bed26
+CS_TIP=8ae8f68ea3abb7a68071908bad02baa39742870c
 CS_BRA=next
 endif
 ifeq ($(CS_COMMIT_ARCHIVE),1)
