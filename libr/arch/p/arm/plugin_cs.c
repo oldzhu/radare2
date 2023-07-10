@@ -4027,8 +4027,12 @@ jmp $$ + 4 + ( [delta] * 2 )
 		op->cycles = 4;
 		break;
 	case ARM_INS_SVC:
-		op->type = R_ANAL_OP_TYPE_SWI;
-		op->val = IMM(0);
+		if (insn->detail->arm.cc == ARM_CC_AL) {
+			op->type = R_ANAL_OP_TYPE_SWI;
+		} else {
+			op->type = R_ANAL_OP_TYPE_CSWI;
+		}
+		op->val = IMM (0);
 		break;
 	case ARM_INS_ROR:
 	case ARM_INS_RRX:
