@@ -1,7 +1,4 @@
-/* radare - LGPL - Copyright 2009-2022 - pancake */
-
-#include <r_bin.h>
-#include <r_debug.h>
+/* radare - LGPL - Copyright 2009-2023 - pancake */
 
 static RCoreHelpMessage help_msg_o = {
 	"Usage: o","[file] ([offset])","Open and close files, maps, and banks",
@@ -14,7 +11,7 @@ static RCoreHelpMessage help_msg_o = {
 	"o++"," [file]", "create and open file in read-write mode (see ot and omr)",
 	"o-","[?][#!*$.]","close opened files",
 	"o.","","show current filename (or o.q/oq to get the fd)",
-	"o:"," [len]","open a malloc://[len] copying the bytes from current offset",
+	"o:"," [len]","open a malloc://[len] copying the bytes from current offset", // XXX R2_590 - should be an alias for ':' no need for a malloc:// wrapper imho
 	"o=","","list opened files (ascii-art bars)",
 	"oL","","list all IO plugins registered",
 	"oa","[-] [A] [B] [filename]","specify arch and bits for given file",

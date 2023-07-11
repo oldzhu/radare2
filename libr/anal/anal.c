@@ -261,62 +261,24 @@ R_API bool r_anal_use(RAnal *anal, const char *name) {
 }
 
 R_API char *r_anal_get_reg_profile(RAnal *anal) {
-	if (anal && anal->cur && anal->cur->get_reg_profile) {
-		return anal->cur->get_reg_profile (anal);
-	}
 	RArchSession *session = R_UNWRAP3 (anal, arch, session);
 	RArchPluginRegistersCallback regs = R_UNWRAP3 (session, plugin, regs);
-	if (regs) {
-		return regs (session);
-	}
-#if 0
-	if (anal->arch && anal->arch->current && anal->arch->current->p && anal->arch->current->p->set_reg_profile) {
-		eprintf ("WINRAR must get wat awat at\n");
-	}
-#endif
-	return (anal && anal->cur && anal->cur->get_reg_profile)
-		? anal->cur->get_reg_profile (anal) : NULL;
+	return regs? regs (session): NULL;
 }
 
 // deprecate.. or at least reuse get_reg_profile...
 R_DEPRECATE R_API bool r_anal_set_reg_profile(RAnal *anal, const char *p) {
 	r_return_val_if_fail (anal, false);
-	if (p) {
-		return r_reg_set_profile_string (anal->reg, p);
-	}
-	/// if the code goes this way, it means that we are expecting the anal plugin to give us the regprofile which should be deprecated
+	char *rp = NULL;
 	bool ret = false;
-	if (anal->cur && anal->cur->set_reg_profile) {
-		ret = anal->cur->set_reg_profile (anal);
-	} else if (anal->cur && anal->cur->get_reg_profile) {
-		char *rp = r_anal_get_reg_profile (anal);
-		if (R_STR_ISNOTEMPTY (rp)) {
-			r_reg_set_profile_string (anal->reg, rp);
-			ret = true;
-		}
-		free (rp);
-	} else if (anal->arch && anal->arch->session && anal->arch->session->plugin && anal->arch->session->plugin->regs) {
-		char *rp = anal->arch->session->plugin->regs (anal->arch->session);
-		if (R_STR_ISNOTEMPTY (rp)) {
-			r_reg_set_profile_string (anal->reg, rp);
-			ret = true;
-		}
-		free (rp);
-#if 0
-	} else if (anal->arch && anal->arch->current && anal->arch->current->p && anal->arch->current->p->set_reg_profile) {
-		// RArchPluginRegistersCallback set_reg_profile = R_UNWRAP5 (anal, arch, current, p, regs);
-		ret = anal->arch->current->p->set_reg_profile (anal->arch->cfg, anal->reg);
-	} else if (anal->arch && anal->arch->current && anal->arch->current->p && anal->arch->current->p->set_reg_profile) {
-		ret = anal->arch->current->p->set_reg_profile (anal->arch->cfg, anal->reg);
-#endif
-	} else {
-		char *p = r_anal_get_reg_profile (anal);
-		if (R_STR_ISNOTEMPTY (p)) {
-			r_reg_set_profile_string (anal->reg, p);
-			ret = true;
-		}
-		free (p);
+	if (!p) {
+		rp = r_anal_get_reg_profile (anal);
+		p = (const char *)rp;
 	}
+	if (R_STR_ISNOTEMPTY (p)) {
+		ret = r_reg_set_profile_string (anal->reg, p);
+	}
+	free (rp);
 	return ret;
 }
 
@@ -385,30 +347,20 @@ R_API bool r_anal_set_bits(RAnal *anal, int bits) {
 	return true;
 }
 
+// see 'aobm' command
 R_API ut8 *r_anal_mask(RAnal *anal, int size, const ut8 *data, ut64 at) {
-	// see 'aobm' command
-	RAnalOp *op = NULL;
-	ut8 *ret = NULL;
+	r_return_val_if_fail (anal && data && size > 0, NULL);
 	int oplen, idx = 0;
 
-	if (!data) {
+	RAnalOp *op = r_anal_op_new ();
+	if (!op) {
 		return NULL;
 	}
-
-	if (anal->cur && anal->cur->anal_mask) {
-		return anal->cur->anal_mask (anal, size, data, at);
-	}
-
-	if (!(op = r_anal_op_new ())) {
+	ut8 *ret = r_mem_set (0xff, size);
+	if (!ret) {
+		free (op);
 		return NULL;
 	}
-
-	if (!(ret = malloc (size))) {
-		r_anal_op_free (op);
-		return NULL;
-	}
-
-	memset (ret, 0xff, size);
 
 	// TODO: use the bitfliping thing to guess the mask in here
 	while (idx < size) {
@@ -443,6 +395,7 @@ R_API RList* r_anal_get_fcns(RAnal *anal) {
 }
 
 R_API bool r_anal_op_is_eob(RAnalOp *op) {
+	r_return_val_if_fail (op, false);
 	if (op->eob) {
 		return true;
 	}
@@ -462,6 +415,7 @@ R_API bool r_anal_op_is_eob(RAnalOp *op) {
 }
 
 R_API void r_anal_purge(RAnal *anal) {
+	r_return_if_fail (anal);
 	r_anal_hint_clear (anal);
 	r_interval_tree_fini (&anal->meta);
 	r_interval_tree_init (&anal->meta, r_meta_item_free);
@@ -487,23 +441,15 @@ static int default_archinfo(int res, int q) {
 
 // XXX deprecate. use r_arch_info() when all anal plugs get moved
 // XXX this function should NEVER return -1. it should provide all valid values, even if the delegate does not
-R_API R_DEPRECATE int r_anal_archinfo(RAnal *anal, int query) {
+R_API R_DEPRECATE int r_anal_archinfo(RAnal *anal, int query) { // R2_590
 	r_return_val_if_fail (anal, -1);
-	// this check wont be needed when all the anal plugs move to archland
-	// const char *const b = anal->cur->name;
-	// eprintf ("%s %s\n", a, b);
+	int res = -1;
 	if (anal->uses && anal->arch->session) {
 		const char *const a = anal->arch->session? anal->arch->session->config->arch: "";
 		const char *const b = anal->config->arch;
 		if (!strcmp (a, b)) {
-			int res = r_arch_info (anal->arch, query);
-			return default_archinfo (res, query);
+			res = r_arch_info (anal->arch, query);
 		}
-	}
-	int res = -1;
-	// this is the anal archinfo fallback
-	if (anal->cur && anal->cur->archinfo) {
-		res = anal->cur->archinfo (anal, query);
 	}
 	return default_archinfo (res, query);
 }
@@ -515,14 +461,14 @@ R_API bool r_anal_is_aligned(RAnal *anal, const ut64 addr) {
 
 static bool __nonreturn_print_commands(void *p, const char *k, const char *v) {
 	RAnal *anal = (RAnal *)p;
-	if (!strncmp (v, "func", strlen ("func") + 1)) {
+	if (!strcmp (v, "func")) {
 		char *query = r_str_newf ("func.%s.noreturn", k);
 		if (sdb_bool_get (anal->sdb_types, query, NULL)) {
 			anal->cb_printf ("tnn %s\n", k);
 		}
 		free (query);
 	}
-	if (!strncmp (k, "addr.", 5)) {
+	if (r_str_startswith (k, "addr.")) {
 		anal->cb_printf ("tna 0x%s %s\n", k + 5, v);
 	}
 	return true;
@@ -530,7 +476,7 @@ static bool __nonreturn_print_commands(void *p, const char *k, const char *v) {
 
 static bool __nonreturn_print(void *p, const char *k, const char *v) {
 	RAnal *anal = (RAnal *)p;
-	if (!strncmp (k, "func.", 5) && strstr (k, ".noreturn")) {
+	if (r_str_startswith (k, "func.") && strstr (k, ".noreturn")) {
 		char *s = strdup (k + 5);
 		char *d = strchr (s, '.');
 		if (d) {
@@ -539,9 +485,9 @@ static bool __nonreturn_print(void *p, const char *k, const char *v) {
 		anal->cb_printf ("%s\n", s);
 		free (s);
 	}
-	if (!strncmp (k, "addr.", 5)) {
+	if (r_str_startswith (k, "addr.")) {
 		char *off;
-		if (!(off = strdup (k + 5))) {
+		if (!(off = strdup (k + strlen ("addr.")))) {
 			return 1;
 		}
 		char *ptr = strstr (off, ".noreturn");
@@ -584,7 +530,7 @@ R_API bool r_anal_noreturn_add(RAnal *anal, const char *name, ut64 addr) {
 			return true;
 		}
 	}
-	if (name && *name) {
+	if (R_STR_ISNOTEMPTY (name)) {
 		tmp_name = name;
 	} else {
 		RAnalFunction *fcn = r_anal_get_fcn_in (anal, addr, -1);
@@ -625,19 +571,16 @@ R_API bool r_anal_noreturn_add(RAnal *anal, const char *name, ut64 addr) {
 R_API bool r_anal_noreturn_drop(RAnal *anal, const char *expr) {
 	r_strf_buffer (64);
 	Sdb *TDB = anal->sdb_types;
-	expr = r_str_trim_head_ro (expr);
-	const char *fcnname = NULL;
-	if (!strncmp (expr, "0x", 2)) {
-		ut64 n = r_num_math (NULL, expr);
+	const char *fcnname = r_str_trim_head_ro (expr);
+	if (r_str_startswith (fcnname, "0x")) {
+		ut64 n = r_num_math (NULL, fcnname);
 		sdb_unset (TDB, K_NORET_ADDR (n), 0);
 		RAnalFunction *fcn = r_anal_get_fcn_in (anal, n, -1);
 		if (!fcn) {
-			// eprintf ("can't find function at 0x%"PFMT64x"\n", n);
+			R_LOG_DEBUG ("can't find function at 0x%"PFMT64x, n);
 			return false;
 		}
 		fcnname = fcn->name;
-	} else {
-		fcnname = expr;
 	}
 	sdb_unset (TDB, K_NORET_FUNC (fcnname), 0);
 #if 0
@@ -774,10 +717,6 @@ R_API RList *r_anal_preludes(RAnal *anal) {
 			r_list_free (ap);
 			return l;
 		}
-		return NULL;
-	}
-	if (anal->cur && anal->cur->preludes) {
-		return anal->cur->preludes (anal);
 	}
 	return NULL;
 }
@@ -859,4 +798,15 @@ R_API void r_anal_purge_imports(RAnal *anal) {
 	r_return_if_fail (anal);
 	r_list_purge (anal->imports);
 	R_DIRTY (anal);
+}
+
+R_API bool r_anal_cmd(RAnal *anal, const char *cmd) {
+	RListIter *iter;
+	RAnalPlugin *ap;
+	r_list_foreach (anal->plugins, iter, ap) {
+		if (ap->cmd && ap->cmd (anal, cmd)) {
+			return true;
+		}
+	}
+	return false;
 }

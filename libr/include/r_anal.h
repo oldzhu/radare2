@@ -62,42 +62,6 @@ typedef struct r_anal_range_t {
 	RBNode rb;
 } RAnalRange;
 
-#if 0
-typedef struct r_lib_plugin_description_t {
-	const char *name;
-	const char *author;
-	const char *license;
-} RLibpluginDescription;
-
-typedef bool (*RAnalPluginCheckCallback)(RAnal *anal);
-typedef bool (*RAnalPluginRunCallback)(RAnal *anal, const char *args);
-
-typedef struct r_anal_plugin_t {
-	RLibPluginDescription data;
-	RAnalPluginCheckCallback check;
-	const char *depends; // comma separated list of dependencies
-	RAnalPluginRunCallback run;
-} RAnalPlugin;
-
-static bool p_check(Ranal *anal) {
-	// if arch is x86 or arm, otherwise return false
-}
-
-static bool p_run(Ranal *anal, const char *args) {
-}
-
-RAnalPlugin p = {
-	.data = {
-		.name = "objc",
-		.author = "pancake",
-		.license = "MIT",
-	},
-	.check = p_check,
-	.depends = p_depends,
-	.run = p_run,
-};
-#endif
-
 enum {
 	R_ANAL_DATA_TYPE_NULL = 0,
 	R_ANAL_DATA_TYPE_UNKNOWN = 1,
@@ -765,7 +729,7 @@ typedef struct r_anal_esil_dfg_node_t {
 	ut32 /*RAnalEsilDFGTagType*/ type;
 } RAnalEsilDFGNode;
 
-typedef int (*RAnalCmdExt)(/* Rcore */RAnal *anal, const char* input);
+typedef bool (*RAnalCmdCallback)(/* Rcore */RAnal *anal, const char* input);
 
 typedef int (*RAnalOpCallback)(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *data, int len, RAnalOpMask mask);
 typedef int (*RAnalOpAsmCallback)(RAnal *a, ut64 addr, const char *str, ut8 *outbuf, int outlen);
@@ -784,39 +748,15 @@ typedef int (*REsilTrapCB)(REsil *esil, int trap_type, int trap_code);
 
 typedef struct r_anal_plugin_t {
 	RPluginMeta meta;
-#if 0
-	char *name;
-	char *desc;
-	char *license;
-	char *arch;
-	char *author;
-	char *version;
 
-	int endian; // bitmask to define little, big, etc.
-	char *cpus;
-	int bits;
-	int esil; // can do esil or not
-	int jmpmid;	// can do jump in the middle
-#endif
-	int fileformat_type;
-	int (*init)(void *user);
-	int (*fini)(void *user);
-	//int (*reset_counter) (RAnal *anal, ut64 start_addr);
-	int (*archinfo)(RAnal *anal, int query);
-	ut8* (*anal_mask)(RAnal *anal, int size, const ut8 *data, ut64 at);
-	RList* (*preludes)(RAnal *anal);
+	const char *depends; // comma separated list of dependencies
+
+	bool (*init)(RAnal *a);
+	bool (*fini)(RAnal *a);
 
 	// legacy r_anal_functions
 	RAnalOpCallback op;
-#if 0
-	RAnalOpAsmCallback opasm;
-#endif
-
-	// command extension to directly call any analysis functions
-//	RAnalCmdExt cmd_ext;
-
-	RAnalRegProfCallback set_reg_profile;
-	RAnalRegProfGetCallback get_reg_profile;
+	RAnalCmdCallback cmd;
 #if 1
 	/// XXX unused but referenced, maybe worth checking in case we want them for anal
 	RAnalFPBBCallback fingerprint_bb;
@@ -852,6 +792,8 @@ R_API const char *r_anal_datatype_tostring(RAnalDataType t);
 R_API RAnalType *r_anal_str_to_type(RAnal *a, const char* s);
 R_API RAnalType *r_anal_type_free(RAnalType *t);
 R_API RAnalType *r_anal_type_loadfile(RAnal *a, const char *path);
+
+R_API bool r_anal_cmd(RAnal *a, const char *cmd);
 
 /* block.c */
 typedef bool (*RAnalBlockCb)(RAnalBlock *block, void *user);
