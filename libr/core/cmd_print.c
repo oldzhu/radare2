@@ -31,6 +31,7 @@ static RCoreHelpMessage help_msg_p8 = {
 	"Usage: p8[*fjx]", " [len]", "8bit hexpair list of bytes (see pcj)",
 	"p8", " ([len])", "print hexpairs string",
 	"p8*", "","display r2 commands to write this block",
+	"p8d", "", "space separated list of byte values in decimal",
 	"p8f", "", "print hexpairs of function (linear)",
 	"p8j", "", "print hexpairs in JSON array",
 	"p8x", "","print hexpairs honoring hex.cols",
@@ -159,7 +160,7 @@ static RCoreHelpMessage help_msg_p = {
 	"p2", " [len]", "8x8 2bpp-tiles",
 	"p3", " [file]", "print 3D stereogram image of current block",
 	"p6", "[de] [len]", "base64 decode/encode",
-	"p8", "[?][j] [len]", "8bit hexpair list of bytes",
+	"p8", "[?][dfjx] [len]", "8bit hexpair list of bytes",
 	"p=", "[?][bep] [N] [L] [b]", "show entropy/printable chars/chars bars",
 	"pa", "[edD] [arg]", "pa:assemble  pa[dD]:disasm or pae: esil from hex",
 	"pA", "[n_ops]", "show n_ops address and type",
@@ -492,6 +493,7 @@ static RCoreHelpMessage help_msg_ps = {
 	"psb", "", "print strings in current block",
 	"psi", "", "print string inside curseek",
 	"psj", "", "print string in JSON format",
+	"psn", "[l] [len]", "print string until newline",
 	"psp", "[j]", "print pascal string",
 	"psq", "", "alias for pqs",
 	"pss", "", "print string in screen (wrap width)",
@@ -6627,10 +6629,47 @@ static int cmd_print(void *data, const char *input) {
 						break;
 					}
 				}
-				r_cons_print ((const char *) b);
-				r_cons_newline ();
+				r_cons_println ((const char *) b);
 				// r_print_string (core->print, core->offset, b,
 				// (size_t)(e-b), 0);
+				free (buf);
+			}
+			break;
+		case 'n': // "psn"
+			if (input[1] == '?') {
+				r_cons_printf ("Usage: psn[l] [len] - print string until newline or maxlen\n");
+			} else {
+				int len = core->blocksize;
+				if (input[2] == ' ') {
+					len = r_num_math (core->num, input + 2);
+				}
+				char *buf = malloc (len);
+				if (!buf) {
+					break;
+				}
+				if (r_io_read_at (core->io, core->offset, (ut8*)buf, len) < 1) {
+					R_LOG_ERROR ("cannot read");
+					break;
+				}
+
+				char *nl = (char *)r_str_nchr ((const char *)buf, '\n', len);
+				if (nl) {
+					size_t len = nl - (char *)buf;
+					if (input[2] == 'l') { // "psnl"
+						r_cons_printf ("%d\n", (int)len);
+					} else {
+						r_cons_write ((const char *)buf, len);
+						r_cons_newline ();
+					}
+				} else {
+					if (input[2] == 'l') { // "psnl"
+						r_cons_print ("0\n");
+					} else {
+						// cant find newline, print block
+						r_cons_write ((const char *)core->block, core->blocksize);
+						r_cons_newline ();
+					}
+				}
 				free (buf);
 			}
 			break;
@@ -7853,6 +7892,12 @@ static int cmd_print(void *data, const char *input) {
 					}
 					r_print_bytes (core->print, block + i, R_MIN (cols, len - cols), "%02x");
 				}
+			} else if (input[1] == 'd') { // "p8d"
+				int i;
+				for (i = 0; i < len; i ++) {
+					r_cons_printf ("%d ", block[i]);
+				}
+				r_cons_newline ();
 			} else if (input[1] == 'f') { // "p8f"
 				r_core_cmdf (core, "p8 $FS @ $FB");
 			} else {
