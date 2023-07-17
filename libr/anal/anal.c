@@ -120,7 +120,8 @@ R_API RAnal *r_anal_new(void) {
 	anal->sdb_classes_attrs = sdb_ns (anal->sdb_classes, "attrs", 1);
 	anal->zign_path = strdup ("");
 	anal->cb_printf = (PrintfCallback) printf;
-	anal->esil = NULL; // nul on purpose, otherwise many analysisi fail O_O
+	anal->esil = r_esil_new (4096, 0, 1);
+	anal->esil->anal = anal;
 	(void)r_anal_pin_init (anal);
 	(void)r_anal_xrefs_init (anal);
 	anal->diff_thbb = R_ANAL_THRESHOLDBB;
@@ -174,6 +175,7 @@ R_API void r_anal_free(RAnal *a) {
 	r_unref (a->config);
 	a->arch->esil = NULL;
 	r_arch_free (a->arch);
+	a->arch = NULL;
 	free (a->zign_path);
 	r_list_free (a->plugins);
 	r_rbtree_free (a->bb_tree, __block_free_rb, NULL);
@@ -187,6 +189,7 @@ R_API void r_anal_free(RAnal *a) {
 	r_list_free (a->threads);
 	r_list_free (a->leaddrs);
 	sdb_free (a->sdb);
+	a->esil->anal = NULL;
 	r_esil_free (a->esil);
 	free (a->last_disasm_reg);
 	r_list_free (a->imports);

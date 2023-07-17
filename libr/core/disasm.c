@@ -198,6 +198,7 @@ typedef struct r_disasm_state_t {
 	int cursor;
 	int show_comment_right_default;
 	bool show_flag_in_bytes;
+	bool show_flag_in_offset;
 	int lbytes;
 	int show_comment_right;
 	int pre;
@@ -345,7 +346,7 @@ static void ds_adistrick_comments(RDisasmState *ds);
 static void ds_print_comments_right(RDisasmState *ds);
 static void ds_show_comments_right(RDisasmState *ds);
 
-static void ds_show_flags(RDisasmState *ds, bool overlapped);
+static bool ds_show_flags(RDisasmState *ds, bool overlapped);
 static void ds_update_ref_lines(RDisasmState *ds);
 static int ds_disassemble(RDisasmState *ds, ut8 *buf, int len);
 static void ds_print_lines_right(RDisasmState *ds);
@@ -847,6 +848,7 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->show_comment_right_default = r_config_get_b (core->config, "asm.cmt.right");
 	ds->show_comment_right = ds->show_comment_right_default;
 	ds->show_flag_in_bytes = r_config_get_i (core->config, "asm.flags.inbytes");
+	ds->show_flag_in_offset = r_config_get_i (core->config, "asm.flags.inoffset");
 	ds->show_marks = r_config_get_i (core->config, "asm.marks");
 	ds->show_noisy_comments = r_config_get_i (core->config, "asm.noisy");
 	ds->pre = DS_PRE_NONE;
@@ -2449,12 +2451,12 @@ static RList *custom_sorted_flags(const RList *flaglist) {
 }
 
 #define printPre (outline || !*comma)
-static void ds_show_flags(RDisasmState *ds, bool overlapped) {
+static bool ds_show_flags(RDisasmState *ds, bool overlapped) {
 	RFlagItem *flag;
 	RListIter *iter;
 
 	if (ds->asm_flags_right || !ds->show_flags) {
-		return;
+		return false;
 	}
 	RCore *core = ds->core;
 	char addr[64] = {0};
@@ -2466,9 +2468,10 @@ static void ds_show_flags(RDisasmState *ds, bool overlapped) {
 	int count = 0;
 	bool outline = !ds->flags_inline;
 	const char *comma = "";
-	bool keep_lib = r_config_get_i (core->config, "bin.demangle.libs");
+	bool keep_lib = r_config_get_b (core->config, "bin.demangle.libs");
 	bool docolon = true;
 	int nth = 0;
+	bool any = false;
 #if 0
 	r_list_foreach (uniqlist, iter, flag) {
 		r_cons_printf ("(%s)(at:%s),", flag->name, flag->space->name);
@@ -2489,8 +2492,8 @@ static void ds_show_flags(RDisasmState *ds, bool overlapped) {
 			break;
 		}
 		count++;
-		if (!strncmp (flag->name, "case.", 5)) {
-			char *chop = strdup (flag->name + 5);
+		if (r_str_startswith (flag->name, "case.")) {
+			char *chop = strdup (flag->name + strlen ("case."));
 			char *dot = strchr (chop, '.');
 			if (dot) {
 				int mul = 1;
@@ -2552,6 +2555,7 @@ static void ds_show_flags(RDisasmState *ds, bool overlapped) {
 				r_cons_print (ds->color_flag);
 			}
 		}
+			any = true;
 
 		if (ds->asm_demangle && flag->realname) {
 			if (!strncmp (flag->name, "switch.", 7)) {
@@ -2559,7 +2563,7 @@ static void ds_show_flags(RDisasmState *ds, bool overlapped) {
 					r_cons_printf (FLAG_PREFIX);
 				}
 				r_cons_printf ("switch:");
-			} else if (!strncmp (flag->name, "case.", 5)) {
+			} else if (r_str_startswith (flag->name, "case.")) {
 				if (nth > 0) {
 					__preline_flag (ds, flag);
 				}
@@ -2639,6 +2643,7 @@ static void ds_show_flags(RDisasmState *ds, bool overlapped) {
 		ds_newline (ds);
 	}
 	r_list_free (uniqlist);
+	return any;
 }
 
 static void ds_update_ref_lines(RDisasmState *ds) {
@@ -3046,6 +3051,12 @@ static void ds_print_offset(RDisasmState *ds) {
 	bool hasCustomColor = false;
 	// probably tooslow
 	RFlagItem *f = r_flag_get_at (core->flags, at, 1);
+	if (f && ds->show_flag_in_offset && f->offset == at) {
+		ds_newline (ds);
+		if (ds_show_flags (ds, false)) {
+			ds_begin_cont (ds);
+		}
+	}
 	if (ds->show_color && f && R_STR_ISNOTEMPTY (f->color)) {
 		if (ds->at >= f->offset && ds->at < f->offset + f->size) {
 		//	if (r_itv_inrange (f->itv, ds->at))
@@ -4953,6 +4964,7 @@ static void ds_print_esil_anal_init(RDisasmState *ds) {
 	if (!pc) {
 		return;
 	}
+	r_esil_setup (core->anal->esil, core->anal, 0, 0, 1);
 	ds->esil_old_pc = r_reg_getv (core->anal->reg, pc);
 	if (!ds->esil_old_pc || ds->esil_old_pc == UT64_MAX) {
 		ds->esil_old_pc = core->offset;
@@ -4960,17 +4972,6 @@ static void ds_print_esil_anal_init(RDisasmState *ds) {
 	if (!ds->show_emu) {
 		// XXX. stackptr not computed without asm.emu, when its not required
 		return;
-	}
-	if (!core->anal->esil) {
-		int iotrap = r_config_get_i (core->config, "esil.iotrap");
-		int esd = r_config_get_i (core->config, "esil.stack.depth");
-		unsigned int addrsize = r_config_get_i (core->config, "esil.addr.size");
-
-		if (!(core->anal->esil = r_esil_new (esd, iotrap, addrsize))) {
-			R_FREE (ds->esil_regstate);
-			return;
-		}
-		r_esil_setup (core->anal->esil, core->anal, 0, 0, 1);
 	}
 	core->anal->esil->user = ds;
 	free (ds->esil_regstate);
@@ -5783,7 +5784,7 @@ R_API int r_core_print_disasm(RCore *core, ut64 addr, ut8 *buf, int len, int cou
 toro:
 	// uhm... is this necessary? imho can be removed
 	r_asm_set_pc (core->rasm, r_core_pava (core, ds->addr));
-	core->cons->vline = r_config_get_i (core->config, "scr.utf8") ? (r_config_get_i (core->config, "scr.utf8.curvy") ? r_vline_uc : r_vline_u) : r_vline_a;
+	core->cons->vline = r_config_get_b (core->config, "scr.utf8") ? (r_config_get_b (core->config, "scr.utf8.curvy") ? r_vline_uc : r_vline_u) : r_vline_a;
 
 	if (core->print->cur_enabled) {
 		// TODO: support in-the-middle-of-instruction too
@@ -5863,7 +5864,6 @@ toro:
 		if (!ds->show_comment_right) {
 			if (ds->show_cmtesil) {
 				const char *esil = R_STRBUF_SAFEGET (&ds->analop.esil);
-				// ds_begin_line (ds);
 				ds_pre_line (ds);
 				ds_setup_print_pre (ds, false, false);
 				r_cons_print ("      ");
@@ -5985,12 +5985,16 @@ toro:
 		if (ds->midbb) {
 			skip_bytes_bb = handleMidBB (core, ds);
 		}
-		ds_show_flags (ds, false);
+		if (!ds->show_flag_in_offset) {
+			ds_show_flags (ds, false);
+		}
 		ds_show_xrefs (ds);
 		if (skip_bytes_flag && ds->midflags == R_MIDFLAGS_SHOW &&
 				(!ds->midbb || !skip_bytes_bb || skip_bytes_bb > skip_bytes_flag)) {
 			ds->at += skip_bytes_flag;
-			ds_show_flags (ds, true);
+			if (!ds->show_flag_in_offset) {
+				ds_show_flags (ds, true);
+			}
 			ds_show_xrefs (ds);
 			ds->at -= skip_bytes_flag;
 		}
@@ -6092,11 +6096,13 @@ toro:
 				// r_asm_set_syntax (core->rasm, os);
 				r_arch_config_set_syntax (core->anal->config, os);
 			}
+#if 0
 			if (mi_type == R_META_TYPE_FORMAT) {
 				if ((ds->show_comments || ds->show_usercomments) && ds->show_comment_right) {
 			//		haveMeta = false;
 				}
 			}
+#endif
 			if (mi_type != R_META_TYPE_FORMAT) {
 				if (ds->asm_hint_pos > 0) {
 					ds_print_core_vmode (ds, ds->asm_hint_pos);
@@ -7328,6 +7334,7 @@ static bool read_ahead(RIO *io, ut8 **buf, size_t *buf_sz, ut64 address, size_t 
 }
 
 R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
+	// R2R db/cmd/cmd_pde
 	if (nb_opcodes < 1) {
 		return 0;
 	}
@@ -7344,14 +7351,8 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 		}
 		pj_a (pj);
 	}
-	if (!core->anal->esil) {
-		r_core_cmd_call (core, "aei");
-		if (!r_config_get_b (core->config, "cfg.debug")) {
-			r_core_cmd_call (core, "aeim");
-		}
-	}
+	// R2_590 - maybe here r_core_cmd_call (core, "aeim");
 	REsil *esil = core->anal->esil;
-	r_reg_arena_push (reg);
 	RConfigHold *chold = r_config_hold_new (core->config);
 	r_config_hold (chold, "io.cache", "asm.lines", NULL);
 	r_config_set_b (core->config, "io.cache", true);
@@ -7365,7 +7366,19 @@ R_API int r_core_disasm_pde(RCore *core, int nb_opcodes, int mode) {
 	size_t buf_sz = 0x100, block_sz = 0, block_instr = 0;
 	ut64 block_start = r_reg_get_value (reg, pc);
 	size_t i = 0;
+	const ut64 op_addr = r_reg_get_value (reg, pc);
 	ut8 *buf = malloc (buf_sz);
+	if (op_addr == 0) {
+		const RList *entries = r_bin_get_entries (core->bin);
+		if (entries && !r_list_empty (entries)) {
+			RBinAddr *entry = (RBinAddr *)r_list_get_n (entries, 0);
+			RBinInfo *info = r_bin_get_info (core->bin);
+			block_start = info->has_va? entry->vaddr: entry->paddr;
+			r_reg_set_value (reg, pc, block_start);
+			r_core_cmd0 (core, ".dr*");
+		}
+	}
+	r_reg_arena_push (reg);
 	if (!buf) {
 		goto leave;
 	}
