@@ -200,12 +200,16 @@ R_API RBinSymbol *r_bin_symbol_clone(RBinSymbol *bs) {
 	return nbs;
 }
 
+R_API void r_bin_symbol_fini(RBinSymbol *sym) {
+	free (sym->name);
+	free (sym->libname);
+	free (sym->classname);
+}
+
 R_API void r_bin_symbol_free(void *_sym) {
 	RBinSymbol *sym = (RBinSymbol *)_sym;
 	if (sym) {
-		free (sym->name);
-		free (sym->libname);
-		free (sym->classname);
+		r_bin_symbol_fini (sym);
 		free (sym);
 	}
 }
@@ -787,22 +791,16 @@ R_API RList *r_bin_get_strings(RBin *bin) {
 
 // TODO: Deprecate because we must use the internal representation
 R_API RList *r_bin_get_symbols(RBin *bin) {
+	R_LOG_WARN ("Dont use RBin.getSymbols() use getSymbolsVec() instead");
 	r_return_val_if_fail (bin, NULL);
-	RBinObject *o = r_bin_cur_object (bin);
-	if (o) {
-		if (o->symbols) {
-			return o->symbols;
-		}
-		if (o->symbols_vec) {
-			RList *list = r_list_newf (NULL);
-			RBinSymbol *s;
-			R_VEC_FOREACH (o->symbols_vec, s) {
-				r_list_append (list, s);
-			}
-			return list;
-		}
-	}
-	return NULL;
+	RBinFile *bf = bin->cur;
+	return bf? r_bin_file_get_symbols (bf): NULL;
+}
+
+R_API RVecRBinSymbol *r_bin_get_symbols_vec(RBin *bin) {
+	r_return_val_if_fail (bin, NULL);
+	RBinFile *bf = bin->cur;
+	return bf? r_bin_file_get_symbols_vec (bf): NULL;
 }
 
 R_API RList *r_bin_get_mem(RBin *bin) {
@@ -811,13 +809,14 @@ R_API RList *r_bin_get_mem(RBin *bin) {
 	return o ? o->mem : NULL;
 }
 
+// XXX badly designed api, should not exist, aka DEPRECATE
 R_API int r_bin_is_big_endian(RBin *bin) {
 	r_return_val_if_fail (bin, -1);
 	RBinObject *o = r_bin_cur_object (bin);
 	return (o && o->info) ? o->info->big_endian : -1;
 }
 
-R_API int r_bin_is_static(RBin *bin) {
+R_API bool r_bin_is_static(RBin *bin) {
 	r_return_val_if_fail (bin, false);
 	RBinObject *o = r_bin_cur_object (bin);
 	if (o && o->libs && r_list_length (o->libs) > 0) {

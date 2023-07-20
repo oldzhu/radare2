@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2019 - pancake, nibble */
+/* radare - LGPL - Copyright 2009-2023 - pancake, nibble */
 
 #define R_BIN_ELF64 1
 #include "bin_elf.inc.c"
@@ -116,7 +116,7 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 	/* Append code */
 	B (code, codelen);
 
-	if (data && datalen>0) {
+	if (data && datalen > 0) {
 		R_LOG_WARN ("DATA section not support for ELF yet");
 		B (data, datalen);
 	}
@@ -135,8 +135,12 @@ RBinPlugin r_bin_plugin_elf64 = {
 	.boffset = &boffset,
 	.binsym = &binsym,
 	.entries = &entries,
+#if R2_590
+	.sections_vec = &sections_vec,
+#else
 	.sections = &sections,
-	.symbols = &symbols,
+#endif
+	.symbols_vec = symbols_vec,
 	.imports = &imports,
 	.minstrlen = 4,
 	.info = &info,

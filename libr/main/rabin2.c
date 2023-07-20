@@ -1,11 +1,6 @@
-/* radare - LGPL - Copyright 2009-2022 - pancake */
+/* radare - LGPL - Copyright 2009-2023 - pancake */
 
 #include <r_core.h>
-#include <r_types.h>
-#include <r_util.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <r_main.h>
 #include "../../libr/bin/format/pdb/pdb_downloader.h"
 
 typedef struct rabin2_state_t {
@@ -235,15 +230,14 @@ static int rabin_extract(RBin *bin, int all) {
 }
 
 static int rabin_dump_symbols(RBin *bin, int len) {
-	RList *symbols = r_bin_get_symbols (bin);
+	RVecRBinSymbol *symbols = r_bin_get_symbols_vec (bin);
 	if (!symbols) {
 		return false;
 	}
 
-	RListIter *iter;
 	RBinSymbol *symbol;
 	int olen = len;
-	r_list_foreach (symbols, iter, symbol) {
+	R_VEC_FOREACH (symbols, symbol) {
 		if (symbol->size && (olen > symbol->size || !olen)) {
 			len = symbol->size;
 		} else if (!symbol->size && !olen) {

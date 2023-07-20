@@ -175,7 +175,7 @@ static void cmd_info_here(RCore *core, PJ *pj, int mode) {
 				}
 				pj_end (pj);
 			}
-			RVecAnalRef_free (refs, NULL, NULL);
+			RVecAnalRef_free (refs);
 		}
 		{
 			RVecAnalRef *refs = r_anal_xrefs_get (core->anal, core->offset);
@@ -191,7 +191,7 @@ static void cmd_info_here(RCore *core, PJ *pj, int mode) {
 				}
 				pj_end (pj);
 			}
-			RVecAnalRef_free (refs, NULL, NULL);
+			RVecAnalRef_free (refs);
 		}
 		pj_end (pj);
 		r_core_item_free (item);
@@ -866,6 +866,9 @@ static int cmd_info(void *data, const char *input) {
 				}
 				core->bin->cur = bf;
 				// Case for isj.
+#if R2_590
+				// TODO: use obj->symbols_vec if obj->symbols is null
+#else
 				if (input[1] == 'j' && input[2] == '.') {
 					RBININFO ("symbols", R_CORE_BIN_ACC_SYMBOLS, input + 2, (obj && obj->symbols)? r_list_length (obj->symbols): 0);
 				} else if (input[1] == ',') {
@@ -881,6 +884,7 @@ static int cmd_info(void *data, const char *input) {
 				} else {
 					RBININFO ("symbols", R_CORE_BIN_ACC_SYMBOLS, input + 1, (obj && obj->symbols)? r_list_length (obj->symbols): 0);
 				}
+#endif
 			}
 			input = input + strlen (input) - 1;
 			r_list_free (objs);
@@ -1049,7 +1053,7 @@ static int cmd_info(void *data, const char *input) {
 			  }
 			break;
 		case 'e': // "ie"
-			  {
+			{
 				  RList *objs = r_core_bin_files (core);
 				  RListIter *iter;
 				  RBinFile *bf;
@@ -1065,7 +1069,7 @@ static int cmd_info(void *data, const char *input) {
 				  }
 				  core->bin->cur = cur;
 				  r_list_free (objs);
-			  }
+			}
 			break;
 		case 'M': // "iM"
 			  {

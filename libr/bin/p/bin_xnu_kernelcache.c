@@ -1021,14 +1021,13 @@ static void process_constructors(RKernelCacheObj *obj, struct MACH0_(obj_t) *mac
 
 static RBinAddr *newEntry(ut64 haddr, ut64 vaddr, int type) {
 	RBinAddr *ptr = R_NEW0 (RBinAddr);
-	if (!ptr) {
-		return NULL;
+	if (ptr) {
+		ptr->paddr = haddr;
+		ptr->vaddr = vaddr;
+		ptr->hpaddr = haddr;
+		ptr->bits = 64;
+		ptr->type = type;
 	}
-	ptr->paddr = haddr;
-	ptr->vaddr = vaddr;
-	ptr->hpaddr = haddr;
-	ptr->bits = 64;
-	ptr->type = type;
 	return ptr;
 }
 
@@ -1244,15 +1243,15 @@ static RList *symbols(RBinFile *bf) {
 	return ret;
 }
 
-static void symbols_from_mach0(RList *ret, struct MACH0_(obj_t) *mach0, RBinFile *bf, ut64 paddr, int ordinal) {
-	const RVector *symbols = MACH0_(load_symbols) (bf, mach0);
-	if (!symbols) {
+static void symbols_from_mach0(RList *ret, struct MACH0_(obj_t) *mo, RBinFile *bf, ut64 paddr, int ordinal) {
+	if (!MACH0_(load_symbols) (mo)) {
 		return;
 	}
+	RVecRBinSymbol *symbols = mo->symbols_vec;
 
 	int i = 0;
 	RBinSymbol *sym;
-	r_vector_foreach (symbols, sym) {
+	R_VEC_FOREACH (symbols, sym) {
 		RBinSymbol *ret_sym = R_NEW0 (RBinSymbol);
 		if (!sym) {
 			break;

@@ -21,8 +21,6 @@ typedef struct qjs_core_plugin {
 	// void *data;  // can be added later if needed
 } QjsCorePlugin;
 
-R_VEC_TYPE (RVecCorePlugin, QjsCorePlugin);
-
 typedef struct qjs_arch_plugin_t {
 	char *name;
 	char *arch;
@@ -44,8 +42,18 @@ typedef struct qjs_io_plugin_t {
 	// JSValue encode_func;
 } QjsIoPlugin;
 
-R_VEC_TYPE (RVecArchPlugin, QjsArchPlugin);
-R_VEC_TYPE (RVecIoPlugin, QjsIoPlugin);
+static void core_plugin_fini(QjsCorePlugin *cp) {
+	free (cp->name);
+}
+
+static void arch_plugin_fini(QjsArchPlugin *ap) {
+	free (ap->name);
+	free (ap->arch);
+}
+
+R_VEC_TYPE_WITH_FINI (RVecCorePlugin, QjsCorePlugin, core_plugin_fini);
+R_VEC_TYPE_WITH_FINI (RVecArchPlugin, QjsArchPlugin, arch_plugin_fini);
+R_VEC_TYPE (RVecIoPlugin, QjsIoPlugin); // R2_590 add finalizer function
 
 typedef struct qjs_plugin_manager_t {
 	R_BORROW RCore *core;
@@ -55,15 +63,6 @@ typedef struct qjs_plugin_manager_t {
 	RVecArchPlugin arch_plugins;
 	RVecIoPlugin io_plugins;
 } QjsPluginManager;
-
-static void core_plugin_fini(QjsCorePlugin *cp, void *user) {
-	free (cp->name);
-}
-
-static void arch_plugin_fini(QjsArchPlugin *ap, void *user) {
-	free (ap->name);
-	free (ap->arch);
-}
 
 static bool plugin_manager_init(QjsPluginManager *pm, RCore *core, JSRuntime *rt) {
 	pm->core = core;
@@ -128,7 +127,7 @@ static bool plugin_manager_remove_core_plugin(QjsPluginManager *pm, const char *
 	ut64 index = RVecCorePlugin_find_index (&pm->core_plugins, (void*) name, compare_core_plugin_name);
 	if (index != UT64_MAX) {
 		pm->core->lang->cmdf (pm->core, "L-%s", name);
-		RVecCorePlugin_remove (&pm->core_plugins, index, core_plugin_fini, NULL);
+		RVecCorePlugin_remove (&pm->core_plugins, index);
 		return true;
 	}
 
@@ -166,7 +165,7 @@ static bool plugin_manager_remove_arch_plugin(QjsPluginManager *pm, const char *
 	if (index != UT64_MAX) {
 		QjsArchPlugin *ap = RVecArchPlugin_at (&pm->arch_plugins, index);
 		pm->core->lang->cmdf (pm->core, "L-%s", ap->name);
-		RVecArchPlugin_remove (&pm->arch_plugins, index, arch_plugin_fini, NULL);
+		RVecArchPlugin_remove (&pm->arch_plugins, index);
 		return true;
 	}
 
@@ -193,8 +192,8 @@ static bool plugin_manager_remove_plugin(QjsPluginManager *pm, const char *type,
 }
 
 static void plugin_manager_fini (QjsPluginManager *pm) {
-	RVecCorePlugin_fini (&pm->core_plugins, core_plugin_fini, NULL);
-	RVecArchPlugin_fini (&pm->arch_plugins, arch_plugin_fini, NULL);
+	RVecCorePlugin_fini (&pm->core_plugins);
+	RVecArchPlugin_fini (&pm->arch_plugins);
 	// XXX leaks, but calling it causes crash because not all JS objects are freed
 	// JS_FreeRuntime (pm->rt);
 	pm->rt = NULL;

@@ -278,10 +278,29 @@ typedef struct r_bin_symbol_t {
 	int dup_count;
 } RBinSymbol;
 
+typedef struct r_bin_section_t {
+	char *name;
+	ut64 size;
+	ut64 vsize;
+	ut64 vaddr;
+	ut64 paddr;
+	ut32 perm;
+	const char *type;
+	const char *arch;
+	char *format;
+	int bits;
+	bool has_strings;
+	bool add; // indicates when you want to add the section to io `S` command
+	bool is_data;
+	bool is_segment;
+} RBinSection;
+
 #include <r_vec.h>
 
 // R2_590 only forward declare here for better compile times
-R_VEC_TYPE(RVecRBinSymbol, RBinSymbol);
+R_API void r_bin_symbol_fini(RBinSymbol *sym);
+R_VEC_TYPE_WITH_FINI (RVecRBinSymbol, RBinSymbol, r_bin_symbol_fini);
+R_VEC_TYPE(RVecRBinSection, RBinSection);
 
 typedef struct r_bin_object_t {
 	ut64 baddr;
@@ -290,10 +309,12 @@ typedef struct r_bin_object_t {
 	ut64 boffset;
 	ut64 size;
 	ut64 obj_size;
+	RStrpool *pool;
 	RList/*<RBinSection>*/ *sections;
 	RList/*<RBinImport>*/ *imports;
 	RList/*<RBinSymbol>*/ *symbols; // DEPRECATE
-	RVecRBinSymbol *symbols_vec;
+	RVecRBinSymbol symbols_vec;
+	RVecRBinSection sections_vec;
 	RList/*<??>*/ *entries;
 	RList/*<??>*/ *fields;
 	RList/*<??>*/ *libs;
@@ -502,10 +523,13 @@ typedef struct r_bin_plugin_t {
 	ut64 (*boffset)(RBinFile *bf);
 	RBinAddr* (*binsym)(RBinFile *bf, int num);
 	RList/*<RBinAddr>*/* (*entries)(RBinFile *bf);
-	RList/*<RBinSection>*/* (*sections)(RBinFile *bf);
+	RList/*<RBinSection>*/* (*sections)(RBinFile *bf); // R2_600 - deprecate
+#if R2_590
+	bool (*sections_vec)(RBinFile *bf);
+#endif
 	R_BORROW RList/*<RBinDwarfRow>*/* (*lines)(RBinFile *bf);
 	RList/*<RBinSymbol>*/* (*symbols)(RBinFile *bf); // R2_590: return VecBinSymbol* for better memory usage and perf
-	RVecRBinSymbol* (*symbols_vec)(RBinFile *bf); // must deprecate symbols
+	bool (*symbols_vec)(RBinFile *bf);
 	RList/*<RBinImport>*/* (*imports)(RBinFile *bf); // R2_590: return VecBinImport*
 	RList/*<RBinString>*/* (*strings)(RBinFile *bf);
 	RBinInfo/*<RBinInfo>*/* (*info)(RBinFile *bf);
@@ -539,22 +563,6 @@ typedef struct r_bin_plugin_t {
 
 typedef void (*RBinSymbollCallback)(RBinObject *obj, void *symbol);
 
-typedef struct r_bin_section_t {
-	char *name;
-	ut64 size;
-	ut64 vsize;
-	ut64 vaddr;
-	ut64 paddr;
-	ut32 perm;
-	const char *type;
-	const char *arch;
-	char *format;
-	int bits;
-	bool has_strings;
-	bool add; // indicates when you want to add the section to io `S` command
-	bool is_data;
-	bool is_segment;
-} RBinSection;
 
 typedef struct r_bin_class_t {
 	char *name;
@@ -670,9 +678,6 @@ typedef struct r_bin_write_t {
 	bool (*addlib)(RBinFile *bf, const char *lib);
 } RBinWrite;
 
-// TODO: deprecate r_bin_is_big_endian
-// TODO: has_dbg_syms... maybe flags?
-
 typedef int (*RBinGetOffset)(RBin *bin, int type, int idx);
 typedef const char *(*RBinGetName)(RBin *bin, int type, int idx, bool sd);
 typedef RList *(*RBinGetSections)(RBin *bin);
@@ -694,7 +699,7 @@ R_API RBinSection *r_bin_section_clone(RBinSection *s);
 R_IPI void r_bin_section_free(RBinSection *bs);
 R_API void r_bin_info_free(RBinInfo *rb);
 R_API void r_bin_import_free(RBinImport *imp);
-R_API void r_bin_symbol_free(void *_sym);
+R_API void r_bin_symbol_free(void *sym);
 R_API RBinSymbol *r_bin_symbol_new(const char *name, ut64 paddr, ut64 vaddr);
 R_API RBinSymbol *r_bin_symbol_clone(RBinSymbol *bs);
 R_API void r_bin_string_free(void *_str);
@@ -759,8 +764,8 @@ R_API RList *r_bin_file_get_trycatch(RBinFile *bf);
 R_API RList *r_bin_get_symbols(RBin *bin);
 R_API RVecRBinSymbol *r_bin_get_symbols_vec(RBin *bin);
 R_API RList *r_bin_reset_strings(RBin *bin);
-R_API int r_bin_is_big_endian(RBin *bin);
-R_API int r_bin_is_static(RBin *bin);
+R_API int r_bin_is_big_endian(RBin *bin); // R2_590: deprecate. also it returns -1, false and true
+R_API bool r_bin_is_static(RBin *bin); // R2_590: deprecate
 R_API ut64 r_bin_get_vaddr(RBin *bin, ut64 paddr, ut64 vaddr);
 R_API ut64 r_bin_file_get_vaddr(RBinFile *bf, ut64 paddr, ut64 vaddr);
 

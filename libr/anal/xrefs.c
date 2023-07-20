@@ -163,7 +163,7 @@ static RVecAnalRef *_collect_all_refs(RefManager *rm, const AdjacencyList *adj_l
 
 	const ut64 length = ref_manager_count_xrefs (rm);
 	if (!RVecAnalRef_reserve (result, length)) {
-		RVecAnalRef_free (result, NULL, NULL);
+		RVecAnalRef_free (result);
 		return NULL;
 	}
 
@@ -171,7 +171,7 @@ static RVecAnalRef *_collect_all_refs(RefManager *rm, const AdjacencyList *adj_l
 	ht_up_foreach ((AdjacencyList*) adj_list, _collect_refs_cb, &state);
 
 	if (!state.success) {
-		RVecAnalRef_free (result, NULL, NULL);
+		RVecAnalRef_free (result);
 	}
 
 	return result;
@@ -187,14 +187,14 @@ static RVecAnalRef *_collect_refs_from(const AdjacencyList *adj_list, ut64 from)
 	bool found;
 	Edges *edges = ht_up_find ((AdjacencyList*)adj_list, from, &found);
 	if (!found) {
-		RVecAnalRef_free (result, NULL, NULL);
+		RVecAnalRef_free (result);
 		return NULL;
 	}
 
 	CollectRefState state = { .refs_state = { .result = result, .success = true }, .at = from };
 	ht_uu_foreach (edges, _collect_ref_cb, &state);
 	if (!state.refs_state.success) {
-		RVecAnalRef_free (result, NULL, NULL);
+		RVecAnalRef_free (result);
 		return NULL;
 	}
 
@@ -286,7 +286,7 @@ R_API RVecAnalRef *r_anal_refs_get(RAnal *anal, ut64 from) {
 
 	RVecAnalRef *anal_refs = ref_manager_get_refs (anal->rm, from);
 	if (!anal_refs || RVecAnalRef_empty (anal_refs)) {
-		RVecAnalRef_free (anal_refs, NULL, NULL);
+		RVecAnalRef_free (anal_refs);
 		return NULL;
 	}
 
@@ -299,7 +299,7 @@ R_API RVecAnalRef *r_anal_xrefs_get(RAnal *anal, ut64 to) {
 
 	RVecAnalRef *anal_refs = ref_manager_get_xrefs(anal->rm, to);
 	if (!anal_refs || RVecAnalRef_empty (anal_refs)) {
-		RVecAnalRef_free (anal_refs, NULL, NULL);
+		RVecAnalRef_free (anal_refs);
 		return NULL;
 	}
 
@@ -312,7 +312,7 @@ R_API RVecAnalRef *r_anal_xrefs_get_from(RAnal *anal, ut64 to) {
 
 	RVecAnalRef *anal_refs = ref_manager_get_refs (anal->rm, to);
 	if (!anal_refs || RVecAnalRef_empty (anal_refs)) {
-		RVecAnalRef_free (anal_refs, NULL, NULL);
+		RVecAnalRef_free (anal_refs);
 		return NULL;
 	}
 
@@ -487,7 +487,7 @@ R_API void r_anal_xrefs_list(RAnal *anal, int rad, const char *arg) {
 		break;
 	}
 
-	RVecAnalRef_free (anal_refs, NULL, NULL);
+	RVecAnalRef_free (anal_refs);
 }
 
 R_API ut64 r_anal_xrefs_count(RAnal *anal) {
@@ -523,8 +523,8 @@ static RVecAnalRef *fcn_get_all_refs(RAnalFunction *fcn, RefManager *rm, Collect
 					continue;
 				}
 
-				RVecAnalRef_append (anal_refs, refs);
-				RVecAnalRef_free (refs, NULL, NULL);
+				RVecAnalRef_append (anal_refs, refs, NULL);
+				RVecAnalRef_free (refs);
 			}
 		}
 
