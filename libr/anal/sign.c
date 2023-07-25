@@ -10,20 +10,25 @@ R_LIB_VERSION (r_sign);
 
 R_VEC_TYPE (RVecAnalRef, RAnalRef);
 
-const char *getRealRef(RCore *core, ut64 off) {
+static inline const char *get_xrefname(RCore *core, ut64 addr) {
+	RAnalFunction *f = r_anal_get_fcn_in (core->anal, addr, 0);
+	if (f) {
+		return f->name;
+	}
+	return NULL;
+}
+
+static const char *get_refname(RCore *core, ut64 addr) {
 	RFlagItem *item;
 	RListIter *iter;
 
-	const RList *list = r_flag_get_list (core->flags, off);
+	const RList *list = r_flag_get_list (core->flags, addr);
 	if (!list) {
 		return NULL;
 	}
 
 	r_list_foreach (list, iter, item) {
-		if (!item->name) {
-			continue;
-		}
-		if (strncmp (item->name, "sym.", 4)) {
+		if (!item->name || !r_str_startswith (item->name, "sym.")) {
 			continue;
 		}
 		return item->name;
@@ -32,14 +37,17 @@ const char *getRealRef(RCore *core, ut64 off) {
 	return NULL;
 }
 
-int list_str_cmp (const void *a, const void *b) {
+static int list_str_cmp(const void *a, const void *b) {
 	// prevent silent failure if RListComparator changes
 	return strcmp ((const char *)a, (const char *)b);
 }
 
-R_API RList *r_sign_fcn_xrefs(RAnal *a, RAnalFunction *fcn) {
-	RAnalRef *refi = NULL;
+static ut64 valstr(const void *_a) {
+	const char *a = _a;
+	return r_str_hash64 (a);
+}
 
+R_API RList *r_sign_fcn_xrefs(RAnal *a, RAnalFunction *fcn) {
 	r_return_val_if_fail (a && fcn, NULL);
 
 	RCore *core = a->coreb.core;
@@ -49,20 +57,23 @@ R_API RList *r_sign_fcn_xrefs(RAnal *a, RAnalFunction *fcn) {
 	}
 
 	RList *ret = r_list_newf ((RListFree) free);
-	RVecAnalRef *xrefs = r_anal_function_get_xrefs (fcn);
+	RVecAnalRef *xrefs = r_anal_xrefs_get (a, fcn->addr);
 	if (!xrefs) {
 		return ret;
 	}
 
+	RAnalRef *refi;
 	R_VEC_FOREACH (xrefs, refi) {
-		RAnalRefType rt = R_ANAL_REF_TYPE_MASK (refi->type);
-		if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
-			const char *flag = getRealRef (core, refi->addr);
+		// RAnalRefType rt = R_ANAL_REF_TYPE_MASK (refi->type);
+		// if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
+			const char *flag = get_xrefname (core, refi->addr);
 			if (flag) {
-				r_list_append (ret, r_str_new (flag));
+				r_list_append (ret, strdup (flag));
 			}
-		}
+		// }
 	}
+
+	r_list_uniq (ret, valstr);
 	RVecAnalRef_free (xrefs);
 	return ret;
 }
@@ -85,13 +96,13 @@ R_API RList *r_sign_fcn_refs(RAnal *a, RAnalFunction *fcn) {
 	}
 
 	R_VEC_FOREACH (refs, refi) {
-		RAnalRefType rt = R_ANAL_REF_TYPE_MASK (refi->type);
-		if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
-			const char *flag = getRealRef (core, refi->addr);
+		// RAnalRefType rt = R_ANAL_REF_TYPE_MASK (refi->type);
+		// if (rt == R_ANAL_REF_TYPE_CODE || rt == R_ANAL_REF_TYPE_CALL) {
+			const char *flag = get_refname (core, refi->addr);
 			if (flag) {
-				r_list_append (ret, r_str_new (flag));
+				r_list_append (ret, strdup (flag));
 			}
-		}
+		// }
 	}
 	RVecAnalRef_free (refs);
 	return ret;
