@@ -100,6 +100,15 @@ struct MACH0_(opts_t) {
 	RBinFile *bf;
 };
 
+static inline void r_bin_section_fini(RBinSection *bs) {
+	if (bs) {
+		free (bs->name);
+		free (bs->format);
+	}
+}
+
+R_VEC_TYPE_WITH_FINI(RVecSegment, RBinSection, r_bin_section_fini);
+
 struct MACH0_(obj_t) {
 	struct MACH0_(mach_header) hdr;
 	struct MACH0_(segment_command) *segs;
@@ -125,7 +134,6 @@ struct MACH0_(obj_t) {
 	RBinImport **imports_by_ord;
 	size_t imports_by_ord_size;
 	HtPP *imports_by_name;
-	RList *cached_segments;
 	struct MACH0_(opts_t) options;
 
 	struct dysymtab_command dysymtab;
@@ -170,8 +178,8 @@ struct MACH0_(obj_t) {
 	ut64 header_at;
 	bool parse_start_symbols;
 	bool symbols_loaded;
-	//RVector symbols_cache;
 	RVecRBinSymbol *symbols_vec; // pointer to &bf->o->symbols_vec
+	RVecSegment *segments_vec;  // R2_590 pointer of &bf->o->segments_vec
 	ut64 symbols_off;
 	void *user;
 	ut64 (*va2pa)(ut64 p, ut32 *offset, ut32 *left, RBinFile *bf);
@@ -250,6 +258,7 @@ struct MACH0_(obj_t) *MACH0_(new_buf)(RBuffer *buf, struct MACH0_(opts_t) *optio
 void *MACH0_(mach0_free)(struct MACH0_(obj_t) *bin);
 const RVector *MACH0_(load_sections)(struct MACH0_(obj_t) *mo);
 RList *MACH0_(get_segments)(RBinFile *bf, struct MACH0_(obj_t) *mo);
+RVecSegment *MACH0_(get_segments_vec)(RBinFile *bf, struct MACH0_(obj_t) *mo);
 const bool MACH0_(load_symbols)(struct MACH0_(obj_t) *mo);
 void MACH0_(pull_symbols)(struct MACH0_(obj_t) *mo, RBinSymbolCallback cb, void *user);
 const RPVector *MACH0_(load_imports)(RBinFile* bf, struct MACH0_(obj_t) *bin);
