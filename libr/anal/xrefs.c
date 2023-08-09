@@ -280,14 +280,6 @@ R_API bool r_anal_xrefs_set(RAnal *anal, ut64 from, ut64 to, const RAnalRefType 
 	return true;
 }
 
-// R2_590 deprecate, does same as r_anal_xref_del?
-R_API bool r_anal_xrefs_deln(RAnal *anal, ut64 from, ut64 to, const RAnalRefType type) {
-	r_return_val_if_fail (anal && anal->rm, false);
-	ref_manager_remove_entry (anal->rm, from, to);
-	R_DIRTY (anal);
-	return true;
-}
-
 R_API bool r_anal_xref_del(RAnal *anal, ut64 from, ut64 to) {
 	r_return_val_if_fail (anal, false);
 	ref_manager_remove_entry (anal->rm, from, to);
@@ -332,6 +324,14 @@ R_API RVecAnalRef *r_anal_xrefs_get_from(RAnal *anal, ut64 to) {
 
 	RVecAnalRef_sort (anal_refs, compare_ref); // XXX not needed?
 	return anal_refs;
+}
+
+R_API bool r_anal_xrefs_has_xrefs_at(RAnal *anal, ut64 at) {
+	r_return_val_if_fail (anal && anal->rm, NULL);
+
+	AdjacencyList_CIter iter = AdjacencyList_cfind (&anal->rm->xrefs, &at);
+	const AdjacencyList_Entry *entry = AdjacencyList_CIter_get (&iter);
+	return !!entry;
 }
 
 static void r_anal_xrefs_list_table(RAnal *anal, RVecAnalRef *anal_refs, const char *arg) {

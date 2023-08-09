@@ -92,8 +92,8 @@ static int cmpaddr(const void *_a, const void *_b) {
 
 static char *get_function_name(RCore *core, ut64 addr) {
 	RBinFile *bf = r_bin_cur (core->bin);
-	if (bf && bf->o) {
-		RBinSymbol *sym = ht_up_find (bf->o->addr2klassmethod, addr, NULL);
+	if (bf && bf->bo) {
+		RBinSymbol *sym = ht_up_find (bf->bo->addr2klassmethod, addr, NULL);
 		if (sym && sym->classname && sym->name) {
 			return r_str_newf ("method.%s.%s", sym->classname, sym->name);
 		}
@@ -2062,11 +2062,7 @@ R_API bool r_core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int dep
 			return 0;  // already analyzed function
 		}
 		if (r_anal_function_contains (fcn, from)) { // inner function
-			// R2_590 add r_anal_has_xrefs(RAnal *anal, ut64 from) function to API for better performance
-			RVecAnalRef *refs = r_anal_xrefs_get (core->anal, from);
-			const bool has_refs = refs && !RVecAnalRef_empty (refs);
-			RVecAnalRef_free (refs);
-			if (has_refs) {
+			if (r_anal_xrefs_has_xrefs_at (core->anal, from)) {
 				return true;
 			}
 
@@ -2887,7 +2883,7 @@ R_API RVecAnalRef *r_core_anal_fcn_get_calls(RCore *core, RAnalFunction *fcn) {
 	RVecAnalRef_free (refs);
 	return call_refs;
 #if 0
-	// R2_590 fix vec partition
+	// R2_590 fix vec algorithms: partition / erase_back?
 	// sanity check
 	if (refs && !RVecAnalRef_empty (refs)) {
 		// remove all references that aren't of type call
