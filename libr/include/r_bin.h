@@ -3,7 +3,6 @@
 
 #include <r_util.h>
 #include <r_types.h>
-#include <sdb/ht_pu.h>
 #include <r_io.h>
 #include <r_cons.h>
 #include <r_list.h>
@@ -297,7 +296,7 @@ typedef struct r_bin_section_t {
 
 #include <r_vec.h>
 
-// R2_590 only forward declare here for better compile times
+// XXX only forward declare here for better compile times
 R_API void r_bin_symbol_fini(RBinSymbol *sym);
 R_VEC_TYPE_WITH_FINI (RVecRBinSymbol, RBinSymbol, r_bin_symbol_fini);
 R_VEC_TYPE(RVecRBinSection, RBinSection);
@@ -861,10 +860,12 @@ R_API const char *r_bin_lang_tostring(int type);
 R_API RList *r_bin_get_mem(RBin *bin);
 
 /* filter.c */
+typedef struct HtSU_t HtSU;
+
 R_API void r_bin_load_filter(RBin *bin, ut64 rules);
 R_API void r_bin_filter_symbols(RBinFile *bf, RList *list);
 R_API void r_bin_filter_sections(RBinFile *bf, RList *list);
-R_API char *r_bin_filter_name(RBinFile *bf, HtPU *db, ut64 addr, char *name);
+R_API char *r_bin_filter_name(RBinFile *bf, HtSU *db, ut64 addr, const char *name);
 R_API void r_bin_filter_sym(RBinFile *bf, HtPP *ht, ut64 vaddr, RBinSymbol *sym);
 R_API bool r_bin_strpurge(RBin *bin, const char *str, ut64 addr);
 R_API bool r_bin_string_filter(RBin *bin, const char *str, ut64 addr);

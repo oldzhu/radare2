@@ -108,10 +108,10 @@ static RDebugReasonType r_debug_winkd_wait(RDebug *dbg, int pid) {
 static bool r_debug_winkd_attach(RDebug *dbg, int pid) {
 	RIODesc *desc = dbg->iob.io->desc;
 
-	if (!desc || !desc->plugin || !desc->plugin->name || !desc->data) {
+	if (!desc || !desc->plugin || !desc->plugin->meta.name || !desc->data) {
 		return false;
 	}
-	if (strncmp (desc->plugin->name, "winkd", 6)) {
+	if (r_str_startswith (desc->plugin->meta.name, "winkd")) {
 		return false;
 	}
 	if (dbg->arch && strcmp (dbg->arch, "x86")) {

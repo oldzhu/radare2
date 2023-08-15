@@ -35,12 +35,8 @@ static void set_options(RConfigNode *node, ...) {
 }
 
 static bool isGdbPlugin(RCore *core) {
-	if (core->io && core->io->desc && core->io->desc->plugin) {
-		if (core->io->desc->plugin->name && !strcmp (core->io->desc->plugin->name, "gdb")) {
-			return true;
-		}
-	}
-	return false;
+	RIOPlugin *plugin = R_UNWRAP4 (core, io, desc, plugin);
+	return plugin && plugin->meta.name && !strcmp (plugin->meta.name, "gdb");
 }
 
 static void print_node_options(RConfigNode *node) {
@@ -1573,9 +1569,9 @@ static bool cb_cmdpdc(void *user, void *data) {
 		RListIter *iter;
 		RCorePlugin *cp;
 		r_list_foreach (core->rcmd->plist, iter, cp) {
-			if (!strcmp (cp->name, "r2retdec")) {
+			if (!strcmp (cp->meta.name, "r2retdec")) {
 				r_cons_printf ("pdz\n");
-			} else if (!strcmp (cp->name, "r2ghidra")) {
+			} else if (!strcmp (cp->meta.name, "r2ghidra")) {
 				r_cons_printf ("pdg\n");
 			}
 		}
