@@ -4,7 +4,7 @@
 #include "bin_elf.inc.c"
 
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	ut8 buf[5] = {0};
 	if (r_buf_size (b) > 4) {
 		r_buf_read_at (b, 0, buf, sizeof (buf));
@@ -124,15 +124,16 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 }
 
 RBinPlugin r_bin_plugin_elf64 = {
-	.name = "elf64",
-	.desc = "elf64 bin plugin",
-	.license = "LGPL3",
+	.meta = {
+		.name = "elf64",
+		.desc = "elf64 bin plugin",
+		.license = "LGPL3",
+	},
 	.get_sdb = &get_sdb,
-	.check_buffer = &check_buffer,
-	.load_buffer = &load_buffer,
+	.check = &check,
+	.load = &load,
 	.destroy = &destroy,
 	.baddr = &baddr,
-	.boffset = &boffset,
 	.binsym = &binsym,
 	.entries = &entries,
 #if R2_590

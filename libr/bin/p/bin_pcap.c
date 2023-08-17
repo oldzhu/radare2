@@ -26,7 +26,7 @@ static RBinInfo *info(RBinFile *bf) {
 	return ret;
 }
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	r_return_val_if_fail (b, false);
 
 	switch (r_buf_read_be32_at (b, 0)) {
@@ -39,15 +39,10 @@ static bool check_buffer(RBinFile *bf, RBuffer *b) {
 	return false;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
-	r_return_val_if_fail (bf && bin_obj && buf, false);
-
-	pcap_obj_t *obj = pcap_obj_new_buf (buf);
-	if (obj) {
-		*bin_obj = obj;
-		return true;
-	}
-	return false;
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
+	r_return_val_if_fail (bf && buf, false);
+	bf->bo->bin_obj = pcap_obj_new_buf (buf);
+	return bf->bo->bin_obj != NULL;
 }
 
 static RList *symbols(RBinFile *bf) {
@@ -147,10 +142,12 @@ static ut64 baddr(RBinFile *bf) {
 }
 
 RBinPlugin r_bin_plugin_pcap = {
-	.name = "pcap",
-	.desc = "libpcap/.pcap format",
-	.license = "LGPL3",
-	.author = "srimanta,pancake",
+	.meta = {
+		.name = "pcap",
+		.desc = "libpcap/.pcap format",
+		.license = "LGPL3",
+		.author = "srimanta,pancake",
+	},
 	.info = info,
 	.libs = libs,
 	.baddr = baddr,
@@ -159,8 +156,8 @@ RBinPlugin r_bin_plugin_pcap = {
 	.strings = strings,
 #endif
 	.symbols = symbols,
-	.load_buffer= load_buffer,
-	.check_buffer = check_buffer,
+	.load= load,
+	.check = check,
 };
 
 #ifndef R2_PLUGIN_INCORE

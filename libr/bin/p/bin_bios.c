@@ -3,7 +3,7 @@
 #include <r_bin.h>
 #include "../i/private.h"
 
-static bool check_buffer(RBinFile *bf, RBuffer *buf) {
+static bool check(RBinFile *bf, RBuffer *buf) {
 	r_return_val_if_fail (buf, false);
 
 	ut64 sz = r_buf_size (buf);
@@ -30,11 +30,11 @@ static bool check_buffer(RBinFile *bf, RBuffer *buf) {
 	return bep == 0xea || bep == 0xe9;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
-	if (!check_buffer (bf, buf)) {
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
+	if (!check (bf, buf)) {
 		return false;
 	}
-	*bin_obj = r_buf_ref (buf);
+	bf->bo->bin_obj = r_buf_ref (buf);
 	return true;
 }
 
@@ -123,12 +123,14 @@ static RList *entries(RBinFile *bf) {
 }
 
 RBinPlugin r_bin_plugin_bios = {
-	.name = "bios",
-	.desc = "BIOS bin plugin",
-	.license = "LGPL",
-	.load_buffer = &load_buffer,
+	.meta = {
+		.name = "bios",
+		.desc = "BIOS bin plugin",
+		.license = "LGPL",
+	},
+	.load = &load,
 	.destroy = &destroy,
-	.check_buffer = &check_buffer,
+	.check = &check,
 	.baddr = &baddr,
 	.entries = entries,
 	.sections = sections,

@@ -40,7 +40,6 @@ static char* regstate(RBinFile *bf) {
 	}
 	R_LOG_ERROR ("Cannot retrieve regstate on unsupported arch %s", Elf_(get_machine_name)(eo));
 	return NULL;
-
 }
 
 static void setimpord(ELFOBJ* eo, ut32 ord, RBinImport *ptr) {
@@ -56,13 +55,13 @@ static Sdb* get_sdb(RBinFile *bf) {
 	return eo? eo->kv: NULL;
 }
 
-static bool load_buffer(RBinFile *bf, void **bo, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
 	ut64 user_baddr = bf->user_baddr;
 	ELFOBJ *res = Elf_(new_buf) (buf, user_baddr, bf->rbin->verbose);
 	if (res) {
 	//	sdb_ns_set (sdb, "info", res->kv);
 		res->limit = bf->rbin->limit;
-		*bo= res;
+		bf->bo->bin_obj = res;
 		return true;
 	}
 	return false;
@@ -87,10 +86,6 @@ static void destroy(RBinFile *bf) {
 
 static ut64 baddr(RBinFile *bf) {
 	return Elf_(get_baddr) (bf->bo->bin_obj);
-}
-
-static ut64 boffset(RBinFile *bf) {
-	return Elf_(get_boffset) (bf->bo->bin_obj);
 }
 
 static RBinAddr* binsym(RBinFile *bf, int sym) {

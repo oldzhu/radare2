@@ -11990,8 +11990,8 @@ static bool is_apple_target(RCore *core) {
 		return false;
 	}
 	RBinObject *bo = r_bin_cur_object (core->bin);
-	r_return_val_if_fail (!bo || (bo->plugin && bo->plugin->name), false);
-	return bo? strstr (bo->plugin->name, "mach"): false;
+	r_return_val_if_fail (!bo || (bo->plugin && bo->plugin->meta.name), false);
+	return bo? strstr (bo->plugin->meta.name, "mach"): false;
 }
 
 static bool is_valid_code(RCore *core, ut64 addr, int n) {
@@ -12492,6 +12492,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 				r_core_task_yield (&core->tasks);
 				R_LOG_INFO ("Finding and parsing C++ vtables (avrr)");
 				r_core_cmd_call (core, "avrr");
+				R_LOG_INFO ("Analyzing methods");
 				r_core_cmd0 (core, "af @@ method.*");
 				r_core_task_yield (&core->tasks);
 				// r_config_set_b (core->config, "anal.calls", c);
@@ -12531,6 +12532,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 					r_core_task_yield (&core->tasks);
 				}
 				if (core->anal->opt.vars) {
+					R_LOG_INFO ("Recovering local variables (afva)");
 					RAnalFunction *fcni;
 					RListIter *iter;
 					r_list_foreach (core->anal->fcns, iter, fcni) {

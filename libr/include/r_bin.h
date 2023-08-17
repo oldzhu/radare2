@@ -294,10 +294,28 @@ typedef struct r_bin_section_t {
 	bool is_segment;
 } RBinSection;
 
+typedef struct r_bin_import_t {
+	char *name;
+	char *libname;
+	const char *bind;
+	const char *type;
+	char *classname;
+	char *descriptor;
+	ut32 ordinal;
+	ut32 visibility;
+	// used by elf, so we just expose them here, so we can remove the internal representation dupe
+	bool in_shdr;
+	bool is_sht_null;
+	bool is_vaddr; /* when true, offset is virtual address, otherwise it's physical */
+	bool is_imported;
+} RBinImport;
+
 #include <r_vec.h>
 
 // XXX only forward declare here for better compile times
 R_API void r_bin_symbol_fini(RBinSymbol *sym);
+R_API void r_bin_import_fini(RBinImport *sym);
+R_VEC_TYPE_WITH_FINI (RVecRBinImport, RBinImport, r_bin_import_fini);
 R_VEC_TYPE_WITH_FINI (RVecRBinSymbol, RBinSymbol, r_bin_symbol_fini);
 R_VEC_TYPE(RVecRBinSection, RBinSection);
 
@@ -312,6 +330,7 @@ typedef struct r_bin_object_t {
 	RList/*<RBinSection>*/ *sections;
 	RList/*<RBinImport>*/ *imports;
 	RList/*<RBinSymbol>*/ *symbols; // DEPRECATE
+	RVecRBinImport imports_vec;
 	RVecRBinSymbol symbols_vec;
 	RVecRBinSection sections_vec;
 	RList/*<??>*/ *entries;
@@ -333,11 +352,11 @@ typedef struct r_bin_object_t {
 	int lang;
 	Sdb *kv;
 	HtUP *addr2klassmethod;
-	void *bin_obj; // internal pointer used by formats
+	void *bin_obj; // internal pointer used by formats... TODO: RENAME TO internal object or sthg
 	bool is_reloc_patched; // used to indicate whether relocations were patched or not
 } RBinObject;
 
-// XXX: RbinFile may hold more than one RBinObject
+// XXX: RbinFile may hold more than one RBinObject?
 /// XX curplugin == o->plugin
 typedef struct r_bin_file_t {
 	char *file;
@@ -457,13 +476,9 @@ R_API RBinXtrData *r_bin_xtrdata_new(RBuffer *buf, ut64 offset, ut64 size, ut32 
 R_API void r_bin_xtrdata_free(void /*RBinXtrData*/ *data);
 
 typedef struct r_bin_xtr_plugin_t {
-	char *name;
-	char *desc;
-	char *license;
-	int (*init)(void *user);
-	int (*fini)(void *user);
-	bool (*check_buffer)(RBinFile *bf, RBuffer *buf);
+	RPluginMeta meta;
 
+	bool (*check)(RBinFile *bf, RBuffer *buf);
 	RBinXtrData *(*extract_from_bytes)(RBin *bin, const ut8 *buf, ut64 size, int idx);
 	RBinXtrData *(*extract_from_buffer)(RBin *bin, RBuffer *buf, int idx);
 	RList *(*extractall_from_bytes)(RBin *bin, const ut8 *buf, ut64 size);
@@ -479,11 +494,7 @@ typedef struct r_bin_xtr_plugin_t {
 } RBinXtrPlugin;
 
 typedef struct r_bin_ldr_plugin_t {
-	char *name;
-	char *desc;
-	char *license;
-	int (*init)(void *user);
-	int (*fini)(void *user);
+	RPluginMeta meta;
 	bool (*load)(RBin *bin);
 } RBinLdrPlugin;
 
@@ -506,30 +517,24 @@ R_API RBinTrycatch *r_bin_trycatch_new(ut64 source, ut64 from, ut64 to, ut64 han
 R_API void r_bin_trycatch_free(RBinTrycatch *tc);
 
 typedef struct r_bin_plugin_t {
-	char *name;
-	char *desc;
-	char *author;
-	char *version;
-	char *license;
-	int (*init)(void *user);
-	int (*fini)(void *user);
+	RPluginMeta meta;
 	Sdb * (*get_sdb)(RBinFile *obj);
-	bool (*load_buffer)(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb);
+	bool (*load)(RBinFile *bf, RBuffer *buf, ut64 laddr);
 	ut64 (*size)(RBinFile *bin); // return ut64 maybe? meh
 	void (*destroy)(RBinFile *bf);
-	bool (*check_buffer)(RBinFile *bf, RBuffer *buf);
+	bool (*check)(RBinFile *bf, RBuffer *buf);
 	ut64 (*baddr)(RBinFile *bf);
-	ut64 (*boffset)(RBinFile *bf);
 	RBinAddr* (*binsym)(RBinFile *bf, int num);
 	RList/*<RBinAddr>*/* (*entries)(RBinFile *bf);
-	RList/*<RBinSection>*/* (*sections)(RBinFile *bf); // R2_600 - deprecate
-#if R2_590
-	bool (*sections_vec)(RBinFile *bf);
-#endif
-	R_BORROW RList/*<RBinDwarfRow>*/* (*lines)(RBinFile *bf);
+	// R2_600 - deprecate in r2-6.0.0
+	RList/*<RBinSection>*/* (*sections)(RBinFile *bf);
 	RList/*<RBinSymbol>*/* (*symbols)(RBinFile *bf); // R2_590: return VecBinSymbol* for better memory usage and perf
-	bool (*symbols_vec)(RBinFile *bf);
 	RList/*<RBinImport>*/* (*imports)(RBinFile *bf); // R2_590: return VecBinImport*
+	// R2_590 - implement them in all the plugins
+	bool (*sections_vec)(RBinFile *bf); // R2_590
+	bool (*symbols_vec)(RBinFile *bf);
+	bool (*imports_vec)(RBinFile *bf);
+	R_BORROW RList/*<RBinDwarfRow>*/* (*lines)(RBinFile *bf);
 	RList/*<RBinString>*/* (*strings)(RBinFile *bf);
 	RBinInfo/*<RBinInfo>*/* (*info)(RBinFile *bf);
 	RList/*<RBinField>*/* (*fields)(RBinFile *bf);
@@ -588,19 +593,6 @@ typedef struct r_bin_class_t {
 			_el->paddr += (o)->loadaddr;\
 		}\
 	} while (0)
-
-
-
-typedef struct r_bin_import_t {
-	char *name;
-	char *libname;
-	const char *bind;
-	const char *type;
-	char *classname;
-	char *descriptor;
-	ut32 ordinal;
-	ut32 visibility;
-} RBinImport;
 
 typedef struct r_bin_reloc_t {
 	ut8 type; // type have implicit size.. but its anoying

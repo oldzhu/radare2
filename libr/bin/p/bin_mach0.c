@@ -44,14 +44,15 @@ static char *entitlements(RBinFile *bf, bool json) {
 	return NULL;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
-	r_return_val_if_fail (bf && bin_obj && buf, false);
+static bool load(RBinFile *bf, RBuffer *buf, ut64 laddr) {
+	r_return_val_if_fail (bf && buf, false);
 	struct MACH0_(opts_t) opts;
 	MACH0_(opts_set_default) (&opts, bf);
 	opts.parse_start_symbols = true;
 
 	struct MACH0_(obj_t) *mo = MACH0_(new_buf) (buf, &opts);
 	if (mo) {
+		bf->bo->bin_obj = mo;
 		if (mo->chained_starts) {
 			RIO *io = bf->rbin->iob.io;
 			RBuffer *nb = swizzle_io_read (bf, mo, io);
@@ -60,8 +61,7 @@ static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadadd
 			}
 			bf->buf = nb;
 		}
-		sdb_ns_set (sdb, "info", mo->kv);
-		*bin_obj = mo;
+		sdb_ns_set (bf->sdb, "info", mo->kv);
 		return true;
 	}
 	return false;
@@ -644,7 +644,7 @@ static RList *classes(RBinFile *bf) {
 
 #if !R_BIN_MACH064
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	if (r_buf_size (b) >= 4) {
 		ut8 buf[4] = {0};
 		if (r_buf_read_at (b, 0, buf, 4)) {
@@ -961,13 +961,15 @@ static ut64 size(RBinFile *bf) {
 }
 
 RBinPlugin r_bin_plugin_mach0 = {
-	.name = "mach0",
-	.desc = "mach0 bin plugin",
-	.license = "LGPL3",
+	.meta = {
+		.name = "mach0",
+		.desc = "mach0 bin plugin",
+		.license = "LGPL3",
+	},
 	.get_sdb = &get_sdb,
-	.load_buffer = &load_buffer,
+	.load = &load,
 	.destroy = &destroy,
-	.check_buffer = &check_buffer,
+	.check = &check,
 	.baddr = &baddr,
 	.binsym = &binsym,
 	.entries = &entries,

@@ -82,7 +82,7 @@ static ut64 baddr(RBinFile *bf) {
 	return S390_BADDR;
 }
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	ut8 buf[8] = {0};
 	if (r_buf_read_at (b, 0, buf, sizeof (buf)) != sizeof (buf)) {
 		return false;
@@ -96,14 +96,14 @@ static bool check_buffer(RBinFile *bf, RBuffer *b) {
 	return false;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *b, ut64 loadaddr, Sdb *sdb) {
-	bool res = check_buffer (bf, b);
+static bool load(RBinFile *bf, RBuffer *b, ut64 loadaddr) {
+	bool res = check (bf, b);
 	if (res) {
 		s390user *su = R_NEW0 (s390user);
 		if (su) {
 			su->sb = r_strbuf_new ("");
 			su->symbols = r_list_newf (r_bin_symbol_free);
-			*bin_obj = (void*)su;
+			bf->bo->bin_obj = (void*)su;
 		}
 	}
 	return res;
@@ -366,29 +366,30 @@ static void headers(RBinFile *bf) {
 	bf->rbin->cb_printf ("%s\n", s);
 }
 
-static int fini(void *user) {
-	RBinFile *bf = (RBinFile*)user;
+static void destroy(RBinFile *bf) {
 	if (bf && bf->bo && bf->bo->bin_obj) {
 		s390user *su = bf->bo->bin_obj;
 		r_strbuf_free (su->sb);
 		free (su);
 	}
-	return 0;
 }
+
 RBinPlugin r_bin_plugin_s390 = {
-	.name = "s390",
-	.desc = "s390 Load Module parser",
-	.license = "LGPL3",
-	.author = "Jose Antonio Romero",
-	.load_buffer = &load_buffer,
-	.check_buffer = &check_buffer,
+	.meta = {
+		.name = "s390",
+		.desc = "s390 Load Module parser",
+		.license = "LGPL3",
+		.author = "Jose Antonio Romero",
+	},
+	.load = &load,
+	.check = &check,
 	.baddr = &baddr,
 	.header = &headers,
 	.entries = &entries,
 	.sections = &sections,
 	.symbols = &symbols,
 	.info = &info,
-	.fini = &fini,
+	.destroy = &destroy,
 	.minstrlen = 3
 };
 

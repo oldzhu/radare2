@@ -20,7 +20,7 @@ static void headers32(RBinFile *bf) {
 	p ("0x00000032  ShrStrndx   %d\n", r_buf_read_le16_at (bf->buf, 0x32));
 }
 
-static bool check_buffer(RBinFile *bf, RBuffer *buf) {
+static bool check(RBinFile *bf, RBuffer *buf) {
 	ut8 b[5] = {0};
 	r_buf_read_at (buf, 0, b, sizeof (b));
 	return !memcmp (b, ELFMAG, SELFMAG) && b[4] != 2;
@@ -125,15 +125,16 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 }
 
 RBinPlugin r_bin_plugin_elf = {
-	.name = "elf",
-	.desc = "ELF format r2 plugin",
-	.license = "LGPL3",
+	.meta = {
+		.name = "elf",
+		.desc = "ELF format r2 plugin",
+		.license = "LGPL3",
+	},
 	.get_sdb = &get_sdb,
-	.load_buffer = &load_buffer,
+	.load = &load,
 	.destroy = &destroy,
-	.check_buffer = &check_buffer,
+	.check = &check,
 	.baddr = &baddr,
-	.boffset = &boffset,
 	.binsym = &binsym,
 	.entries = &entries,
 	.sections = &sections,

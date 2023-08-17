@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2019-2022 - mrmacete */
+/* radare2 - LGPL - Copyright 2019-2023 - mrmacete */
 
 #include <r_types.h>
 #include <r_util.h>
@@ -175,7 +175,7 @@ static void r_kernel_cache_free(RKernelCacheObj *obj);
 
 static R_TH_LOCAL RList *pending_bin_files = NULL;
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
 	RBuffer *fbuf = r_buf_ref (buf);
 	struct MACH0_(opts_t) opts;
 	MACH0_(opts_set_default) (&opts, bf);
@@ -185,21 +185,20 @@ static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadadd
 	}
 
 	RRebaseInfo *rebase_info = r_rebase_info_new_from_mach0 (fbuf, main_mach0);
-	RKernelCacheObj *obj = NULL;
 
 	RPrelinkRange *prelink_range = get_prelink_info_range_from_mach0 (main_mach0);
 	if (!prelink_range) {
 		goto beach;
 	}
 
-	obj = R_NEW0 (RKernelCacheObj);
+	RKernelCacheObj *obj = R_NEW0 (RKernelCacheObj);
 	if (!obj) {
 		R_FREE (prelink_range);
 		goto beach;
 	}
 
-	bool is_modern = main_mach0->hdr.filetype == MH_FILESET ||
-		(main_mach0->hdr.cputype == CPU_TYPE_ARM64 && main_mach0->hdr.cpusubtype  == 0xc0000002);
+	const bool is_modern = main_mach0->hdr.filetype == MH_FILESET ||
+		(main_mach0->hdr.cputype == CPU_TYPE_ARM64 && main_mach0->hdr.cpusubtype == 0xc0000002);
 
 	RCFValueDict *prelink_info = NULL;
 	if (!is_modern && prelink_range->range.size) {
@@ -228,11 +227,8 @@ static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadadd
 	obj->cache_buf = fbuf;
 	obj->pa2va_exec = prelink_range->pa2va_exec;
 	obj->pa2va_data = prelink_range->pa2va_data;
-
 	R_FREE (prelink_range);
-
-	*bin_obj = obj;
-
+	bf->bo->bin_obj = obj;
 	r_list_push (pending_bin_files, bf);
 
 	if (rebase_info || main_mach0->chained_starts) {
@@ -1031,7 +1027,7 @@ static RBinAddr *newEntry(ut64 haddr, ut64 vaddr, int type) {
 	return ptr;
 }
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	if (r_buf_size (b) > 4) {
 		ut8 buf[4];
 		r_buf_read_at (b, 0, buf, sizeof (buf));
@@ -2199,16 +2195,18 @@ static void rebase_buffer_fixup(RKernelCacheObj *kobj, ut64 off, RIODesc *fd, ut
 }
 
 RBinPlugin r_bin_plugin_xnu_kernelcache = {
-	.name = "kernelcache",
-	.desc = "kernelcache bin plugin",
-	.license = "LGPL3",
+	.meta = {
+		.name = "kernelcache",
+		.desc = "kernelcache bin plugin",
+		.license = "LGPL3",
+	},
 	.destroy = &destroy,
-	.load_buffer = &load_buffer,
+	.load = &load,
 	.entries = &entries,
 	.baddr = &baddr,
 	.symbols = &symbols,
 	.sections = &sections,
-	.check_buffer = &check_buffer,
+	.check = &check,
 	.info = &info
 };
 

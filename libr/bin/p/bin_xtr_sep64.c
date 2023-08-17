@@ -86,7 +86,7 @@ static inline void fill_metadata_info_from_hdr(RBinXtrMetadata *meta, struct MAC
 
 #define BTW(val, min, max) ((val) > min && (val) < max)
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	r_return_val_if_fail (b, false);
 
 	const ut64 sz = r_buf_size (b);
@@ -472,10 +472,12 @@ static ut32 read_arm64_ins(RBuffer *b, int idx) {
 }
 
 RBinXtrPlugin r_bin_xtr_plugin_xtr_sep64 = {
-	.name = "xtr.sep64",
-	.desc = "64-bit SEP bin extractor plugin",
-	.license = "LGPL3",
-	.check_buffer = check_buffer,
+	.meta = {
+		.name = "xtr.sep64",
+		.desc = "64-bit SEP bin extractor plugin",
+		.license = "LGPL3",
+	},
+	.check = check,
 	.load = &load,
 	.destroy = &destroy,
 	.size = &size,

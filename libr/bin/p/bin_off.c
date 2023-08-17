@@ -1,4 +1,4 @@
-/* radare2 - MIT - 2021 - pancake */
+/* radare2 - MIT - 2021-2023 - pancake */
 // https://en.wikipedia.org/wiki/OS/360_Object_File_Format
 
 #include <r_bin.h>
@@ -8,7 +8,7 @@ typedef struct {
 	RBuffer *buf;
 } OffObj;
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	r_return_val_if_fail (b, false);
 	ut8 sig[4];
 	if (r_buf_read_at (b, 0, sig, sizeof (sig)) != 4) {
@@ -20,10 +20,9 @@ static bool check_buffer(RBinFile *bf, RBuffer *b) {
 	return true;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
-	OffObj *wo = R_NEW0 (OffObj);
-	r_return_val_if_fail (wo, false);
-	*bin_obj = wo;
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
+	r_return_val_if_fail (bf && buf, false);
+	bf->bo->bin_obj = R_NEW0 (OffObj);
 	return true;
 }
 
@@ -94,13 +93,15 @@ static RList *entries(RBinFile *bf) {
 }
 
 RBinPlugin r_bin_plugin_off = {
-	.name = "off",
-	.desc = "OS/360 Object File Format",
-	.license = "MIT",
-	.author = "pancake",
+	.meta = {
+		.name = "off",
+		.desc = "OS/360 Object File Format",
+		.license = "MIT",
+		.author = "pancake",
+	},
 	.entries = entries,
-	.check_buffer = &check_buffer,
-	.load_buffer = &load_buffer,
+	.check = &check,
+	.load = &load,
 	.baddr = &baddr,
 	.info = &info,
 	.header = &off_header_fields,

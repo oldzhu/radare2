@@ -3,7 +3,7 @@
 #include <r_bin.h>
 #include "../format/le/le.h"
 
-static bool check_buffer(RBinFile *bf, RBuffer *b) {
+static bool check(RBinFile *bf, RBuffer *b) {
 	ut64 length = r_buf_size (b);
 	if (length < 2) {
 		return false;
@@ -25,11 +25,11 @@ static bool check_buffer(RBinFile *bf, RBuffer *b) {
 	return false;
 }
 
-static bool load_buffer(RBinFile *bf, void **bin_obj, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
-	r_return_val_if_fail (bf && bin_obj && buf, false);
+static bool load(RBinFile *bf, RBuffer *buf, ut64 loadaddr) {
+	r_return_val_if_fail (bf && buf, false);
 	RBinLEObj *res = r_bin_le_new_buf (buf);
 	if (res) {
-		*bin_obj = res;
+		bf->bo->bin_obj = res;
 		return true;
 	}
 	return false;
@@ -144,12 +144,14 @@ static RBinInfo *info(RBinFile *bf) {
 }
 
 RBinPlugin r_bin_plugin_le = {
-	.name = "le",
-	.desc = "LE/LX format r2 plugin",
-	.author = "GustavoLCR",
-	.license = "LGPL3",
-	.check_buffer = &check_buffer,
-	.load_buffer = &load_buffer,
+	.meta = {
+		.name = "le",
+		.desc = "LE/LX format r2 plugin",
+		.author = "GustavoLCR",
+		.license = "LGPL3",
+	},
+	.check = &check,
+	.load = &load,
 	.destroy = &destroy,
 	.info = &info,
 	.header = &header,

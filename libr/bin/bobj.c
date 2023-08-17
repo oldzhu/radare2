@@ -157,17 +157,16 @@ R_IPI RBinObject *r_bin_object_new(RBinFile *bf, RBinPlugin *plugin, ut64 basead
 	bo->pool = r_strpool_new (0);
 	bf->bo = bo;
 
-	Sdb *sdb = bf->sdb; // should be bo->kv ?
-	if (plugin && plugin->load_buffer) {
-		if (!plugin->load_buffer (bf, &bo->bin_obj, bf->buf, loadaddr, sdb)) {
-			R_LOG_DEBUG ("load_buffer failed for %s plugin", plugin->name);
+	if (plugin && plugin->load) {
+		if (!plugin->load (bf, bf->buf, loadaddr)) {
+			R_LOG_DEBUG ("load failed for %s plugin", plugin->meta.name);
 			sdb_free (bo->kv);
 			free (bo);
 			bf->bo = NULL;
 			return NULL;
 		}
 	} else {
-		R_LOG_WARN ("Plugin %s should implement load_buffer method", plugin->name);
+		R_LOG_WARN ("Plugin %s should implement load method", plugin->meta.name);
 		sdb_free (bo->kv);
 		free (bo);
 		bf->bo = NULL;
@@ -298,9 +297,6 @@ R_API int r_bin_object_set_items(RBinFile *bf, RBinObject *bo) {
 		}
 	}
 
-	if (p->boffset) {
-		bo->boffset = p->boffset (bf);
-	}
 	// XXX: no way to get info from xtr pluginz?
 	// Note, object size can not be set from here due to potential
 	// inconsistencies
