@@ -240,7 +240,7 @@ static RCoreHelpMessage help_msg_ab = {
 	"aba", " [addr]", "analyze esil accesses in basic block (see aea?)",
 	"abb", " [length]", "analyze N bytes and extract basic blocks",
 	"abc", "[-] [color]", "change color of the current basic block (same as afbc, abc- to unset)",
-	"abe", " [addr]", "emulate basic block (alias for aeb)",
+	"abe", " [esil-expr]", "assign esil expression to basic block (see: aeb, dre, afbd)",
 	"abf", " [addr]", "address of incoming (from) basic blocks",
 	"abi", "", "same as ab. or ab",
 	"abj", " [addr]", "display basic block information in JSON",
@@ -568,6 +568,7 @@ static RCoreHelpMessage help_msg_afb = {
 	"afb=", "", "display ascii-art bars for basic block regions",
 	"afb+", " fcn_at bbat bbsz [jump] [fail] ([diff])", "add basic block by hand",
 	"afbc", "[-] [color] ([addr])", "colorize basic block (same as 'abc', afbc- to unset)",
+	"afbd", "", "list function basic block dependency list in order and set abe values",
 	"afbe", " bbfrom bbto", "add basic-block edge for switch-cases",
 	"afbi", "[j]", "print current basic block information",
 	"afbj", " [addr]", "show basic blocks information in json",
@@ -4082,6 +4083,118 @@ static void cmd_afsj(RCore *core, const char *arg) {
 	}
 }
 
+typedef struct {
+	ut64 from;
+	ut64 to;
+	char *regstate;
+} BlockItem;
+
+R_VEC_TYPE (RVecBlocks, BlockItem);
+
+static BlockItem *find_predecessor(RVecBlocks *blocks, BlockItem *b0) {
+	BlockItem *b1;
+	R_VEC_FOREACH (blocks, b1) {
+		if (b1->to == b0->from) {
+			return b1;
+		}
+	}
+	return NULL;
+}
+
+static void emulate_block(RCore *core, RVecBlocks *blocks, BlockItem *b0);
+static void save_regstate_in_destinations(RCore *core, RVecBlocks *blocks, BlockItem *b0, BlockItem *b1) {
+	BlockItem *b2;
+	if (b1) {
+		r_core_cmd0 (core, b1->regstate);
+	}
+	R_LOG_DEBUG ("aeb @0x%"PFMT64x, b0->from);
+	r_core_cmdf (core, "aeb @0x%"PFMT64x, b0->from);
+	char *regstate = r_core_cmd_str (core, "dre");
+	r_str_trim (regstate);
+	R_LOG_DEBUG ("dre # %s", regstate);
+	bool unused = true;
+	R_VEC_FOREACH (blocks, b2) {
+		if (!b2->regstate && b0->to == b2->from) {
+			R_LOG_DEBUG ("abe %s @ 0x%08"PFMT64x, regstate, b2->from);
+			r_core_cmdf (core, "abe %s @ 0x%08"PFMT64x, regstate, b2->from);
+			// eprintf ("abe %s @ 0x%"PFMT64x"\n", regstate, b2->from);
+			b0->regstate = regstate;
+			emulate_block (core, blocks, b2);
+			unused = false;
+			// break;
+		}
+	}
+	if (unused) {
+		free (regstate);
+	}
+}
+
+static void emulate_block(RCore *core, RVecBlocks *blocks, BlockItem *b0) {
+	BlockItem *b1 = find_predecessor (blocks, b0);
+	if (b1) {
+		if (b1->regstate) {
+			save_regstate_in_destinations (core, blocks, b0, b1);
+		} else {
+			// b1->regstate;
+	//		emulate_block (core, blocks, b1);
+		}
+	} else {
+		// root node, assume initial regstate
+		eprintf ("# root node 0x%"PFMT64x"\n", b0->from);
+		char *regstate = r_core_cmd_str (core, "dre");
+		r_str_trim (regstate);
+		r_core_cmdf (core, "abe %s @0x%"PFMT64x, regstate, b0->from);
+		r_core_cmdf (core, "aeb @0x%"PFMT64x, b0->from);
+		b0->regstate = strdup ("dr0,#!"); //initial regstate
+		save_regstate_in_destinations (core, blocks, b0, NULL);
+	}
+}
+
+static void cmd_afbd(RCore *core, const char *input) {
+	r_return_if_fail (core && input);
+	ut64 addr = core->offset;
+	RAnalFunction *f = r_anal_get_fcn_in (core->anal, addr, -1);
+	if (!f) {
+		R_LOG_ERROR ("No function found");
+		return;
+	}
+	ut64 oaddr = core->offset;
+	RAnalBlock *bb;
+	RVecBlocks blocks;
+	RVecBlocks_init (&blocks);
+	RListIter *iter;
+	r_core_cmd0 (core, "drs+");
+	r_list_foreach (f->bbs, iter, bb) {
+		BlockItem bi = { 0 };
+		bi.from = bb->addr;
+		if (bb->jump != UT64_MAX) {
+			bi.to = bb->jump;
+			RVecBlocks_push_back (&blocks, &bi);
+		}
+		if (bb->fail != UT64_MAX) {
+			bi.to = bb->fail;
+			RVecBlocks_push_back (&blocks, &bi);
+		}
+		if (bb->switch_op) {
+			RListIter *iter;
+			RAnalCaseOp *scase;
+			r_list_foreach (bb->switch_op->cases, iter, scase) {
+				bi.to = scase->jump;
+				RVecBlocks_push_back (&blocks, &bi);
+			}
+		}
+	}
+	BlockItem *b0;
+	R_VEC_FOREACH (&blocks, b0) {
+		if (b0->regstate) {
+			continue;
+		}
+		emulate_block (core, &blocks, b0);
+	}
+	r_core_cmd0 (core, "drs-");
+	r_core_seek (core, oaddr, true);
+}
+
 static void cmd_afbc(RCore *core, const char *input) {
 	r_return_if_fail (core && input);
 	char *ptr = strdup (input);
@@ -5186,6 +5299,9 @@ static int cmd_af(RCore *core, const char *input) {
 		case 'c': // "afbc"
 			cmd_afbc (core, r_str_trim_head_ro (input + 3));
 			break;
+		case 'd': // "afbd"
+			cmd_afbd (core, r_str_trim_head_ro (input + 3));
+			break;
 		default:
 			r_core_cmd_help (core, help_msg_afb);
 			break;
@@ -5591,6 +5707,9 @@ void cmd_anal_reg(RCore *core, const char *str) {
 	case ',': // "ar,"
 		__tableRegList (core, core->anal->reg, str + 1);
 		break;
+	case 'e': // "are"
+		r_debug_reg_list (core->dbg, R_REG_TYPE_GPR, 64, NULL, 'e', NULL);
+		break;
 	case '0': // "ar0"
 		r_reg_arena_zero (core->anal->reg);
 		break;
@@ -5994,7 +6113,7 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 			R_LOG_INFO ("[ESIL] Trap, trying to execute on non-executable memory");
 			return_tail (1);
 		}
-		// eprintf ("addr %llx\n", addr);
+		// eprintf ("addr %"PFMT64x"\n", addr);
 		r_asm_set_pc (core->rasm, addr);
 		// run esil pin command here
 		const char *pincmd = r_anal_pin_call (core->anal, addr);
@@ -6153,7 +6272,7 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 			tail_return_value = 1;
 		}
 		// esil->verbose ?
-		// eprintf ("REPE 0x%llx %s => 0x%llx\n", addr, R_STRBUF_SAFEGET (&op.esil), r_reg_getv (core->anal->reg, "PC"));
+		// eprintf ("REPE 0x%"PFMT64x" %s => 0x%"PFMT64x"\n", addr, R_STRBUF_SAFEGET (&op.esil), r_reg_getv (core->anal->reg, "PC"));
 		ut64 pc = r_reg_getv (core->anal->reg, pcname);
 		if (pc == UT64_MAX || pc == UT32_MAX) {
 			R_LOG_ERROR ("Invalid program counter PC=-1 coming from 0x%08"PFMT64x, addr);
@@ -6393,7 +6512,7 @@ static void initialize_stack(RCore *core, ut64 addr, ut64 size) {
 		ut64 i;
 		for (i = 0; i < size; i += bs) {
 			ut64 left = R_MIN (bs, size - i);
-		//	r_core_cmdf (core, "wx 10203040 @ 0x%llx", addr);
+		//	r_core_cmdf (core, "wx 10203040 @ 0x%"PFMT64x, addr);
 			switch (*mode) {
 			case 'd': // "debrujn"
 				r_core_cmdf (core, "wopD %"PFMT64u" @ 0x%"PFMT64x, left, addr + i);
@@ -13561,8 +13680,28 @@ static int cmd_anal(void *data, const char *input) {
 		case 'o': // "abo"
 			abo (core);
 			break;
-		case 'e': // "aeb"
-			r_core_cmdf (core, "aeb%s", input + 2);
+		case 'e': // "abe"
+			{
+				const char *arg = r_str_trim_head_ro (input + 2);
+				if (*arg == '?') {
+					r_core_cmd_help_match (core, help_msg_ab, "abe", true);
+				} else {
+					RListIter *iter;
+					RAnalBlock *bb;
+					RList *blocks = r_anal_get_blocks_in (core->anal, core->offset);
+					r_list_foreach (blocks, iter, bb) {
+						if (arg && *arg) {
+							free (bb->esil);
+							bb->esil = strdup (arg);
+						} else {
+							if (bb->esil) {
+								r_cons_printf ("%s\n", bb->esil);
+							}
+						}
+					}
+				}
+			}
+			// OLD not confuse with aeb: r_core_cmdf (core, "aeb%s", input + 2);
 			break;
 		case 'f': // "abf"
 			core_anal_abf (core, input + 2);
