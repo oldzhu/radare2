@@ -3060,6 +3060,9 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 		pj_o (pj);
 		pj_kn (pj, "addr", b->addr);
 		pj_ki (pj, "size", b->size);
+		if (b->esil != NULL) {
+			pj_ks (pj, "esil", b->esil);
+		}
 		if (b->jump != UT64_MAX) {
 			pj_kn (pj, "jump", b->jump);
 		}
@@ -3125,6 +3128,9 @@ static void print_bb(PJ *pj, const RAnalBlock *b, const RAnalFunction *fcn, cons
 		}
 		if (b->fail != UT64_MAX) {
 			r_cons_printf ("fail: 0x%08"PFMT64x"\n", b->fail);
+		}
+		if (b->esil != NULL) {
+			r_cons_printf ("esil: %s\n", b->esil);
 		}
 		r_cons_printf ("opaddr: 0x%08"PFMT64x"\n", opaddr);
 		r_cons_printf ("addr: 0x%08" PFMT64x "\nsize: %" PFMT64d "\ninputs: %d\noutputs: %d\nninstr: %d\ntraced: 0x%"PFMT64x"\n",
@@ -7368,12 +7374,12 @@ static void __anal_esil_function(RCore *core, ut64 addr) {
 	r_reg_setv (core->anal->reg, pcname, old_pc);
 }
 
-static char *_aeg_get_title(void *data) {
+static char *_aeg_get_title(void *data, void *user) {
 	RAnalEsilDFGNode *enode = (RAnalEsilDFGNode *)data;
 	return r_str_newf ("%d", enode->idx);
 }
 
-static char *_aeg_get_body(void *data) {
+static char *_aeg_get_body(void *data, void *user) {
 	RAnalEsilDFGNode *enode = (RAnalEsilDFGNode *)data;
 	return r_str_newf ("%s%s",
 		(enode->type & R_ANAL_ESIL_DFG_TAG_GENERATIVE)? "generative:": "",
@@ -7402,7 +7408,7 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 					r_anal_op_free (aop);
 					return;
 				}
-				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
+				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs, NULL);
 				r_anal_esil_dfg_free (dfg);
 				agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
 				agraph->layout = r_config_get_i (core->config, "graph.layout");
@@ -7424,7 +7430,7 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 					r_config_get_b (core->config, "esil.dfg.mapinfo"),
 					r_config_get_b (core->config, "esil.dfg.maps"));
 			if (dfg) {
-				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
+				RAGraph *agraph = r_agraph_new_from_graph (dfg->flow, &cbs, NULL);
 				r_anal_esil_dfg_free (dfg);
 				agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
 				agraph->layout = r_config_get_i (core->config, "graph.layout");
@@ -7462,7 +7468,7 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 					r_anal_op_free (aop);
 					return;
 				}
-				agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
+				agraph = r_agraph_new_from_graph (dfg->flow, &cbs, NULL);
 				r_anal_esil_dfg_free (dfg);
 			}
 			r_anal_op_free (aop);
@@ -7471,7 +7477,7 @@ static void cmd_aeg(RCore *core, int argc, char *argv[]) {
 				r_config_get_b (core->config, "esil.dfg.mapinfo"),
 				r_config_get_b (core->config, "esil.dfg.maps"));
 			r_return_if_fail (dfg);
-			agraph = r_agraph_new_from_graph (dfg->flow, &cbs);
+			agraph = r_agraph_new_from_graph (dfg->flow, &cbs, NULL);
 			r_anal_esil_dfg_free (dfg);
 		}
 		const ut64 osc = r_config_get_i (core->config, "scr.color");
@@ -10996,12 +11002,12 @@ static char *print_graph_dot(RCore *core, RGraph /*<RGraphNodeInfo>*/ *graph) {
 	return result;
 }
 
-static char *_graph_node_info_get_title(void *data) {
+static char *_graph_node_info_get_title(void *data, void *user) {
 	RGraphNodeInfo *info = (RGraphNodeInfo *)data;
 	return (info && info->title)? strdup (info->title): NULL;
 }
 
-static char *_graph_node_info_get_body(void *data) {
+static char *_graph_node_info_get_body(void *data, void *user) {
 	RGraphNodeInfo *info = (RGraphNodeInfo *)data;
 	return (info && info->body)? strdup (info->body): NULL;
 }
@@ -11025,7 +11031,7 @@ static void r_core_graph_print(RCore *core, RGraph /*<RGraphNodeInfo>*/ *graph, 
 			.get_title = _graph_node_info_get_title,
 			.get_body = _graph_node_info_get_body
 		};
-		agraph = r_agraph_new_from_graph (graph, &cbs);
+		agraph = r_agraph_new_from_graph (graph, &cbs, NULL);
 		switch (*input) {
 		case 0:
 			agraph->can->linemode = r_config_get_i (core->config, "graph.linemode");
