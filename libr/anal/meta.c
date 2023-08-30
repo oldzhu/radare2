@@ -221,8 +221,9 @@ R_API RPVector *r_meta_get_all_intersect(RAnal *a, ut64 start, ut64 size, RAnalM
 R_API const char *r_meta_type_tostring(int type) {
 	// XXX: use type as '%c'
 	switch (type) {
-	case R_META_TYPE_DATA: return "Cd";
+	case R_META_TYPE_BIND: return "Cb";
 	case R_META_TYPE_CODE: return "Cc";
+	case R_META_TYPE_DATA: return "Cd";
 	case R_META_TYPE_STRING: return "Cs";
 	case R_META_TYPE_FORMAT: return "Cf";
 	case R_META_TYPE_MAGIC: return "Cm";
@@ -259,13 +260,15 @@ R_API void r_meta_print(RAnal *a, RAnalMetaItem *d, ut64 start, ut64 size, int r
 			str = r_str_escape (d->str);
 		}
 	}
-	if (str || d->type == R_META_TYPE_DATA) {
+	if (str || d->type == R_META_TYPE_DATA || d->type == R_META_TYPE_BIND) {
 		if (d->type == R_META_TYPE_STRING && !*str) {
 			free (str);
 			return;
 		}
 		if (!str) {
 			pstr = "";
+		} else if (d->type == 'b') {
+			pstr = str;
 		} else if (d->type == 'f') {
 			pstr = str;
 		} else if (d->type == 's') {
@@ -432,6 +435,13 @@ R_API void r_meta_print(RAnal *a, RAnalMetaItem *d, ut64 start, ut64 size, int r
 					} else {
 						a->cb_printf ("%" PFMT64u " %s\n", size, pstr);
 					}
+				}
+				break;
+			case R_META_TYPE_BIND:
+				if (rad) {
+					a->cb_printf ("Cb 0x%08" PFMT64x " %s\n", start, pstr);
+				} else {
+					a->cb_printf ("Cb 0x%08" PFMT64x " %s\n", start, pstr);
 				}
 				break;
 			case R_META_TYPE_VARTYPE:
