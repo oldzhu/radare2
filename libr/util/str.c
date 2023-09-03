@@ -1123,6 +1123,9 @@ R_API void r_str_replace_in(char *str, ut32 sz, const char *key, const char *val
 	r_return_if_fail (str && key && val);
 	char *heaped = r_str_replace (strdup (str), key, val, g);
 	if (heaped) {
+		if (sz < 0) {
+			sz = strlen (key);
+		}
 		r_str_ncpy (str, heaped, sz);
 		free (heaped);
 	}
@@ -4122,6 +4125,17 @@ R_API char *r_str_tok_r(char *str, const char *delim, char **save_ptr) {
 R_API char *r_str_tok_next(char *s) {
 	if (s) {
 		return s + strlen (s) + 1;
+	}
+	return NULL;
+}
+
+R_API R_MUSTUSE char *r_str_after(char *s, char c) {
+	if (s) {
+		char *p = strchr (s, c);
+		if (p) {
+			*p++ = 0;
+			return p;
+		}
 	}
 	return NULL;
 }

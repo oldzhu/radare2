@@ -1172,8 +1172,11 @@ void MACH0_(get_class_t)(mach0_ut p, RBinFile *bf, RBinClass *klass, bool dupe, 
 
 	klass->addr = c.isa;
 	if (c.superclass) {
-		klass->super = r_list_newf (free);
-		r_list_append (klass->super, get_class_name (c.superclass, bf));
+		const char *klass_name = get_class_name (c.superclass, bf);
+		if (klass_name) {
+			klass->super = r_list_newf (free);
+			r_list_append (klass->super, (void *)klass_name);
+		}
 	} else if (relocs) {
 		struct reloc_t reloc_at_class_addr;
 		reloc_at_class_addr.addr = p + sizeof (mach0_ut);
@@ -1185,7 +1188,17 @@ void MACH0_(get_class_t)(mach0_ut p, RBinFile *bf, RBinClass *klass, bool dupe, 
 			if (r_str_startswith (target_class_name, _objc_class)) {
 				target_class_name += _objc_class_len;
 				klass->super = r_list_newf (free);
-				r_list_append (klass->super, strdup (target_class_name));
+				if (r_str_startswith (target_class_name, "_T")) {
+					char *dsuper = r_bin_demangle (bf, "swift", target_class_name, 0, false);
+					if (!dsuper || !strcmp (dsuper, target_class_name)) {
+						R_LOG_DEBUG ("Failed to demangle");
+						r_list_append (klass->super, strdup (target_class_name));
+					} else {
+						r_list_append (klass->super, dsuper);
+					}
+				} else {
+					r_list_append (klass->super, strdup (target_class_name));
+				}
 			}
 		}
 	}
@@ -1304,7 +1317,7 @@ static inline HtUP *_load_symbol_by_vaddr_hashtable(RBinFile *bf) {
 static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht) {
 	char *otypename = readstr (bf, st.name_addr);
 	if (!otypename) {
-		R_LOG_DEBUG("swift-type-parse missing name");
+		R_LOG_DEBUG ("swift-type-parse missing name");
 		return;
 	}
 	char *typename = r_name_filter_dup (otypename);
@@ -1312,7 +1325,6 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 	// eprintf ("Type name (%s)\n", typename);
 	klass->addr = st.addr;
 	klass->lang = R_BIN_LANG_SWIFT;
-	// eprintf ("methods:\n");
 	if (st.members != UT64_MAX) {
 		ut8 buf[512];
 		int i = 0;
@@ -1330,6 +1342,11 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 			char *method_name;
 			if (symbols_ht && (sym = ht_up_find (symbols_ht, method_addr, NULL))) {
 				method_name = r_name_filter_dup (sym->name);
+				char *dname = r_bin_demangle (bf, "swift", method_name, 0, false);
+				if (dname) {
+					free (method_name);
+					method_name = dname;
+				}
 			} else {
 				method_name = r_str_newf ("%d", i);
 			}
@@ -1620,6 +1637,7 @@ static RList *MACH0_(parse_categories)(RBinFile *bf, const RSkipList *relocs, ob
 		if (par) {
 			size_t idx = par - klass->name;
 			char *super = strdup (klass->name);
+			// TODO: demangle name!!
 			super[idx++] = 0;
 			char *cpar = strchr (super + idx, ')');
 			if (cpar) {
