@@ -3,6 +3,7 @@
 #include <r_core.h>
 #include <r_vec.h>
 
+R_IPI void visual_refresh(RCore *core);
 static R_TH_LOCAL int mousemode = 0;
 static R_TH_LOCAL int disMode = 0;
 static R_TH_LOCAL int discroll = 0;
@@ -350,8 +351,7 @@ static void mini_RANode_print(const RAGraph *g, const RANode *n, int cur, bool d
 		if (cur) {
 			W (&MINIGRAPH_NODE_TEXT_CUR[delta_x]);
 			(void) G (-g->can->sx, -g->can->sy + 2);
-			snprintf (title, sizeof (title) - 1,
-				"[ %s ]", n->title);
+			snprintf (title, sizeof (title) - 1, "[ %s ]", n->title);
 			W (title);
 			if (discroll > 0) {
 				char *body = r_str_ansi_crop (n->body, 0, discroll, -1, -1);
@@ -1718,15 +1718,19 @@ static void place_original(RAGraph *g) {
 }
 
 static void aedge_free(AEdge *e) {
-	r_list_free (e->x);
-	r_list_free (e->y);
-	free (e);
+	if (e) {
+		r_list_free (e->x);
+		r_list_free (e->y);
+		free (e);
+	}
 }
 
 static void ranode_free(RANode *n) {
-	free (n->title);
-	free (n->body);
-	free (n);
+	if (n) {
+		free (n->title);
+		free (n->body);
+		free (n);
+	}
 }
 
 static void set_layer_gap(RAGraph *g) {
@@ -3576,18 +3580,28 @@ static int agraph_print(RAGraph *g, bool is_interactive, RCore *core, RAnalFunct
 		r_config_set_b (core->config, "asm.bytes", asm_bytes);
 		r_config_set_b (core->config, "asm.cmt.right", asm_cmt_right);
 	}
-	if (g->title && *g->title) {
-		g->can->sy ++;
+	if (R_STR_ISNOTEMPTY (g->title)) {
+		g->can->sy++;
 	}
 	agraph_print_edges (g);
 	agraph_print_nodes (g);
-	if (g->title && *g->title) {
-		g->can->sy --;
+	if (R_STR_ISNOTEMPTY (g->title)) {
+		g->can->sy--;
 	}
 	/* print the graph title */
 	(void) G (-g->can->sx, -g->can->sy);
 	if (!g->is_tiny) {
-		W (g->title);
+		int color = core? r_config_get_i (core->config, "scr.color"): 0;
+		if (color > 0) {
+			const char *kolor = core->cons->context->pal.prompt;
+			r_cons_gotoxy (0, 0);
+			r_cons_print (kolor?kolor: Color_WHITE);
+			r_cons_print (g->title);
+			r_cons_print (Color_RESET"\r");
+		} else {
+			W (g->title); // canvas write is always black/white
+		// 	r_cons_print (g->title);
+		}
 	}
 	if (is_interactive && g->title) {
 		int title_len = strlen (g->title);
@@ -3631,7 +3645,7 @@ static int agraph_print(RAGraph *g, bool is_interactive, RCore *core, RAnalFunct
 			agraph_print_nodes (g);
 			r_cons_canvas_print_region (g->can);
 			g->can = _can;
-			char *s = strdup (r_cons_singleton()->context->buffer);
+			char *s = strdup (r_cons_singleton ()->context->buffer);
 			r_cons_pop ();
 			cmd_agfb3 (core, s, w - 40, 2);
 			free (s);
@@ -4079,8 +4093,7 @@ static void visual_offset(RAGraph *g, RCore *core) {
 	core->cons->line->prompt_type = R_LINE_PROMPT_DEFAULT;
 }
 
-
-static void visual_find(RAGraph *g, RCore *core) {
+R_API void r_core_visual_find(RCore *core, RAGraph *g) {
 	int offset = 0;
 	int offset_max = 0;
 	int rows;
@@ -4094,7 +4107,7 @@ static void visual_find(RAGraph *g, RCore *core) {
 
 	while (1) {
 		r_cons_get_size (&rows);
-		r_cons_gotoxy (0, rows);
+		r_cons_gotoxy (0, rows - 1);
 		r_cons_flush ();
 		printf (Color_RESET);
 		r_cons_flush ();
@@ -4140,15 +4153,20 @@ find_next:
 
 		r_config_set_b (core->config, "asm.offset", asm_offset);
 		r_config_set_b (core->config, "asm.lines", asm_lines);
-
-		agraph_refresh (r_cons_singleton ()->event_data);
+		if (g) {
+			agraph_refresh (r_cons_singleton ()->event_data);
+		} else {
+			visual_refresh (core);
+		}
 
 		r_cons_clear_line (0);
 		r_cons_printf (Color_RESET);
 		if (addr > 0) {
-			r_cons_printf ("Found (%d/%d) \"%s\". Press 'n' for next, 'N' for prev, 'q' for quit, any other key to conitnue", offset+1, offset_max, line);
+			r_cons_gotoxy (0, 0);
+			r_cons_printf ("[find]> match '%s'", line);
+			R_LOG_INFO ("Found (%d/%d). Press 'n' for next, 'N' for prev, 'q' for quit, any other key to continue", offset+1, offset_max);
 		} else {
-			r_cons_printf ("Sentence \"%s\", not found. Press 'q' for quit, any other key to conitnue", buf);
+			R_LOG_ERROR ("Text '%s' not found. Press 'q' for quit, any other key to conitnue", buf);
 		}
 		r_cons_flush ();
 
@@ -4156,10 +4174,27 @@ find_next:
 
 		char c = r_cons_readchar ();
 		if (addr > 0) {
-			if (c == 'n') {
+			if (c == ';') {
+				char buf[256];
+				r_line_set_prompt ("[comment]> ");
+				if (r_cons_fgets (buf, sizeof (buf), 0, NULL) > 0) {
+					r_core_cmdf (core, "'CC %s", buf);
+				}
+				r_line_set_prompt ("[find]> ");
+				if (g) {
+					g->need_reload_nodes = true;
+				}
+			}
+			if (c == ':') {
+				core->cons->event_resize = (RConsEvent)agraph_set_need_reload_nodes;
+				r_core_visual_prompt_input (core);
+				r_cons_set_raw (true);
+				core->cons->event_resize = (RConsEvent)agraph_refresh_oneshot;
+			}
+			if (c == 'n' || c == 'j') {
 				goto find_next;
 			}
-			if (c == 'N') {
+			if (c == 'N' || c == 'k') {
 				offset -= 2;
 				if (offset < -1) {
 					offset = offset_max - 2;
@@ -4170,7 +4205,11 @@ find_next:
 		if (c == 'q') {
 			break;
 		}
-		agraph_refresh (r_cons_singleton ()->event_data);
+		if (g) {
+			agraph_refresh (r_cons_singleton ()->event_data);
+		} else {
+			visual_refresh (core);
+		}
 	}
 
 	free (core->cons->line->contents);
@@ -4180,7 +4219,6 @@ find_next:
 	r_config_set_b (core->config, "asm.offset", asm_offset);
 	r_config_set_b (core->config, "asm.lines", asm_lines);
 }
-
 
 static void goto_asmqjmps(RAGraph *g, RCore *core) {
 	const char *h = "[Fast goto call/jmp]> ";
@@ -4704,7 +4742,7 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 			break;
 		case '%':
 			showcursor (core, true);
-			visual_find (g, core);
+			r_core_visual_find (core, g);
 			showcursor (core, false);
 			break;
 		case 9: // tab

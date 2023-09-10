@@ -8,7 +8,7 @@ R_VEC_TYPE(RVecAnalRef, RAnalRef);
 #define NPF 5
 #define PIDX (R_ABS (core->visual.printidx % NPF))
 
-static void visual_refresh(RCore *core);
+R_IPI void visual_refresh(RCore *core);
 
 #define PROMPTSTR "> "
 
@@ -2738,7 +2738,18 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			}
 			break;
 		case '&':
-			rotateAsmBits (core);
+			// cache current disasm/hexdump, work in a canvas to freely scroll :?
+			if (core->print->cur_enabled) {
+				core->visual.autoblocksize = !core->visual.autoblocksize;
+				if (core->visual.autoblocksize) {
+					core->visual.obs = core->blocksize;
+				} else {
+					r_core_block_size (core, core->visual.obs);
+				}
+				r_cons_clear ();
+			} else {
+				rotateAsmBits (core);
+			}
 			break;
 		case 'a':
 		{
@@ -3465,14 +3476,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			if (core->print->cur_enabled) {
 				findPair (core);
 			} else {
-				/* do nothing? */
-				core->visual.autoblocksize = !core->visual.autoblocksize;
-				if (core->visual.autoblocksize) {
-					core->visual.obs = core->blocksize;
-				} else {
-					r_core_block_size (core, core->visual.obs);
-				}
-				r_cons_clear ();
+				r_core_visual_find (core, NULL);
 			}
 			break;
 		case 'w':
@@ -4297,7 +4301,7 @@ static void show_cursor(RCore *core) {
 	}
 }
 
-static void visual_refresh(RCore *core) {
+R_IPI void visual_refresh(RCore *core) {
 	r_return_if_fail (core);
 	char *cmd_str = NULL;
 	r_print_set_cursor (core->print, core->print->cur_enabled, core->print->ocur, core->print->cur);
