@@ -1422,10 +1422,9 @@ static void ds_show_refs(RDisasmState *ds) {
 			RAnalOp aop;
 			ut8 buf[12];
 			r_io_read_at (ds->core->io, ref->at, buf, sizeof (buf));
-			// R2_590 - check for return value and use it wisely
-			(void)r_anal_op (ds->core->anal, &aop, ref->at, buf, sizeof (buf), R_ARCH_OP_MASK_ALL);
-			if ((aop.type & R_ANAL_OP_TYPE_MASK) == R_ANAL_OP_TYPE_UCALL) {
-				RAnalFunction * fcn = r_anal_get_function_at (ds->core->anal, ref->addr);
+			int opsz = r_anal_op (ds->core->anal, &aop, ref->at, buf, sizeof (buf), R_ARCH_OP_MASK_BASIC);
+			if (opsz > 0 && (aop.type & R_ANAL_OP_TYPE_MASK) == R_ANAL_OP_TYPE_UCALL) {
+				RAnalFunction *fcn = r_anal_get_function_at (ds->core->anal, ref->addr);
 				ds_begin_comment (ds);
 				if (fcn) {
 					ds_comment (ds, true, "%s %s", ds->cmtoken, fcn->name);
@@ -6513,29 +6512,21 @@ toro:
 		}
 		ds->hint = r_core_hint_begin (core, ds->hint, ds->at);
 		ds->has_description = false;
-		// XXX copypasta from main disassembler function
-		// r_anal_get_fcn_in (core->anal, ds->at, R_ANAL_FCN_TYPE_NULL);
-		// R2_580 - remove this call, because ranalop give us the disasssembly now! this is doing work twice
 		r_anal_op_fini (&ds->analop);
-		int oret = r_anal_op (core->anal, &ds->analop, ds->at,
-			buf + addrbytes * i, nb_bytes - addrbytes * i,
-			R_ARCH_OP_MASK_ALL);
+		const size_t delta = addrbytes * i;
+		r_anal_op_init (&ds->analop);
+		const int oret = r_anal_op (core->anal, &ds->analop, ds->at,
+			buf + delta, nb_bytes - delta, R_ARCH_OP_MASK_ALL);
 		ret = oret;
 		ds->oplen = ds->analop.size;
-		if (ret < 1) {
+		if (ret > 0) {
 			ret = ds->oplen;
-#if 1
+			free (ds->opstr);
+			ds->opstr = strdup (ds->analop.mnemonic);
 		} else {
-			r_asm_set_pc (core->rasm, ds->at);
-			(void)r_asm_disassemble (core->rasm, &ds->asmop,
-				buf + addrbytes * i, nb_bytes - addrbytes * i);
-			const char *ns = r_asm_op_get_asm (&ds->asmop);
-			if (R_STR_ISNOTEMPTY (ns)) {
-				// eprintf ("NUCK YOUOOO (%s) => (%s)\n", ds->analop.mnemonic, ns);
-				free (ds->analop.mnemonic);
-				ds->analop.mnemonic = strdup (ns);
+			if (!ds->opstr) {
+				ds->opstr = strdup ("invalid");
 			}
-#endif
 		}
 		opsize = ds->oplen;
 		skip_bytes_flag = handleMidFlags (core, ds, true);
