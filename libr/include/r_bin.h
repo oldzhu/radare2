@@ -183,11 +183,6 @@ typedef enum {
 	R_BIN_RELOC_64 = 64
 } RBinRelocType;
 
-typedef enum {
-	R_BIN_TYPE_DEFAULT = 0,
-	R_BIN_TYPE_CORE = 1
-} RBinType;
-
 typedef struct r_bin_addr_t {
 	ut64 vaddr;
 	ut64 paddr;
@@ -561,7 +556,6 @@ typedef struct r_bin_plugin_t {
 	// TODO: R2_600 RBuffer* (*create)(RBin *bin, RBinCreateOptions *opt);
 	char* (*demangle)(const char *str);
 	char* (*regstate)(RBinFile *bf);
-	int (*file_type)(RBinFile *bf);
 	/* default value if not specified by user */
 	int minstrlen;
 	char strfilter;
