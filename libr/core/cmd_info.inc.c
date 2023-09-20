@@ -96,6 +96,28 @@ static void pair(const char *a, const char *b) {
 	r_cons_printf ("%s%s%s\n", a, ws, b);
 }
 
+
+static void classdump_keys(RCore *core, RBinObject *bo) {
+	const bool iova = r_config_get_b (core->config, "io.va");
+	RBinClass *k;
+	RBinField *f;
+	RBinSymbol *m;
+	RListIter *iter, *iter2;
+	r_list_foreach (bo->classes, iter, k) {
+		r_list_foreach (k->fields, iter2, f) {
+			const char *kind = r_bin_field_kindstr (f);
+			r_cons_printf ("klass.%s.field.%s.%s=0x%"PFMT64x"\n",
+					k->name, kind, f->name,
+					iova? f->vaddr: f->paddr);
+		}
+		r_list_foreach (k->methods, iter2, m) {
+			r_cons_printf ("klass.%s.method.%s.%s=0x%"PFMT64x"\n",
+					k->name, r_str_get (m->visibility_str), m->name,
+					iova? m->vaddr: m->paddr);
+		}
+	}
+}
+
 static bool demangle_internal(RCore *core, const char *lang, const char *s) {
 	char *res = NULL;
 	int type = r_bin_demangle_type (lang);
@@ -1390,7 +1412,7 @@ static int cmd_info(void *data, const char *input) {
 					}
 				}
 				goto done;
-			} else if (input[1] == ' ' || input[1] == '.' || input[1] == 's' || input[1] == 'q' || input[1] == 'j' || input[1] == 'l' || input[1] == 'c' || input[1] == '*') {
+			} else if (input[1] == ' ' || input[1] == 'k' || input[1] == '.' || input[1] == 's' || input[1] == 'q' || input[1] == 'j' || input[1] == 'l' || input[1] == 'c' || input[1] == '*') {
 				const bool iova = r_config_get_b (core->config, "io.va");
 				RList *objs = r_core_bin_files (core);
 				RListIter *objs_iter;
@@ -1450,7 +1472,7 @@ static int cmd_info(void *data, const char *input) {
 							case 'l':
 								r_list_foreach (cls->methods, iter2, sym) {
 									const char *comma = iter2->p? " ": "";
-									r_cons_printf ("%s0x%"PFMT64d, comma,
+									r_cons_printf ("%s0x%"PFMT64x, comma,
 										iova? sym->vaddr: sym->paddr);
 								}
 								r_cons_newline ();
@@ -1505,15 +1527,18 @@ static int cmd_info(void *data, const char *input) {
 									if (addr == 0 || addr == UT64_MAX) {
 										continue;
 									}
-									r_cons_printf ("0x%"PFMT64d" [%s] %s\n",
+									r_cons_printf ("0x%"PFMT64x" [%s] %s\n",
 										addr, cls->name, sym->name);
 								}
 							}
+						} else if (input[1] == 'k') { // "ick"
+							classdump_keys (core, obj);
+							goto done;
 						} else if (input[1] == 'l') { // "icl"
 							r_list_foreach (obj->classes, iter, cls) {
 								r_list_foreach (cls->methods, iter2, sym) {
 									const char *comma = iter2->p? " ": "";
-									r_cons_printf ("%s0x%"PFMT64d, comma,
+									r_cons_printf ("%s0x%"PFMT64x, comma,
 										iova? sym->vaddr: sym->paddr);
 								}
 								if (!r_list_empty (cls->methods)) {
@@ -1553,6 +1578,9 @@ static int cmd_info(void *data, const char *input) {
 							mode = R_MODE_CLASSDUMP;
 							if (input[2] == '*') {
 								mode |= R_MODE_RADARE;
+							} else if (input[2] == 'k') { // "icck"
+								classdump_keys (core, obj);
+								goto done;
 							}
 							RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (obj->classes));
 							input = " ";
