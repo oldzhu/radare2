@@ -3276,13 +3276,16 @@ out:
 }
 
 static bool bin_fields(RCore *r, PJ *pj, int mode, int va) {
-	RList *fields;
 	RListIter *iter;
 	RBinField *field;
 	int i = 0;
 	RBin *bin = r->bin;
-
-	if (!(fields = r_bin_get_fields (bin))) {
+	RBinObject *o = r_bin_cur_object (bin);
+	if (!o) {
+		return false;
+	}
+	RList *fields = o->fields;
+	if (!fields) {
 		if (IS_MODE_JSON (mode)) {
 			pj_o (pj);
 			pj_end (pj);
@@ -4815,7 +4818,7 @@ static bool r_core_bin_file_print(RCore *core, RBinFile *bf, PJ *pj, int mode) {
 R_API bool r_core_bin_list(RCore *core, int mode) {
 	// list all binfiles and there objects and there archs
 	RListIter *iter;
-	RBinFile *binfile = NULL; //, *cur_bf = r_bin_cur (core->bin) ;
+	RBinFile *binfile = NULL;
 	RBin *bin = core->bin;
 	const RList *binfiles = bin ? bin->binfiles: NULL;
 	if (!binfiles) {
@@ -4848,7 +4851,6 @@ R_API char *r_core_bin_method_flags_str(ut64 flags, int mode) {
 		if (!flags) {
 			goto out;
 		}
-
 		for (i = 0; i < 64; i++) {
 			ut64 flag = flags & (1ULL << i);
 			if (flag) {
@@ -4909,13 +4911,12 @@ out:
 
 R_API bool r_core_bin_rebase(RCore *core, ut64 baddr) {
 	r_return_val_if_fail (core && core->bin, false);
-	if (!core->bin->cur || baddr == UT64_MAX) {
-		return false;
+	if (core->bin->cur && baddr != UT64_MAX) {
+		RBinFile *bf = core->bin->cur;
+		bf->bo->baddr = baddr;
+		bf->bo->loadaddr = baddr;
+		r_bin_object_set_items (bf, bf->bo);
+		return true;
 	}
-	RBinFile *bf = core->bin->cur;
-	bf->bo->baddr = baddr;
-	bf->bo->loadaddr = baddr;
-	r_bin_object_set_items (bf, bf->bo);
-	return true;
+	return false;
 }
-

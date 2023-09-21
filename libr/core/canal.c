@@ -1337,7 +1337,8 @@ static int hint_node_cmp(const void *incoming, const RBNode *in_tree, void *user
 	ut64 ta = container_of (in_tree, const HintNode, rb)->addr;
 	if (ia < ta) {
 		return -1;
-	} else if (ia > ta) {
+	}
+	if (ia > ta) {
 		return 1;
 	}
 	return 0;
@@ -1357,26 +1358,26 @@ static bool print_addr_hint_cb(ut64 addr, const RVector/*<const RAnalAddrHintRec
 
 static bool print_arch_hint_cb(ut64 addr, R_NULLABLE const char *arch, void *user) {
 	HintNode *node = R_NEW0 (HintNode);
-	if (!node) {
-		return false;
+	if (node) {
+		node->addr = addr;
+		node->type = HINT_NODE_ARCH;
+		node->arch = arch;
+		r_rbtree_insert (user, &addr, &node->rb, hint_node_cmp, NULL);
+		return true;
 	}
-	node->addr = addr;
-	node->type = HINT_NODE_ARCH;
-	node->arch = arch;
-	r_rbtree_insert (user, &addr, &node->rb, hint_node_cmp, NULL);
-	return true;
+	return false;
 }
 
 static bool print_bits_hint_cb(ut64 addr, int bits, void *user) {
 	HintNode *node = R_NEW0 (HintNode);
-	if (!node) {
-		return false;
+	if (node) {
+		node->addr = addr;
+		node->type = HINT_NODE_BITS;
+		node->bits = bits;
+		r_rbtree_insert (user, &addr, &node->rb, hint_node_cmp, NULL);
+		return true;
 	}
-	node->addr = addr;
-	node->type = HINT_NODE_BITS;
-	node->bits = bits;
-	r_rbtree_insert (user, &addr, &node->rb, hint_node_cmp, NULL);
-	return true;
+	return false;
 }
 
 static void print_hint_tree(RBTree tree, int mode) {
@@ -1447,53 +1448,45 @@ R_API void r_core_anal_hint_print(RAnal* a, ut64 addr, int mode) {
 }
 
 static char *core_anal_graph_label(RCore *core, RAnalBlock *bb, int opts) {
-	int is_html = r_cons_context ()->is_html;
-	int is_json = opts & R_CORE_ANAL_JSON;
+	const bool is_html = r_cons_context ()->is_html;
+	const bool is_json = opts & R_CORE_ANAL_JSON;
 	char cmd[1024], file[1024], *cmdstr = NULL, *filestr = NULL, *str = NULL;
-	int line = 0, oline = 0, colu = 0, idx = 0;
+	int line = 0, oline = 0, colu = 0;
 	ut64 at;
 
 	if (opts & R_CORE_ANAL_GRAPHLINES) {
-		for (at = bb->addr; at < bb->addr + bb->size; at += 2) {
+		RStrBuf *sb = r_strbuf_new ("");
+		const ut64 bb_end = bb->addr + bb->size;
+		for (at = bb->addr; at < bb_end; at += 2) {
 			r_bin_addr2line (core->bin, at, file, sizeof (file) - 1, &line, &colu);
 			if (line != 0 && line != oline && strcmp (file, "??")) {
 				filestr = r_file_slurp_line (file, line, 0);
 				if (filestr) {
-					int flen = strlen (filestr);
-					if (idx < 0 || ST32_ADD_OVFCHK (idx, flen + 8)) {
-						R_LOG_WARN ("integer overflow detected");
-						break;
-					}
-					cmdstr = realloc (cmdstr, idx + flen + 8);
-					memcpy (cmdstr + idx, filestr, flen);
-					idx += flen;
+					r_strbuf_append (sb, filestr);
 					if (is_json) {
-						strcpy (cmdstr + idx, "\\n");
-						idx += 2;
+						r_strbuf_append (sb, "\\n");
 					} else if (is_html) {
-						strcpy (cmdstr + idx, "<br />");
-						idx += 6;
+						r_strbuf_append (sb, "<br />");
 					} else {
-						strcpy (cmdstr + idx, "\\l");
-						idx += 2;
+						r_strbuf_append (sb, "\\l");
 					}
 					free (filestr);
 				}
 			}
 			oline = line;
 		}
+		cmdstr = r_strbuf_drain (sb);
 	} else if (opts & R_CORE_ANAL_STAR) {
-		snprintf (cmd, sizeof (cmd), "pdb %"PFMT64u" @ 0x%08" PFMT64x, bb->size, bb->addr);
-		str = r_core_cmd_str (core, cmd);
+		str = r_core_cmd_strf (core, "pdb %"PFMT64u" @ 0x%08" PFMT64x, bb->size, bb->addr);
 	} else if (opts & R_CORE_ANAL_GRAPHBODY) {
 		const bool scrColor = r_config_get (core->config, "scr.color");
-		const bool scrUtf8 = r_config_get (core->config, "scr.utf8");
+		const bool scrUtf8 = r_config_get_b (core->config, "scr.utf8");
 		r_config_set_i (core->config, "scr.color", COLOR_MODE_DISABLED);
 		r_config_set_b (core->config, "scr.utf8", false);
 		snprintf (cmd, sizeof (cmd), "pD %"PFMT64u" @ 0x%08" PFMT64x, bb->size, bb->addr);
 		cmdstr = r_core_cmd_str (core, cmd);
 		r_config_set_i (core->config, "scr.color", scrColor);
-		r_config_set_i (core->config, "scr.utf8", scrUtf8);
+		r_config_set_b (core->config, "scr.utf8", scrUtf8);
 	}
 	if (cmdstr) {
 		str = r_str_escape_dot (cmdstr);
@@ -1841,15 +1834,15 @@ static int core_anal_graph_construct_nodes(RCore *core, RAnalFunction *fcn, int 
 				}
 			} else {
 				if (is_html) {
-						nodes++;
-						r_cons_printf ("<p class=\"block draggable\" style=\""
-												"top: %dpx; left: %dpx; width: 400px;\" id=\""
-												"_0x%08"PFMT64x"\">\n%s</p>\n",
-												top, left, bbi->addr, str);
-						left = left? 0: 600;
-						if (!left) {
-							top += 250;
-						}
+					nodes++;
+					r_cons_printf ("<p class=\"block draggable\" style=\""
+							"top: %dpx; left: %dpx; width: 400px;\" id=\""
+							"_0x%08"PFMT64x"\">\n%s</p>\n",
+							top, left, bbi->addr, str);
+					left = left? 0: 600;
+					if (!left) {
+						top += 250;
+					}
 				} else if (!is_json && !is_keva) {
 					bool current = r_anal_block_contains (bbi, core->offset);
 					const char *label_color = bbi->traced
@@ -1861,14 +1854,14 @@ static int core_anal_graph_construct_nodes(RCore *core, RAnalFunction *fcn, int 
 					if ((current && color_current) || label_color == pal_traced) {
 						fill_color = r_str_newf ("fillcolor=\"%s\", ", pal_traced);
 					} else {
-						fill_color = r_str_newf ("fontcolor=\"%s\"", label_color);
+						fill_color = r_str_newf ("fontcolor=\"%s\", ", label_color);
 					}
 					nodes++;
 					if (is_star) {
 						char *title = get_title (bbi->addr);
 						char *body_b64 = r_base64_encode_dyn (str, -1);
 						int color = (bbi && bbi->diff) ? bbi->diff->type : 0;
-						if (!title  || !body_b64) {
+						if (!title || !body_b64) {
 								free (body_b64);
 								free (title);
 								return false;
@@ -1878,12 +1871,20 @@ static int core_anal_graph_construct_nodes(RCore *core, RAnalFunction *fcn, int 
 						free (body_b64);
 						free (title);
 					} else {
+						if (R_STR_ISEMPTY (str)) {
 						r_cons_printf ("\t\"0x%08"PFMT64x"\" ["
 								"URL=\"%s/0x%08"PFMT64x"\", "
-								"%sfontname=\"%s\","
+								"%sfontname=\"%s\"]\n",
+								bbi->addr, fcn->name, bbi->addr,
+								fill_color, font);
+						} else {
+						r_cons_printf ("\t\"0x%08"PFMT64x"\" ["
+								"URL=\"%s/0x%08"PFMT64x"\", "
+								"%sfontname=\"%s\", "
 								"label=\"%s\"]\n",
 								bbi->addr, fcn->name, bbi->addr,
 								fill_color, font, str);
+						}
 					}
 					free (fill_color);
 				}
@@ -1895,8 +1896,8 @@ static int core_anal_graph_construct_nodes(RCore *core, RAnalFunction *fcn, int 
 }
 
 static int core_anal_graph_nodes(RCore *core, RAnalFunction *fcn, int opts, PJ *pj) {
-	int is_json = opts & R_CORE_ANAL_JSON;
-	int is_keva = opts & R_CORE_ANAL_KEYVALUE;
+	const bool is_json = opts & R_CORE_ANAL_JSON;
+	const bool is_keva = opts & R_CORE_ANAL_KEYVALUE;
 	int nodes = 0;
 	Sdb *DB = NULL;
 	char *pal_jump = palColorFor ("graph.true");
@@ -1906,13 +1907,8 @@ static int core_anal_graph_nodes(RCore *core, RAnalFunction *fcn, int opts, PJ *
 	char *pal_traced = palColorFor ("graph.traced");
 	char *pal_box4 = palColorFor ("graph.box4");
 	if (!fcn || !fcn->bbs) {
-		free (pal_jump);
-		free (pal_fail);
-		free (pal_trfa);
-		free (pal_curr);
-		free (pal_traced);
-		free (pal_box4);
-		return -1;
+		nodes = -1;
+		goto fin;
 	}
 
 	if (is_keva) {
@@ -1955,6 +1951,7 @@ static int core_anal_graph_nodes(RCore *core, RAnalFunction *fcn, int opts, PJ *
 		pj_end (pj);
 		pj_end (pj);
 	}
+fin:
 	free (pal_jump);
 	free (pal_fail);
 	free (pal_trfa);
@@ -2714,9 +2711,9 @@ static int fcnlist_gather_metadata(RAnal *anal, RList *fcns) {
 }
 
 R_API char *r_core_anal_fcn_name(RCore *core, RAnalFunction *fcn) {
-	bool demangle = r_config_get_i (core->config, "bin.demangle");
+	bool demangle = r_config_get_b (core->config, "bin.demangle");
 	const char *lang = demangle ? r_config_get (core->config, "bin.lang") : NULL;
-	bool keep_lib = r_config_get_i (core->config, "bin.demangle.libs");
+	bool keep_lib = r_config_get_b (core->config, "bin.demangle.libs");
 	char *name = strdup (r_str_get (fcn->name));
 	if (demangle) {
 		char *tmp = r_bin_demangle (core->bin->cur, lang, name, fcn->addr, keep_lib);
@@ -2827,28 +2824,21 @@ static void __fcn_print_default(RCore *core, RAnalFunction *fcn, bool quiet) {
 	if (quiet) {
 		r_cons_printf ("0x%08"PFMT64x" ", fcn->addr);
 	} else {
-#if 1
+		const bool use_colors = core->print->flags & R_PRINT_FLAGS_COLOR;
 		char *name = r_core_anal_fcn_name (core, fcn);
 		ut64 realsize = r_anal_function_realsize (fcn);
-		r_cons_printf ("0x%08"PFMT64x" %4d %6"PFMT64d" %s\n",
-				fcn->addr, r_list_length (fcn->bbs), realsize, name);
-		free (name);
-#else
-		// R2_590 -- trace color functionlisting
-		char *name = r_core_anal_fcn_name (core, fcn);
-		ut64 realsize = r_anal_function_realsize (fcn);
-		RAnalBlock *firstBlock = r_list_first (fcn->bbs);
-		char *color = firstBlock? r_cons_rgb_str (NULL, 0, &firstBlock->color): "";
-		int coverage = r_anal_function_coverage (fcn);
-		if (firstBlock->traced) {
-			color = strdup (Color_RED);
+		if (use_colors) {
+			RAnalBlock *firstBlock = r_list_first (fcn->bbs);
+			char *color = firstBlock? r_cons_rgb_str (NULL, 0, &firstBlock->color): "";
+			r_cons_printf ("%s0x%08"PFMT64x" %4d %6"PFMT64d" %s%s\n",
+					color, fcn->addr, r_list_length (fcn->bbs),
+					realsize, name, Color_RESET);
+			free (color);
+		} else {
+			r_cons_printf ("0x%08"PFMT64x" %4d %6"PFMT64d" %s\n",
+					fcn->addr, r_list_length (fcn->bbs), realsize, name);
 		}
-		r_cons_printf ("%s0x%08"PFMT64x" %4d cov=%d%% %6"PFMT64d" %s%s\n",
-				color, fcn->addr, r_list_length (fcn->bbs),
-				coverage, realsize, name, Color_RESET);
-		free (color);
 		free (name);
-#endif
 	}
 }
 

@@ -316,6 +316,7 @@ R_API void r_bin_import_fini(RBinImport *sym);
 R_VEC_TYPE_WITH_FINI (RVecRBinImport, RBinImport, r_bin_import_fini);
 R_VEC_TYPE_WITH_FINI (RVecRBinSymbol, RBinSymbol, r_bin_symbol_fini);
 R_VEC_TYPE(RVecRBinSection, RBinSection);
+R_VEC_TYPE(RVecRBinEntry, RBinSymbol);
 
 typedef struct r_bin_object_t {
 	ut64 baddr;
@@ -331,6 +332,7 @@ typedef struct r_bin_object_t {
 	RVecRBinImport imports_vec;
 	RVecRBinSymbol symbols_vec;
 	RVecRBinSection sections_vec;
+	RVecRBinEntry entries_vec;
 	RList/*<??>*/ *entries;
 	RList/*<??>*/ *fields;
 	RList/*<??>*/ *libs;
@@ -567,7 +569,7 @@ typedef void (*RBinSymbollCallback)(RBinObject *obj, void *symbol);
 
 typedef struct r_bin_class_t {
 	char *name;
-	// TODO: char *module;
+	// TODO: char *module; // namespace
 	RList *super; // list of char*
 	char *visibility_str; // XXX only used by java
 	int index;
@@ -750,7 +752,6 @@ R_API RList *r_bin_dump_strings(RBinFile *a, int min, int raw);
 
 // use RBinFile instead
 R_API const RList *r_bin_get_entries(RBin *bin);
-R_API RList *r_bin_get_fields(RBin *bin);
 R_API const RList *r_bin_get_imports(RBin *bin);
 R_API RList *r_bin_get_libs(RBin *bin);
 R_API RRBTree *r_bin_patch_relocs(RBinFile *bin);
