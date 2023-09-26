@@ -137,35 +137,34 @@ HAVE_LIB_GMP = 0 ;
 
 
 (( openssl is used for https:// in rsocket and crypto/hash ))
-CHKLIB ssl
-PKGCFG SSL_CFLAGS SSL_LDFLAGS openssl
-IFNOTNULL SSL_LDFLAGS {
-	HAVE_OPENSSL = 1 ;
-}
-
 ARG_WITH WANT_SSL ssl build with (Open|Boring|..)SSL if possible ;
-IFAND WANT_SSL HAVE_OPENSSL {
-	HAVE_OPENSSL = 1 ;
-}{
+ARG_WITH WANT_SSL_CRYPTO ssl-crypto build crypto code with libssl ;
+IFNOT WANT_SSL {
 	HAVE_OPENSSL = 0 ;
 	SSL_CFLAGS = "" ;
 	SSL_LDFLAGS = "" ;
-}
-IFNULL SSL_LDFLAGS {
-	IFNOT HAVE_LIB_SSL {
-		HAVE_OPENSSL = 0 ;
+}{
+	CHKLIB ssl
+	PKGCFG SSL_CFLAGS SSL_LDFLAGS openssl
+	IFNOTNULL SSL_LDFLAGS {
+		HAVE_OPENSSL = 1 ;
+	}
+
+	IFNULL SSL_LDFLAGS {
+		IFNOT HAVE_LIB_SSL {
+			HAVE_OPENSSL = 0 ;
+		}{
+			SSL_LDFLAGS = -lssl ;
+		}
+	}
+	IFAND WANT_SSL_CRYPTO HAVE_OPENSSL {
+		WANT_SSL_CRYPTO = 1 ;
 	}{
-		SSL_LDFLAGS = -lssl ;
+		WANT_SSL_CRYPTO = 0 ;
 	}
 }
-ARG_WITH WANT_SSL_CRYPTO ssl-crypto build crypto code with libssl ;
-IFAND WANT_SSL_CRYPTO HAVE_OPENSSL {
-	WANT_SSL_CRYPTO = 1 ;
-}{
-	WANT_SSL_CRYPTO = 0 ;
-}
 
-ARG_WITH WANT_LIBUV libuv disable libuv dependency ;
+ARG_WITH WANT_LIBUV libuv use libuv if available ;
 CHKVER libuv 1.0.0
 IF HAVE_LIBUV_VERSION_1_0_0 {
 	PKGCFG LIBUV_CFLAGS LIBUV_LDFLAGS libuv
