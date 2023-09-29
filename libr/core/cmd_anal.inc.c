@@ -8295,6 +8295,9 @@ static int compare_mnemonics(const char *a, const char *b) {
 	if (!a || !b) {
 		return 0;
 	}
+	if (strstr (b, "invalid")) {
+		return -1;
+	}
 	RList *la = mnemonic_tolist (a);
 	RList *lb = mnemonic_tolist (b);
 	int i = 0;
@@ -8322,6 +8325,19 @@ static int intsort(const void *a, const void *b) {
 		return 0;
 	}
 	return -1;
+}
+
+static const char guess_arg(int n, const char *arg) {
+	if (n == 0) {
+		return 'o';
+	}
+	if (*arg == '-' || strstr (arg, "0x")) {
+		return 'i';
+	}
+	if (*arg == '[') {
+		return 'm';
+	}
+	return 'r';
 }
 
 #define colors_last 6
@@ -8368,6 +8384,7 @@ static void cmd_anal_opcode_bits(RCore *core, const char *arg, int mode) {
 		pj_kn (pj, "size", analop.size);
 		pj_ko (pj, "bytes");
 	}
+	int numbers[8] = {0};
 	RStrBuf *sb = r_strbuf_new ("");
 	for (i = 0; i < last; i++) {
 		ut8 *byte = buf + i;
@@ -8393,11 +8410,21 @@ static void cmd_anal_opcode_bits(RCore *core, const char *arg, int mode) {
 			// r_cons_printf ("%d %s\n%d %s\n\n", (i*8) + j, analop.mnemonic, (i*8)+j, op.mnemonic);
 			int word_change = compare_mnemonics (analop.mnemonic, op.mnemonic);
 			r_anal_op_fini (&op);
-			if (pj) {
-				pj_n (pj, word_change);
-				r_list_append (args[word_change], (void *)(size_t)((i * 8) + 7 - j));
+			if (word_change < 0) {
+				r_strbuf_append (sb, "x");
+				if (pj) {
+					pj_n (pj, word_change);
+					// r_list_append (args[word_change], (void *)(size_t)((i * 8) + 7 - j));
+				}
+			} else {
+				numbers[word_change] <<= 1;
+				numbers[word_change] |= bit;
+				r_strbuf_appendf (sb, "%d", word_change);
+				if (pj) {
+					pj_n (pj, word_change);
+					r_list_append (args[word_change], (void *)(size_t)((i * 8) + 7 - j));
+				}
 			}
-			r_strbuf_appendf (sb, "%d", word_change);
 		}
 		if (pj) {
 			pj_end (pj);
@@ -8501,7 +8528,7 @@ static void cmd_anal_opcode_bits(RCore *core, const char *arg, int mode) {
 #if 0
 			r_cons_printf ("  %s\n ", analop.mnemonic);
 #else
-			r_cons_printf (" ");
+			r_cons_printf ("     ");
 			RListIter *iter;
 			const char *arg;
 			int idx = 0;
@@ -8517,7 +8544,12 @@ static void cmd_anal_opcode_bits(RCore *core, const char *arg, int mode) {
 			for (i = 0; i < rows; i++) {
 				int iref = row[i].idx - 1;
 				int ref = '0' + iref;
-				const char *word = r_list_get_n (args, iref);
+				char *word = r_list_get_n (args, iref);
+				int lc = strlen (word);
+				if (lc > 0 && word[lc - 1] == 1) {
+					// XXX for some reason some words end with 1 instead of 0
+					word[lc - 1] = 0;
+				}
 				const char *color = row[i].color;
 				bool bar = false;
 				for (p = s; *p; p++) {
@@ -8532,7 +8564,10 @@ static void cmd_anal_opcode_bits(RCore *core, const char *arg, int mode) {
 						}
 					}
 				}
-				r_cons_printf ("%s____%s %d %s%s%s\n ", color, Color_RESET, iref, color, word, Color_RESET);
+				const char guess = guess_arg (iref, word);
+				const char *indent = r_str_pad (' ', 12 - strlen (word));
+				r_cons_printf ("%s__%s %d%c %s%s%s %s= 0%o\n ",
+					color, Color_RESET, iref, guess, color, word, Color_RESET, indent, numbers[i]);
 			}
 			r_list_free (args);
 			free (s);
