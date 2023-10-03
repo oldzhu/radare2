@@ -38,6 +38,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// #if __STDC_VERSION__ < 201112L
+// This requires C11
+#undef static_assert
+#define static_assert(x,y)
+// #endif
+
 /// cwisstable/internal/base.h /////////////////////////////////////////////////
 /// Feature detection and basic helper macros.
 
@@ -966,7 +972,7 @@ static inline size_t RandomSeed(void) {
 	size_t value = counter++;
 #else
 	static CWISS_ATOMIC_T(size_t) counter;
-	size_t value = CWISS_ATOMIC_INC(counter);
+	size_t value = CWISS_ATOMIC_INC (counter);
 #endif
 	return value ^ ((size_t)&counter);
 }
