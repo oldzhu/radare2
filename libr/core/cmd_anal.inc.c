@@ -247,8 +247,18 @@ static RCoreHelpMessage help_msg_ab = {
 	"abl", "[?] [.-cqj]", "list all basic blocks",
 	"abo", "", "list opcode offsets of current basic block",
 	"abp", "[?] [addr] [num]", "follow basic blocks paths from current offset to addr",
-	"abt", "[tag] ([color])", "trace tags are bitfields, 0 means nontraced, withuot arguments show current value",
+	"abt", "[tag] ([color])", "no args = show current trace tag, otherwise set the color",
 	"abx", " [hexpair-bytes]", "analyze N bytes",
+	NULL
+};
+
+static RCoreHelpMessage help_msg_abt = {
+	"Usage:", "abt", "# list and manage stored backtraces",
+	"abt", "", "list backtraces for this function",
+	"abt*", "", "dump as r2 commands",
+	"abt+", "[addr] [bt0,bt1,bt2,..]", "add a new backtrace",
+	"abt-", "[addr]", "delete all backtraces from given bt",
+	"abtn", "[tag] ([color])", "bb trace tag number: set color and tagname",
 	NULL
 };
 
@@ -4251,14 +4261,19 @@ static void cmd_afbc(RCore *core, const char *input) {
 			addr = r_num_math (core->num, space);
 		}
 		RColor color = {0};
+		bool valid_color = false;
 		if (del) {
 			ptr--;
 		} else {
-			(void)r_cons_pal_parse (ptr, &color);
+			char *ansi = r_cons_pal_parse (ptr, &color);
+			valid_color = ansi != NULL;
+			free (ansi);
 		}
-		RAnalBlock *bb = r_anal_get_block_at (core->anal, addr);
-		if (bb) {
-			bb->color = color;
+		if (valid_color) {
+			RAnalBlock *bb = r_anal_get_block_at (core->anal, addr);
+			if (bb) {
+				bb->color = color;
+			}
 		}
 	}
 	free (ptr);
@@ -5591,7 +5606,7 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 	core->dbg->reg = core->anal->reg;
 	const char *use_color;
 	int use_colors = r_config_get_i (core->config, "scr.color");
-	if (use_colors) {
+	if (use_colors != 0) {
 #undef ConsP
 #define ConsP(x) (core->cons && core->cons->context->pal.x)? core->cons->context->pal.x
 		use_color = ConsP (creg) : Color_BWHITE;
@@ -5617,8 +5632,7 @@ static void __anal_reg_list(RCore *core, int type, int bits, char mode) {
 		}
 	}
 	/* workaround for 6502 and avr*/
-	if ((!strcmp (arch_name, "6502") && bits == 8)
-		|| (!strcmp (arch_name, "avr") && bits == 8)) {
+	if (bits == 8 && (!strcmp (arch_name, "6502") || !strcmp (arch_name, "avr"))) {
 		if (mode == 'j') {
 			mode2 = 'J';
 			pj_o (pj);
@@ -10619,8 +10633,11 @@ static void cmd_agraph_node(RCore *core, const char *input) {
 			body = r_str_append (body, "\n");
 			if (n_args > 2) {
 				RColor kolor = {0};
-				(void)r_cons_pal_parse (args[2], &kolor);
-				color = r_cons_rgb_str (NULL, -1, &kolor);
+				char *akolor = r_cons_pal_parse (args[2], &kolor);
+				free (akolor);
+				if (akolor != NULL) {
+					color = r_cons_rgb_str (NULL, -1, &kolor);
+				}
 			}
 		} else {
 			body = strdup ("");
@@ -12155,7 +12172,7 @@ beach:
 	seti ("search.align", o_align);
 }
 
-static void cmd_anal_abt(RCore *core, const char *input) {
+static void cmd_anal_abtn(RCore *core, const char *input) {
 	RAnalBlock *bb = r_anal_get_block_at (core->anal, core->offset);
 	if (bb) {
 		if (R_STR_ISEMPTY (input)) {
@@ -12175,7 +12192,7 @@ static void cmd_anal_abt(RCore *core, const char *input) {
 					core->anal->tracetagcolors[tag] = k;
 					free (s);
 				} else {
-					R_LOG_ERROR ("Invalid error");
+					R_LOG_ERROR ("Invalid color '%s'", arg + 1);
 				}
 			} else {
 				bb->traced = tag;
@@ -12183,6 +12200,53 @@ static void cmd_anal_abt(RCore *core, const char *input) {
 		}
 	} else {
 		R_LOG_ERROR ("Cannot find any basic block here");
+	}
+}
+
+static void cmd_anal_abt(RCore *core, const char *input) {
+	switch (*input) {
+	case '?':
+		r_core_cmd_help (core, help_msg_abt);
+		break;
+	case 'n':
+		cmd_anal_abtn (core, input);
+		break;
+	case '*':
+	case 'j':
+	case 0:
+		r_anal_backtrace_list (core->anal, core->offset, *input);
+		break;
+	case '+':
+		{
+			char *arg_addr = strdup (input);
+			char *arg_bt = r_str_after (arg_addr, ' ');
+			ut64 addr = r_num_math (core->num, arg_addr);
+			RVecStringSlice *ss = r_str_split_vec (arg_bt, ",", 0);
+			RVecBacktrace *bt = RVecBacktrace_new ();
+			RStringSlice *slice;
+			R_VEC_FOREACH (ss, slice) {
+				char *s = r_str_slice (arg_bt, *slice);
+				ut64 n = r_num_math (core->num, s);
+				free (s);
+				RVecBacktrace_push_back (bt, &n);
+			}
+			r_anal_backtrace_add (core->anal, addr, bt);
+			RVecStringSlice_free (ss);
+			free (arg_addr);
+		}
+		break;
+	case '-':
+		{
+			ut64 n = r_num_math (core->num, input + 1);
+			if (!n) {
+				n = core->offset;
+			}
+			r_anal_backtrace_del (core->anal, n);
+		}
+		break;
+	default:
+		r_core_cmd_help (core, help_msg_abt);
+		break;
 	}
 }
 
@@ -12831,7 +12895,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 		if (strchr (input, '?')) {
 			r_core_cmd_help (core, help_msg_aaa);
 		} else {
-			r_str_var (asm_arch, r_config_get (core->config, "asm.arch"));
+			r_str_var (asm_arch, 32, r_config_get (core->config, "asm.arch"));
 			bool didAap = false;
 			char *dh_orig = NULL;
 			if (r_str_startswith (input, "aaaaa")) {
