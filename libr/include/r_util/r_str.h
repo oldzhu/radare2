@@ -3,6 +3,7 @@
 
 #include "r_str_util.h"
 #include <r_list.h>
+#include <r_vec.h>
 #include <r_types_base.h>
 #include <stdarg.h>
 #include <wchar.h>
@@ -29,12 +30,26 @@ typedef struct {
 	bool weak;
 } RString;
 
+// string split using rvec
+typedef struct {
+	ut16 from;
+	ut16 to;
+} RStringSlice;
+
+R_VEC_TYPE (RVecStringSlice, RStringSlice);
+
+
 typedef int (*RStrRangeCallback) (void *, int);
 
 // can be replaced with RString
 #define r_strf_buffer(s) char strbuf[s]
 #define r_strf_var(n,s, f, ...) char n[s]; snprintf (n, s, f, __VA_ARGS__);
-#define r_strf(s,...) (snprintf (strbuf, sizeof (strbuf), s, __VA_ARGS__)?strbuf: strbuf)
+#define r_strf(s,...) (snprintf (strbuf, sizeof (strbuf), s, __VA_ARGS__)? strbuf: strbuf)
+#ifdef _MSC_VER
+#define r_str_var(n, s) char n[64]; r_str_ncpy (n, s, 64);
+#else
+#define r_str_var(n, s) const size_t n##_len = strlen (s) + 1; char n[n##_len]; strncpy (n, s, n##_len);
+#endif
 
 typedef struct r_charset_rune_t {
 	ut8 *ch;
@@ -104,6 +119,8 @@ R_API const char *r_str_firstbut(const char *s, char ch, const char *but);
 R_API const char *r_str_firstbut_escape(const char *s, char ch, const char *but);
 R_API const char *r_str_lastbut(const char *s, char ch, const char *but);
 R_API int r_str_split(char *str, char ch);
+
+R_API RVecStringSlice *r_str_split_vec(const char *str, const char *c, int n);
 R_API RList *r_str_split_list(char *str, const char *c, int n);
 R_API RList *r_str_split_duplist(const char *str, const char *c, bool trim);
 R_API size_t *r_str_split_lines(char *str, size_t *count);

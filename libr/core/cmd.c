@@ -4281,7 +4281,7 @@ escape_pipe:
 	/* pipe console to file */
 	ptr = (char *)r_str_firstbut (cmd, '>', "\"");
 	// TODO honor `
-	if (ptr + 2 > cmd) {
+	if (ptr != NULL && ptr + 2 > cmd) {
 		// Handle ~<>
 		char *prev = ptr - 2;
 		if (r_str_startswith (prev, "~<>")) {
