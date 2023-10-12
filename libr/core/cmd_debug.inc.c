@@ -323,6 +323,7 @@ static RCoreHelpMessage help_msg_do = {
 static RCoreHelpMessage help_msg_dp = {
 	"Usage:", "dp", " # Process commands",
 	"dp", "", "list current pid and children",
+	"dp", "q", "same as dp. just show the current process id",
 	"dp", " <pid>", "list children of pid",
 	"dpj", " <pid>", "list children of pid in JSON format",
 	"dpl", "", "list all attachable pids",
@@ -336,7 +337,7 @@ static RCoreHelpMessage help_msg_dp = {
 	"dpf", "", "attach to pid like file fd // HACK",
 	"dpk", " <pid> [<signal>]", "send signal to process (default 0)",
 	"dpn", "", "create new process (fork)",
-	"dpt", "", "list threads of current pid",
+	"dpt", "[?][j]", "list threads of current pid",
 	"dpt", " <pid>", "list threads of process",
 	"dpt.", "", "show current thread id",
 	"dptj", "", "list threads of current pid in JSON format",
@@ -1121,7 +1122,7 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 			break;
 		case '?': // "dpt?"
 		default:
-			r_core_cmd_help (core, help_msg_dp);
+			r_core_cmd_help_match (core, help_msg_dp, "dpt", false);
 			break;
 		}
 		break;
@@ -1161,6 +1162,10 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 			break;
 		}
 		break;
+	case '.':
+	case 'q':
+		r_cons_printf ("%d\n", core->dbg->pid);
+		break;
 	case 'j': // "dpj"
 		switch (input[2]) {
 		case '\0': // "dpj"
@@ -1179,6 +1184,8 @@ static void cmd_debug_pid(RCore *core, const char *input) {
 			if (exe) {
 				r_cons_println (exe);
 				free (exe);
+			} else {
+				r_core_cmd0 (core, "o.");
 			}
 		}
 		break;

@@ -17,32 +17,45 @@ typedef struct {
 	const char *name;
 } SwiftType;
 
+/* basic types */
 static const SwiftType types[] = {
-	/* basic types */
-	{ "Sb", "Bool" },
-	{ "SS", "Swift.String" },
+	{ "Bi1", "Builtin.Int1" },
+	{ "Bb", "Builtin.BridgeObject" },
+	{ "BB", "Builtin.UnsafeValueBuffer" },
+	{ "Bo", "Builtin.NativeObject" },
+	{ "BO", "Builtin.UnknownObject" },
+	{ "Bp", "Builtin.RawPointer" },
+	{ "Bt", "Builtin.SILToken" },
+	{ "Bw", "Builtin.Word" },
 	{ "FS", "String" },
 	{ "GV", "mutableAddressor" },
+	{ "Sa", "Array" },
+	{ "Sb", "Bool" },
+	{ "SC", "Syntesized" },
+	{ "Sc", "UnicodeScalar" },
+	{ "Sd", "Double" },
+	{ "Sf", "Float" },
+	{ "Si", "Swift.Int" },
+	{ "Sp", "UnsafeMutablePointer" },
+	{ "SP", "UnsafePointer" },
+	{ "SQ", "ImplicitlyUnwrappedOptional" },
+	{ "Sq", "Optional" },
+	{ "SR", "UnsafeBufferPointer" },
+	{ "Sr", "UnsafeMutableBufferPointer" },
+	{ "So", "ObjC.Symbol" },
 	{ "Ss", "generic" },
+	{ "SS", "Swift.String" },
+	{ "Su", "UInt" },
+	{ "Sv", "UnsafeMutableRawPointer" },
+	{ "SV", "UnsafeRawPointer" },
 	{ "S_", "Generic" },
 	{ "TF", "GenericSpec" },
 	{ "Ts", "String" },
-	{ "Sa", "Array" },
-	{ "Si", "Swift.Int" },
-	{ "Sf", "Float" },
-	{ "Sb", "Bool" },
-	{ "Su", "UInt" },
-	{ "SQ", "ImplicitlyUnwrappedOptional" },
-	{ "Sc", "UnicodeScalar" },
-	{ "Sd", "Double" },
-	{ "Bi1", "Builtin.Int1" },
-	{ "Bp", "Builtin.RawPointer" },
-	{ "Bw", "Builtin.Word" },
 	{ NULL, NULL }
 };
 
+/* attributes */
 static const SwiftType metas [] = {
-	/* attributes */
 	{ "FC", "ClassFunc" },
 	{ "S0_FT", "?" },
 	{ "RxC", ".." },
@@ -604,6 +617,12 @@ R_API char *r_bin_demangle_swift(const char *s, bool syscmd, bool trylib) {
 #if USE_THIS_CODE
 	syscmd = trylib = false; // debugging on macos
 #endif
+	if (r_str_startswith (s, "So") && isdigit (s[2])) {
+		char *ss = r_str_newf ("$s%s", s);
+		char *res = r_bin_demangle_swift (ss, syscmd, trylib);
+		free (ss);
+		return res;
+	}
 	s = str_removeprefix (s, "imp.");
 	s = str_removeprefix (s, "reloc.");
 	// check if string doesnt start with __ then return
