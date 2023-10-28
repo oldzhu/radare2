@@ -7,6 +7,7 @@
 
 #define RO_META (1 << 0)
 #define MAX_CLASS_NAME_LEN 256
+#define MAX_SWIFT_MEMBERS 256
 
 #ifdef R_BIN_MACH064
 #define FAST_DATA_MASK 0x00007ffffffffff8UL
@@ -1247,7 +1248,9 @@ void MACH0_(get_class_t)(mach0_ut p, RBinFile *bf, RBinClass *klass, bool dupe, 
 	if (c.superclass) {
 		const char *klass_name = get_class_name (c.superclass, bf);
 		if (klass_name) {
-			klass->super = r_list_newf (free);
+			if (klass->super == NULL) {
+				klass->super = r_list_newf (free);
+			}
 			r_list_append (klass->super, (void *)klass_name);
 		}
 	} else if (relocs) {
@@ -1260,9 +1263,11 @@ void MACH0_(get_class_t)(mach0_ut p, RBinFile *bf, RBinClass *klass, bool dupe, 
 			char *target_class_name = (char*) ((struct reloc_t*) found->data)->name;
 			if (r_str_startswith (target_class_name, _objc_class)) {
 				target_class_name += _objc_class_len;
-				klass->super = r_list_newf (free);
+				if (klass->super == NULL) {
+					klass->super = r_list_newf (free);
+				}
 				if (r_str_startswith (target_class_name, "_T")) {
-					char *dsuper = r_bin_demangle (bf, "swift", target_class_name, 0, false);
+					char *dsuper = r_bin_demangle_swift (target_class_name, true, true);
 					if (!dsuper || !strcmp (dsuper, target_class_name)) {
 						R_LOG_DEBUG ("Failed to demangle");
 						r_list_append (klass->super, strdup (target_class_name));
@@ -1305,6 +1310,7 @@ enum {
 typedef struct {
 	bool valid;
 	ut64 name_addr;
+	ut64 super_addr;
 	ut64 addr;
 	ut64 fields;
 	ut64 members;
@@ -1342,8 +1348,8 @@ ut32 fields_offset;
 	eprintf ("  flags:   0x%08x\n", words[0]);
 	eprintf ("  parent:  0x%08"PFMT64x"\n", NCD (NCD_PARENT));
 #endif
-	ut64 typename_addr = NCD (NCD_NAME);
-	st.name_addr = typename_addr;
+	st.name_addr = NCD (NCD_NAME);
+	st.super_addr = NCD (NCD_SUPER);
 #if 0
 	char *typename = readstr (bf, typename_addr);
 	eprintf ("  name:    0x%08"PFMT64x" (%s)\n", typename_addr, typename);
@@ -1382,8 +1388,6 @@ static inline HtUP *_load_symbol_by_vaddr_hashtable(RBinFile *bf) {
 	return ht;
 }
 
-#define MAX_SWIFT_MEMBERS 32
-
 static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht) {
 	char *otypename = readstr (bf, st.name_addr);
 	if (R_STR_ISEMPTY (otypename)) {
@@ -1392,7 +1396,25 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 	}
 	char *typename = r_name_filter_dup (otypename);
 	RBinClass *klass = r_bin_class_new (typename, NULL, false);
-	// eprintf ("Type name (%s)\n", typename);
+	char *super_name = readstr (bf, st.super_addr);
+	if (super_name) {
+		if (*super_name > 5) {
+			klass->super = r_list_newf (free);
+#if 1
+			char *sname = r_bin_demangle_swift (super_name, 0, false);
+			if (R_STR_ISNOTEMPTY (sname)) {
+				r_list_append (klass->super, sname);
+				free (super_name);
+			} else {
+				r_list_append (klass->super, super_name);
+			}
+#else
+			r_list_append (klass->super, super_name);
+#endif
+		} else {
+			free (super_name);
+		}
+	}
 	klass->addr = st.addr;
 	klass->lang = R_BIN_LANG_SWIFT;
 	if (st.members != UT64_MAX) {
@@ -1419,7 +1441,7 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 			char *method_name;
 			if (symbols_ht && (sym = ht_up_find (symbols_ht, method_addr, NULL))) {
 				method_name = r_name_filter_dup (sym->name);
-				char *dname = r_bin_demangle (bf, "swift", method_name, 0, false);
+				char *dname = r_bin_demangle_swift (method_name, 0, false);
 				if (dname) {
 					free (method_name);
 					method_name = dname;
@@ -1464,11 +1486,26 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 				break;
 			}
 			ut64 field_name_addr = st.fieldmd.addr + (d * 4) + st.fieldmd_data[d];
+			ut64 field_type_addr = st.fieldmd.addr + (d * 4) + st.fieldmd_data[d - 1] - 4;
 			ut64 field_method_addr = field_name_addr;
 			ut64 vaddr = r_bin_file_get_baddr (bf) + field_method_addr;
 			char *field_name = readstr (bf, field_name_addr);
 			if (!field_name) {
 				break;
+			}
+
+			char *field_type = readstr (bf, field_type_addr);
+			if (field_type) {
+				const char *ftype = field_type;
+				if (*ftype < 6) {
+					// basic type
+					ftype += r_str_nlen (ftype, 6);
+				}
+				field->type = r_bin_demangle_swift (ftype, 0, false);
+				if (!field->type) {
+					field->type = strdup (ftype);
+				}
+				free (field_type);
 			}
 			field->name = r_name_filter_dup (field_name);
 			field->paddr = field_method_addr;
@@ -1479,7 +1516,6 @@ static void parse_type(RList *list, RBinFile *bf, SwiftType st, HtUP *symbols_ht
 #endif
 			free (field_name);
 			field->kind = R_BIN_FIELD_KIND_PROPERTY;
-		//	field->type = strdup ("swiftType");
 			r_list_append (klass->fields, field);
 		}
 	}
@@ -1530,7 +1566,6 @@ RList *MACH0_(parse_classes)(RBinFile *bf, objc_cache_opt_info *oi) {
 	const RSkipList *relocs = MACH0_(load_relocs) (bf->bo->bin_obj);
 
 	/* check if it's Swift */
-
 	MetaSections ms = metadata_sections_init (bf);
 	// R_DUMP (&ms);
 
@@ -1542,7 +1577,7 @@ RList *MACH0_(parse_classes)(RBinFile *bf, objc_cache_opt_info *oi) {
 		}
 	}
 
-	bool want_swift = !r_sys_getenv_asbool ("RABIN2_MACHO_NOSWIFT");
+	const bool want_swift = !r_sys_getenv_asbool ("RABIN2_MACHO_NOSWIFT");
 	// 2s / 16s
 	if (want_swift && ms.types.have && ms.fieldmd.have) {
 		ut64 asize = ms.fieldmd.size;
@@ -1561,7 +1596,7 @@ RList *MACH0_(parse_classes)(RBinFile *bf, objc_cache_opt_info *oi) {
 					aligned_types_count = limit;
 				}
 				HtUP *symbols_ht = _load_symbol_by_vaddr_hashtable (bf);
-				int i;
+				ut32 i;
 				for (i = 0; i < aligned_types_count; i++) {
 					st32 word = r_read_le32 (&types[i]);
 					ut64 type_address = ms.types.addr + (i * 4) + word;
@@ -1857,9 +1892,13 @@ static char *readstr(RBinFile *bf, ut64 addr) {
 		R_FREE (name);
 		return NULL;
 	}
+#if 0
 	char *s = strdup (name);
 	free (name);
 	return s;
+#else
+	return name;
+#endif
 }
 
 static char *read_str(RBinFile *bf, mach0_ut p, ut32 *offset, ut32 *left) {
