@@ -807,7 +807,7 @@ static int cmd_info(void *data, const char *input) {
 				break;
 			case '?':
 			default:
-				r_core_cmd_help_match (core, help_msg_i, "ik", false);
+				r_core_cmd_help_contains (core, help_msg_i, "ik");
 			}
 			goto done;
 		}
@@ -1434,7 +1434,7 @@ static int cmd_info(void *data, const char *input) {
 		case 'c': // "ic"
 			// XXX this is dupe of cbin.c:bin_classes()
 			if (input[1] == '?') {
-				r_core_cmd_help_match (core, help_msg_i, "ic", false);
+				r_core_cmd_help_contains (core, help_msg_i, "ic");
 			} else if (input[1] == ',') { // "ic,"
 				cmd_ic_comma (core, input);
 			} else if (input[1] == '-') { // "ic-"
@@ -1442,6 +1442,8 @@ static int cmd_info(void *data, const char *input) {
 			} else if (input[1] == '+') { // "ic+"
 				cmd_ic_add (core, input + 2);
 			} else if (input[1] == 'g') { // "icg"
+				const bool asm_demangle = r_config_get_b (core->config, "asm.demangle");
+				const int pref = asm_demangle? 0: 'o';
 				RBinClass *cls;
 				RListIter *iter, *iter2;
 				RBinObject *obj = r_bin_cur_object (core->bin);
@@ -1452,13 +1454,14 @@ static int cmd_info(void *data, const char *input) {
 				const char *match = r_str_trim_head_ro (input + 2);
 				if (R_STR_ISNOTEMPTY (match)) {
 					r_list_foreach (obj->classes, iter, cls) {
-						char *sk;
 						if (!match || !strstr (cls->name, match)) {
 							continue;
 						}
 						r_cons_printf ("agn %s\n", cls->name);
 						if (cls->super) {
-							r_list_foreach (cls->super, iter2, sk) {
+							RBinName *bn;
+							r_list_foreach (cls->super, iter2, bn) {
+								const char *sk = r_bin_name_tostring2 (bn, pref);
 								if (match && strstr (sk, match)) {
 									r_cons_printf ("agn %s\n", sk);
 									r_cons_printf ("age %s %s\n", sk, cls->name);
@@ -1468,9 +1471,10 @@ static int cmd_info(void *data, const char *input) {
 					}
 				} else if (fullGraph) {
 					r_list_foreach (obj->classes, iter, cls) {
-						const char *sk;
+						RBinName *bn;
 						r_cons_printf ("agn %s\n", cls->name);
-						r_list_foreach (cls->super, iter2, sk) {
+						r_list_foreach (cls->super, iter2, bn) {
+							const char *sk = r_bin_name_tostring2 (bn, pref);
 							r_cons_printf ("agn %s\n", sk);
 							r_cons_printf ("age %s %s\n", sk, cls->name);
 						}
@@ -1693,7 +1697,7 @@ static int cmd_info(void *data, const char *input) {
 			break;
 		case 'D': // "iD"
 			if (input[1] != ' ' || !demangle (core, input + 2)) {
-				r_core_cmd_help_match (core, help_msg_i, "iD", true);
+				r_core_cmd_help_match (core, help_msg_i, "iD");
 			}
 			return 0;
 		case 'a': // "ia"
