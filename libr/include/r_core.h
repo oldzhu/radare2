@@ -486,6 +486,7 @@ R_API void r_core_cmd_queue_wait(RCore *core);
 R_API void r_core_cmd_init(RCore *core);
 R_API char *r_core_cmd_str_at(RCore *core, ut64 addr, const char *cmd);
 R_API int r_core_cmd_call_at(RCore *core, ut64 addr, const char *cmd);
+R_API char *r_core_cmd_call_str_at(RCore *core, ut64 addr, const char *cmd);
 R_API int r_core_cmd_call(RCore *core, const char *cmd);
 R_API int r_core_cmd_callf(RCore *core, const char *cmd, ...);
 R_API int r_core_cmd_pipe(RCore *core, char *radare_cmd, char *shell_cmd);
@@ -824,7 +825,7 @@ typedef struct r_core_bin_filter_t {
 R_API bool r_core_bin_info(RCore *core, int action, PJ *pj, int mode, int va, RCoreBinFilter *filter, const char *chksum);
 R_API bool r_core_bin_set_arch_bits(RCore *r, const char *name, const char *arch, ut16 bits);
 R_API bool r_core_bin_update_arch_bits(RCore *r);
-R_API char *r_core_bin_method_flags_str(ut64 flags, int mode);
+R_API char *r_core_bin_attr_tostring(ut64 flags, int mode);
 R_API bool r_core_pdb_info(RCore *core, const char *file, PJ *pj, int mode);
 
 /* rtr */
