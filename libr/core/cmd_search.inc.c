@@ -392,10 +392,15 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 		return 0;
 	}
 	char *zeropage = calloc (core->blocksize, 1);
+	if (!zeropage) {
+		free (b);
+		return 0;
+	}
 	// TODO: handle sections ?
 	if (from >= to) {
 		R_LOG_ERROR ("aap: Invalid search range 0x%08"PFMT64x " - 0x%08"PFMT64x, from, to);
 		free (b);
+		free (zeropage);
 		return 0;
 	}
 	r_search_reset (core->search, R_SEARCH_KEYWORD);
@@ -812,6 +817,16 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, R_UNUSED int perm, const ch
 		RListIter *iter;
 		r_list_foreach (ls, iter, fi) {
 			if (fi->size > 1) {
+				append_bound (list, core->io, search_itv, fi->offset, fi->size, 7);
+			}
+		}
+	} else if (r_str_startswith (mode, "flag:")) {
+		const char *match = mode + 5;
+		const RList *ls = r_flag_get_list (core->flags, core->offset);
+		RFlagItem *fi;
+		RListIter *iter;
+		r_list_foreach (ls, iter, fi) {
+			if (fi->size > 1 && r_str_glob (fi->name, match)) {
 				append_bound (list, core->io, search_itv, fi->offset, fi->size, 7);
 			}
 		}
