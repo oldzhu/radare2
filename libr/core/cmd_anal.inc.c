@@ -66,11 +66,12 @@ static RCoreHelpMessage help_msg_afu = {
 
 static RCoreHelpMessage help_msg_aae = {
 	"Usage:", "aae", "[pf] ([addr]) # analyze all kind of stuff using esil",
-	"aaep", "", "same as aepa@@@i - define anal pins by import flag names",
-	"aaep", "a", "run 'aep ret0@@@i' and then 'aaep' - all unknown imports are faked to return 0",
-	"aaef", "", "emulate all functions using esil to find out computed references (same as aef@@@F)",
 	"aae", " [size] ([addr])", "same as aepa@@@i - define anal pins by import flag names",
 	"aae", "", "honor anal.{in,from,to} and emulate all executable regions",
+	"aaef", "", "emulate all functions using esil to find out computed references (same as aef@@@F)",
+	"aaep", "", "same as aepa@@@i - define anal pins by import flag names",
+	"aaep", "a", "run 'aep ret0@@@i' and then 'aaep' - all unknown imports are faked to return 0",
+	"aaex", "", "emulate all code linearly and register only the computed xrefs",
 	NULL
 };
 
@@ -190,6 +191,7 @@ static RCoreHelpMessage help_msg_aa = {
 	"aau", " [len]", "list mem areas (larger than len bytes) not covered by functions",
 	"aav", "[?] [sat]", "find values referencing a specific section or map",
 	"aaw", "", "analyze all meta words (Cd) and add r. named flags for referenced pointers",
+	"aax", "[?]", "analyze all xrefs as functions",
 	NULL
 };
 
@@ -13140,6 +13142,9 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			cmd_anal_aav (core, input);
 		}
 		break;
+	case 'x': // "aax"
+		r_core_cmd0 (core, "af@@=`axlq~CALL[2]`");
+		break;
 	case 'w': // "aaw"
 		if (input[1] == '?') {
 			r_core_cmd_help_match (core, help_msg_aa, "aaw");
@@ -13523,6 +13528,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			r_core_anal_esil (core, len, addr);
 			free (arg);
 		} else {
+			const bool only_xrefs = input[1] == 'x';
 			ut64 at = core->offset;
 			RIOMap *map;
 			RListIter *iter;
@@ -13530,23 +13536,25 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			if (!list) {
 				break;
 			}
-			if (!strcmp ("range", r_config_get (core->config, "anal.in"))) {
+			const char *target = only_xrefs? "+x": NULL;
+			const char *anal_in = r_config_get (core->config, "anal.in");
+			if (!strcmp ("range", anal_in) || !strcmp ("raw", anal_in)) {
 				ut64 from = r_config_get_i (core->config, "anal.from");
 				ut64 to = r_config_get_i (core->config, "anal.to");
 				if (to > from) {
 					char *len = r_str_newf (" 0x%"PFMT64x, to - from);
 					r_core_seek (core, from, true);
-					r_core_anal_esil (core, len, NULL);
+					r_core_anal_esil (core, len, target);
 					free (len);
 				} else {
-					R_LOG_ERROR ("Assert: anal.from > anal.to");
+					R_LOG_ERROR ("anal.from can't be past anal.to");
 				}
 			} else {
 				r_list_foreach (list, iter, map) {
 					if (map->perm & R_PERM_X) {
 						char *ss = r_str_newf (" 0x%"PFMT64x, r_io_map_size (map));
 						r_core_seek (core, r_io_map_begin (map), true);
-						r_core_anal_esil (core, ss, NULL);
+						r_core_anal_esil (core, ss, target);
 						free (ss);
 					}
 				}
@@ -14268,30 +14276,56 @@ static bool core_anal_abf(RCore *core, const char* input) {
 	return true;
 }
 
-static void match_prelude(RCore *core, const char *input) {
-	const ut8 *prelude = (const ut8*)"\xe9\x2d"; //:fffff000";
-	const int prelude_sz = 2;
-	const int bufsz = 4096;
+static bool match_prelude_internal(RCore *core, const char *input, ut64 *fcnaddr) {
+	ut8 *prelude = (ut8 *)strdup (input);
+	int prelude_sz = r_hex_str2bin (input, prelude);
+	const int bufsz = core->blocksize;
 	ut8 *buf = calloc (1, bufsz);
 	ut64 off = core->offset;
+#if 0
 	if (input[1] == ' ') {
 		off = r_num_math (core->num, input + 1);
 	}
+#endif
+	ut8 *p = prelude;
+	r_mem_swap (p, prelude_sz);
 	r_io_read_at (core->io, off - bufsz + prelude_sz, buf, bufsz);
-	//const char *prelude = "\x2d\xe9\xf0\x47"; //:fffff000";
 	r_mem_reverse (buf, bufsz);
 	//r_print_hexdump (NULL, off, buf, bufsz, 16, -16);
 	const ut8 *pos = r_mem_mem (buf, bufsz, prelude, prelude_sz);
-	if (pos) {
-		int delta = (size_t)(pos - buf);
-		// R_LOG_DEBUG ("POS = %d", delta);
-		// R_LOG_DEBUG ("HIT = 0x%"PFMT64x, off - delta);
-		r_cons_printf ("0x%08"PFMT64x"\n", off - delta);
-	} else {
-		R_LOG_ERROR ("Cannot find prelude");
-	}
 	free (buf);
+	if (pos) {
+		const int delta = (size_t)(pos - buf);
+		*fcnaddr = off - delta;
+		if (*fcnaddr % 4) {
+			// ignore unaligned hits
+			return false;
+		}
+		return true;
+	}
+	return false;
 }
+
+static void match_prelude(RCore *core, const char *input) {
+	RSearchKeyword *k;
+	RListIter *iter;
+	RList *list = r_anal_preludes (core->anal);
+	r_list_foreach (list, iter, k) {
+		char *hex0 = r_hex_bin2strdup (k->bin_keyword, k->keyword_length);
+		char *hex1 = r_hex_bin2strdup (k->bin_binmask, k->binmask_length);
+		ut64 addr = 0;
+		// TODO: mask is ignored!
+		bool found = match_prelude_internal (core, hex0, &addr);
+		// r_cons_printf ("ap+ %s %s\n", hex0, hex1);
+		free (hex0);
+		free (hex1);
+		if (found) {
+			r_cons_printf ("0x%08"PFMT64x"\n", addr);
+			return;
+		}
+	}
+}
+
 
 static int cmd_apt(RCore *core, const char *input) {
 	switch (*input) {

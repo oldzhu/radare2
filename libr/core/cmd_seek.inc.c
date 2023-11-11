@@ -23,9 +23,12 @@ static RCoreHelpMessage help_msg_s = {
 	"sa", " [[+-]a] [asz]", "seek asz (or bsize) aligned to addr",
 	"sb", "", "seek aligned to bb start",
 	"sC", "[?] string", "seek to comment matching given string",
+	"sd", " ([addr])", "show delta seek compared to all possible reference bases",
 	"sf", "", "seek to next function (f->addr+f->size)",
 	"sf", " function", "seek to address of specified function",
 	"sf.", "", "seek to the beginning of current function",
+	"sfp", "", "seek to the function prelude checking back blocksize bytes",
+	"sff", "", "seek to the nearest flag backwards (uses fd and ignored the delta)",
 	"sg/sG", "", "seek begin (sg) or end (sG) of section or file",
 	"sh", "", "open a basic shell (aims to support basic posix syntax)",
 	"sl", "[?] [+-]line", "seek to line",
@@ -395,6 +398,57 @@ static int cmd_seek(void *data, const char *input) {
 			r_core_cmd_help_contains (core, help_msg_s, "sr");
 		}
 		break;
+	case 'd': // "sd"
+		{
+			st64 delta;
+			ut64 at = core->offset;
+			char *ro = r_core_get_reloff (core, RELOFF_TO_FLAG, at, &delta);
+			if (ro) {
+				r_cons_printf ("flag %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_FUNC, at, &delta);
+			if (ro) {
+				r_cons_printf ("func %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_MAPS, at, &delta);
+			if (ro) {
+				r_cons_printf ("maps %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_FILE, at, &delta);
+			if (ro) {
+				r_cons_printf ("file %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_FMAP, at, &delta);
+			if (ro) {
+				r_cons_printf ("fmap %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_LIBS, at, &delta);
+			if (ro) {
+				r_cons_printf ("libs %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_SYMB, at, &delta);
+			if (ro) {
+				r_cons_printf ("symb %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_SECT, at, &delta);
+			if (ro) {
+				r_cons_printf ("sect %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+			ro = r_core_get_reloff (core, RELOFF_TO_DMAP, at, &delta);
+			if (ro) {
+				r_cons_printf ("dmap %s+0x%"PFMT64x"\n", ro, delta);
+				free (ro);
+			}
+		}
+		break;
 	case 'C': // "sC"
 		if (input[1] == '*') { // "sC*"
 			r_core_cmd0 (core, "C*~^\"CC");
@@ -747,6 +801,17 @@ static int cmd_seek(void *data, const char *input) {
 			if (fcn) {
 				r_core_seek (core, fcn->addr, true);
 			}
+			break;
+		case 'p': // "sfp"
+			// find function prelude backwards
+			r_core_cmd0 (core, "s `ap`");
+			break;
+		case 'f': // "sff"
+			// find function prelude backwards
+			r_core_cmd0 (core, "s `fd~[0]`");
+			break;
+		default:
+			r_core_cmd_help_contains (core, help_msg_s, "sf");
 			break;
 		}
 		break;
