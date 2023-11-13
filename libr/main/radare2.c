@@ -175,8 +175,8 @@ static int r_main_version_verify(RCore *core, bool show, bool json) {
 
 static int main_help(int line) {
 	if (line < 2) {
-		printf ("Usage: r2 [-ACdfLMnNqStuvwzX] [-P patch] [-p prj] [-a arch] [-b bits] [-i file]\n"
-			"          [-s addr] [-B baddr] [-m maddr] [-c cmd] [-e k=v] file|pid|-|--|=\n");
+		printf ("Usage: r2 [-ACdfjLMnNqStuvwzX] [-P patch] [-p prj] [-a arch] [-b bits] [-c cmd]\n"
+			"          [-s addr] [-B baddr] [-m maddr] [-i script] [-e k=v] file|pid|-|--|=\n");
 	}
 	if (line != 1) {
 		printf (
@@ -1264,6 +1264,9 @@ R_API int r_main_radare2(int argc, const char **argv) {
 		}
 		if (mr.asmos) {
 			r_config_set (r->config, "asm.os", mr.asmos);
+		}
+		if (strstr (mr.pfile, "sysgdb://")) {
+			mr.debug = 2;
 		}
 		if (mr.debug) {
 			if (mr.asmbits) {
