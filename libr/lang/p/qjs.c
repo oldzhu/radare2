@@ -574,11 +574,12 @@ static void register_helpers(JSContext *ctx) {
 		"}");
 	eval (ctx, "var console = { log:print, error:print, debug:print };");
 	eval (ctx, "r2.cmdj = (x) => JSON.parse(r2.cmd(x));");
-	eval (ctx, "r2.cmdAt = (x, a) => r2.cmd(`$x @ $a`);");
+	eval (ctx, "r2.cmdAt = (x, a) => r2.cmd(x + ' @ ' + a);");
 	eval (ctx, "r2.call = (x) => r2.cmd('\"\"' + x);");
 	eval (ctx, "r2.callj = (x) => JSON.parse(r2.call(x));");
 	eval (ctx, "var global = globalThis; var G = globalThis;");
 	eval (ctx, js_require_qjs);
+	eval (ctx, "require = function(x) { if (x == 'r2papi') { return new R2Papi(r2); } ; return requirejs(x); }");
 	eval (ctx, "var exports = {};");
 	eval (ctx, "G.r2pipe = {open: function(){ return R.r2;}};");
 	eval (ctx, "G.R2Pipe=() => R.r2;");
