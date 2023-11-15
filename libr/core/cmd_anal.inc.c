@@ -12927,11 +12927,11 @@ static void anal_aarr(RCore *core) {
 }
 
 static void logline(RCore *core, int pc, const char *title) {
-	if (r_config_get_b (core->config, "scr.demo")) {
+	if (r_config_get_b (core->config, "scr.analbar") || r_config_get_b (core->config, "scr.demo")) {
 		int w = 80;
 		r_cons_printf (R_CONS_CLEAR_LINE);
 		r_cons_flush ();
-		R_LOG_INFO ("%s", title);
+		// R_LOG_INFO ("%s", title);
 		r_print_progressbar (core->print, pc, w, NULL);
 		r_cons_printf ("\r");
 		r_cons_flush ();
@@ -13210,7 +13210,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 		if (input[1] == '?') {
 			r_core_cmd_help_match (core, help_msg_aa, "aap");
 		} else {
-			r_core_search_preludes (core, true);
+			r_core_search_preludes (core, false);
 		}
 		break;
 	case '\0': // "aa"

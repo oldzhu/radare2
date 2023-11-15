@@ -526,7 +526,7 @@ static void recursive_help(RCore *core, int detail, const char *cmd_prefix) {
 static bool lastcmd_repeat(RCore *core, int next) {
 	int res = -1;
 	// Fix for backtickbug px`~`
-	if (!core->lastcmd || core->cons->context->cmd_depth < 1) {
+	if (!core->lastcmd || core->cur_cmd_depth < 1) {
 		return false;
 	}
 	switch (*core->lastcmd) {
@@ -3760,7 +3760,7 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 		goto beach;
 	}
 
-	if (core->max_cmd_depth - core->cons->context->cmd_depth == 1) {
+	if (core->max_cmd_depth - core->cur_cmd_depth == 1) {
 		core->prompt_offset = core->offset;
 	}
 	cmd = (char *)r_str_trim_head_ro (icmd);
@@ -3825,7 +3825,7 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 	const char *cmdrep = r_str_get (core->cmdtimes);
 	orep = rep;
 
-	bool is_root_cmd = core->cons->context->cmd_depth + 1 == core->max_cmd_depth;
+	bool is_root_cmd = core->cur_cmd_depth + 1 == core->max_cmd_depth;
 	if (is_root_cmd) {
 		r_cons_break_clear ();
 	}
@@ -5960,12 +5960,14 @@ out_finish:
 static int run_cmd_depth(RCore *core, char *cmd) {
 	char *rcmd;
 	int ret = false;
-
-	if (R_UNLIKELY (core->cons->context->cmd_depth < 1)) {
-		R_LOG_ERROR ("That '%s' was too deep", cmd);
-		return false;
+	int *depth = &core->cur_cmd_depth;
+	if (depth) {
+		if (*depth < 1) {
+			R_LOG_ERROR ("That '%s' was too deep", cmd);
+			return false;
+		}
+		(*depth)--;
 	}
-	core->cons->context->cmd_depth--;
 	for (rcmd = cmd;;) {
 		char *ptr = strchr (rcmd, '\n');
 		if (R_UNLIKELY (ptr)) {
@@ -5981,7 +5983,9 @@ static int run_cmd_depth(RCore *core, char *cmd) {
 		}
 		rcmd = ptr + 1;
 	}
-	core->cons->context->cmd_depth++;
+	if (depth) {
+		(*depth)++;
+	}
 	return ret;
 }
 
