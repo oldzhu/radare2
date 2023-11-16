@@ -359,7 +359,7 @@ static bool cb_analhpskip(void *user, void *data) {
 }
 
 static void update_analarch_options(RCore *core, RConfigNode *node) {
-	// XXX R2_590 - does nothing, but needs testing to proove that
+	// XXX R2_590 - does nothing, but needs testing to prove that
 	RAnalPlugin *h;
 	RListIter *it;
 	if (core && core->anal && node) {
@@ -806,38 +806,6 @@ static bool cb_asmarch(void *user, void *data) {
 	}
 	//we should strdup here otherwise will crash if any r_config_set
 	//free the old value
-	char *asm_cpu = strdup (r_config_get (core->config, "asm.cpu"));
-#if 0
-	if (core->rasm->cur) {
-		const char *new_asm_cpu = core->rasm->config->cpu;
-		if (R_STR_ISNOTEMPTY (new_asm_cpu)) {
-			char *nac = strdup (new_asm_cpu);
-			char *comma = strchr (nac, ',');
-			if (comma) {
-				if (!*asm_cpu || (*asm_cpu && !strstr (nac, asm_cpu))) {
-					*comma = 0;
-					r_config_set (core->config, "asm.cpu", nac);
-				}
-			}
-			free (nac);
-		} else {
-			// TODO: set to '' only if the new arch plugin doesnt handle
-			// the given asm.cpu setup, but we can ignore for now
-			// r_config_set (core->config, "asm.cpu", "");
-		}
-		bits = core->rasm->config->bits;
-		if (8 & bits) {
-			bits = 8;
-		} else if (16 & bits) {
-			bits = 16;
-		} else if (32 & bits) {
-			bits = 32;
-		} else {
-			bits = 64;
-		}
-		update_asmbits_options (core, r_config_node_get (core->config, "asm.bits"));
-	}
-#endif
 	snprintf (asmparser, sizeof (asmparser), "%s.pseudo", node->value);
 	r_config_set (core->config, "asm.parser", asmparser);
 
@@ -885,10 +853,9 @@ static bool cb_asmarch(void *user, void *data) {
 	// try to set endian of RAsm to match binary
 	r_asm_set_big_endian (core->rasm, bigbin);
 
-	r_asm_set_cpu (core->rasm, asm_cpu);
-	free (asm_cpu);
 	RConfigNode *asmcpu = r_config_node_get (core->config, "asm.cpu");
 	if (asmcpu) {
+		r_asm_set_cpu (core->rasm, asmcpu->value);
 		update_asmcpu_options (core, asmcpu);
 	}
 	{
@@ -899,8 +866,8 @@ static bool cb_asmarch(void *user, void *data) {
 	// changing asm.arch changes anal.arch
 	// changing anal.arch sets types db
 	// so ressetting is redundant and may lead to bugs
-	// 1 case this is usefull is when sdb_types is null
-	if (!core->anal || !core->anal->sdb_types) {
+	// 1 case this is useful is when sdb_types is null
+	if (!core->anal->sdb_types) {
 		r_core_anal_type_init (core);
 	}
 	r_core_anal_cc_init (core);
@@ -944,17 +911,6 @@ static bool cb_asmbits(void *user, void *data) {
 	}
 	if (bits > 0) {
 		ret = r_asm_set_bits (core->rasm, bits);
-#if 0
-		if (!ret) {
-			RAsmPlugin *h = core->rasm->cur;
-			if (!h) {
-				// r_asm_use (core->rasm, R_SYS_ARCH);
-				//	R_LOG_ERROR ("e asm.bits: Cannot set value, no plugins defined yet");
-				ret = true;
-			}
-			// else { R_LOG_ERROR ("Cannot set bits %d to '%s'", bits, h->name); }
-		}
-#endif
 		if (!r_anal_set_bits (core->anal, bits)) {
 			R_LOG_ERROR ("asm.arch: Cannot setup '%d' bits analysis engine", bits);
 			ret = false;
@@ -963,7 +919,8 @@ static bool cb_asmbits(void *user, void *data) {
 	r_debug_set_arch (core->dbg, core->anal->config->arch, bits);
 	const bool load_from_debug = r_config_get_b (core->config, "cfg.debug");
 	if (load_from_debug) {
-		if (core->dbg->current && core->dbg->current->plugin.reg_profile) {
+		RDebugPlugin *plugin = R_UNWRAP3 (core->dbg, current, plugin);
+		if (plugin && plugin->reg_profile) {
 // XXX. that should depend on the plugin, not the host os
 #if R2__WINDOWS__
 #if !defined(_WIN64)
@@ -972,7 +929,7 @@ static bool cb_asmbits(void *user, void *data) {
 			core->dbg->bits = R_SYS_BITS_64;
 #endif
 #endif
-			char *rp = core->dbg->current->plugin.reg_profile (core->dbg);
+			char *rp = plugin->reg_profile (core->dbg);
 			if (rp) {
 				r_reg_set_profile_string (core->dbg->reg, rp);
 				r_reg_set_profile_string (core->anal->reg, rp);
@@ -3483,8 +3440,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("anal.limits", "false", (RConfigCallback)&cb_anal_limits, "restrict analysis to address range [anal.from:anal.to]");
 	SETICB ("anal.from", -1, (RConfigCallback)&cb_anal_from, "lower limit on the address range for analysis");
 	SETICB ("anal.to", -1, (RConfigCallback)&cb_anal_from, "upper limit on the address range for analysis");
-	n = NODECB ("anal.in", "io.maps.x", &cb_searchin);
-	// R2_590 - n = NODECB ("anal.in", "io.sections.x", &cb_searchin); // R2R db/anal/calls i think anal.in should change on RCore.fileOpen()
+	n = NODECB ("anal.in", "io.maps.x", &cb_searchin); // TODO: use io.sections.x seems to break db/anal/calls.. why?
 	SETDESC (n, "specify search boundaries for analysis");
 	SETOPTIONS (n, "raw", "block",
 		"bin.segment", "bin.segments", "bin.segments.x", "bin.segments.r", "bin.section", "bin.sections", "bin.sections.rwx", "bin.sections.r", "bin.sections.rw", "bin.sections.rx", "bin.sections.wx", "bin.sections.x",

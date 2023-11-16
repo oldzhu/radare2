@@ -639,6 +639,10 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 	bool is_io_load = false;
 	if (desc && desc->plugin) {
 		is_io_load = true;
+		if (r_str_startswith (filenameuri, "frida://")) {
+			// dont try to guess the bin file in the address 0 if we are using r2frida
+			is_io_load = false;
+		}
 	//	r_io_use_fd (r->io, desc->fd);
 	}
 	r->bin->minstrlen = r_config_get_i (r->config, "bin.str.min");
@@ -938,10 +942,8 @@ R_API RIODesc *r_core_file_open(RCore *r, const char *file, int flags, ut64 load
 
 	r_esil_setup (r->anal->esil, r->anal, 0, 0, false);
 	if (r_config_get_b (r->config, "cfg.debug")) {
-		bool swstep = true;
-		if (r->dbg->current && r->dbg->current->plugin.canstep) {
-			swstep = false;
-		}
+		RDebugPlugin *plugin = R_UNWRAP3 (r->dbg, current, plugin);
+		const bool swstep = (plugin && plugin->canstep)? false: true;
 		r_config_set_b (r->config, "dbg.swstep", swstep);
 		// Set the correct debug handle
 		if (fd->plugin && fd->plugin->isdbg) {

@@ -1,65 +1,21 @@
 use_gpl = not get_option('nogpl')
 user_plugins = get_option('plugins').split(',')
-no_user_plugins = get_option('plugins') == ''
 
 esil_plugins = [ 'dummy' ]
 asm_plugins = [ 'null' ]
 anal_plugins = [ 'null' ]
-arch_plugins = [ 'null',
-  # 'arc',
-  'pyc',
-  'lh5801',
-  'ebc',
-  'msp430',
-  'h8300',
-  'sh',
-  'sh_cs',
-  'x86_nz',
-  'alpha',
-  'pic',
-  'bpf',
-  'bpf_cs',
-  'lm32',
-  'mcs96',
-  'ws',
-  'arm',
-  '6502',
-  'or1k',
-  'dis',
-  'evm',
-  'nios2',
-  'snes',
-  'v850',
-  'any_as',
-  'any_vasm',
-  'jdh8',
-  'kvx',
-  'xap',
-  'mcore',
-  'riscv',
-  'riscv_cs',
-  'i4004',
-  'rsp',
-  'propeller',
-  'amd29k',
-  'vax',
-  'tricore',
-  'tricore_cs',
-  'cris',
-  'cr16',
-  'bf',
-]
+arch_plugins = [ 'null' ]
 bin_plugins = [ 'any' ]
 bin_ldr_plugins = [ 'ldr_linux' ]
 bin_xtr_plugins = [ 'xtr_sep64' ]
-io_plugins = [ 'malloc', 'cyclic', 'xattr', 'fd', 'default', 'null', 'rbuf', 'r2pipe' , 'r2pipe']
+io_plugins = [ 'malloc', 'cyclic', 'xattr', 'fd', 'default', 'null', 'rbuf', 'r2pipe' ]
 fs_plugins = [ 'r2', 'posix', 'io', 'zip' ]
-bp_plugins = [ 'bf' ]
+bp_plugins = [ 'null' ]
 crypto_plugins = [ 'xor', 'punycode' ]
 core_plugins = [ 'a2f', 'agD' ]
 egg_plugins = [ 'xor' ]
-debug_plugins = [ 'null', 'io' ]
-lang_plugins = [ 'lib', 'pipe' ]
+debug_plugins = [ 'null', 'io', 'esil', 'rap' ]
+lang_plugins = [ 'lib', 'pipe', 'qjs', 'tsc', 'spp' ]
 parse_plugins = [ 'att2intel' ]
 
 if get_option('nogpl')
@@ -68,132 +24,176 @@ endif
 
 # This must be splitted in meson.builds for each module
 # meson split is results in 1 empty element when splitting an empty string :facepalm:
-if not no_user_plugins
-  if user_plugins.contains('apple') or user_plugins.contains('macos') or user_plugins.contains('ios')
-    io_plugins += [
-      'mach',
-    ]
-    bin_plugins += [
-      'mach0', 'mach064',
-      'dyldcache',
-      'xnu_kernelcache',
-    ]
-    bin_xtr_plugins += [
-      'xtr_dyldcache',
-      'xtr_fatmach0',
-      'xtr_xalz',
-      'xtr_sep64'
-    ]
+if user_plugins.contains('apple') or user_plugins.contains('macos') or user_plugins.contains('ios')
+  io_plugins += [
+    'mach',
+  ]
+  bin_plugins += [
+    'mach0', 'mach064',
+    'dyldcache',
+    'xnu_kernelcache',
+  ]
+  bin_xtr_plugins += [
+    'xtr_dyldcache',
+    'xtr_fatmach0',
+    'xtr_xalz',
+    'xtr_sep64'
+  ]
+endif
+if user_plugins.contains('bf')
+  bin_plugins += [ 'bf' ]
+  bp_plugins += [ 'bf' ]
+  debug_plugins += [ 'bf' ]
+  io_plugins += [ 'bfdbg' ]
+endif
+if user_plugins.contains('android')
+  bin_plugins += [
+    'elf', 'elf64',
+    'art', 'nso', 'nro'
+  ]
+  bin_ldr_plugins += [
+    'ldr_linux'
+  ]
+endif
+if user_plugins.contains('x86')
+  arch_plugins += [ 'x86_cs', 'x86_nz' ]
+  bp_plugins += [ 'x86' ]
+  parse_plugins += [ 'x86_pseudo' ]
+endif
+if user_plugins.contains('web')
+  io_plugins += [ 'http' ]
+  io_plugins += [ 'r2web' ]
+endif
+if user_plugins.contains('arm')
+  anal_plugins += [] # sixref should be an analysis plugin
+  core_plugins += [ 'sixref' ]
+  arch_plugins += [ 'arm', 'arm_cs'  ]
+  bp_plugins += [ 'arm' ]
+  parse_plugins += [ 'arm_pseudo' ]
+endif
+if user_plugins.contains('v850')
+  arch_plugins += [ 'v810', 'v850' ]
+  parse_plugins += [ 'v850_pseudo' ]
+endif
+if user_plugins.contains('wasm')
+  bin_plugins += [ 'wasm' ]
+  arch_plugins += [ 'wasm' ]
+  parse_plugins += [ 'wasm_pseudo' ]
+endif
+if user_plugins.contains('sparc')
+  arch_plugins += [ 'sparc_cs' ]
+  bp_plugins += [ 'sparc' ]
+  # missing parse_plugins += [ 'sparc_pseudo' ]
+endif
+if user_plugins.contains('mips')
+  arch_plugins += [ 'mips_cs' ]
+  if use_gpl
+    arch_plugins += [ 'mips_gnu' ]
   endif
-  if user_plugins.contains('android')
-    bin_plugins += [
-      'elf', 'elf64',
-      'art', 'nso', 'nro'
-    ]
-    bin_ldr_plugins += [
-      'ldr_linux'
-    ]
-  endif
-  if user_plugins.contains('x86')
-    arch_plugins += [ 'x86_cs', 'x86_nz' ]
-    bp_plugins += [ 'x86' ]
-    parse_plugins += [ 'x86_pseudo' ]
-  endif
-  if user_plugins.contains('web')
-    io_plugins += [ 'http' ]
-    io_plugins += [ 'r2web' ]
-  endif
-  if user_plugins.contains('arm')
-    anal_plugins += []
-    arch_plugins += [ 'arm', 'arm_cs'  ]
-    bp_plugins += [ 'arm' ]
-    parse_plugins += [ 'arm_pseudo' ]
-  endif
-  if user_plugins.contains('v850')
-    arch_plugins += [ 'v810', 'v850' ]
-    parse_plugins += [ 'v850_pseudo' ]
-  endif
-  if user_plugins.contains('wasm')
-    bin_plugins += [ 'wasm' ]
-    arch_plugins += [ 'wasm' ]
-    parse_plugins += [ 'wasm_pseudo' ]
-  endif
-  if user_plugins.contains('sparc')
-    arch_plugins += [ 'sparc_cs' ]
-    bp_plugins += [ 'sparc' ]
-    # missing parse_plugins += [ 'sparc_pseudo' ]
-  endif
-  if user_plugins.contains('mips')
-    arch_plugins += [ 'mips_cs' ]
-    if use_gpl
-      arch_plugins += [ 'mips_gnu' ]
-    endif
-    bp_plugins += [ 'mips' ]
-    parse_plugins += [ 'mips_pseudo' ]
-  endif
-  if user_plugins.contains('dalvik')
-    bin_plugins += [ 'dex' ]
-    arch_plugins += [ 'dalvik' ]
-    parse_plugins += [ 'dalvik_pseudo' ]
-  endif
-  if user_plugins.contains('loongarch')
-    arch_plugins += [ 'loongarch_gnu' ]
-  endif
-  if user_plugins.contains('elf')
-    bin_plugins += [ 'elf', 'elf64' ]
-  endif
-  if user_plugins.contains('pe')
-    bin_plugins += [ 'pe', 'pe64', 'coff', 'xcoff64', 'mz', 'ne' ]
-    bin_xtr_plugins += [ 'xtr_pemixed' ]
-  endif
+  bp_plugins += [ 'mips' ]
+  parse_plugins += [ 'mips_pseudo' ]
+endif
+if user_plugins.contains('dalvik')
+  bin_plugins += [ 'dex' ]
+  arch_plugins += [ 'dalvik' ]
+  parse_plugins += [ 'dalvik_pseudo' ]
+endif
+if user_plugins.contains('loongarch')
+  arch_plugins += [ 'loongarch_gnu' ]
+endif
+if user_plugins.contains('elf')
+  bin_plugins += [ 'elf', 'elf64' ]
+endif
+if user_plugins.contains('pe')
+  bin_plugins += [ 'pe', 'pe64', 'coff', 'xcoff64', 'mz', 'ne' ]
+  bin_xtr_plugins += [ 'xtr_pemixed' ]
 endif
 
-# else
-if no_user_plugins
-
-  anal_plugins += [
-  ]
-
+# default plugins if none is defined
+if get_option('plugins') == ''
   arch_plugins += [
-    '8051',
-    'avr',
-    'dalvik',
-    'arm_cs',
-    'java',
-    'chip8',
-    'wasm',
-    'i8080',
-    'mips_cs',
+    # 'arc',
+    '6502',
     '6502_cs',
-    'loongarch_gnu',
-    's390_cs',
-    'm68k_cs',
-    'm680x_cs',
-    'xcore_cs',
-    'tms320',
-    'sparc_cs',
-    'ppc_cs',
+    '8051',
+    'alpha',
+    'amd29k',
+    'any_as',
+    'any_vasm',
+    'arm',
+    'arm_cs',
+    'avr',
+    'bf',
+    'bpf',
+    'bpf_cs',
+    'chip8',
+    'cr16',
+    'cris',
+    'dalvik',
+    'dis',
+    'ebc',
+    'evm',
     'gb',
+    'h8300',
+    'i4004',
+    'i8080',
+    'java',
+    'jdh8',
+    'kvx',
+    'lh5801',
+    'lm32',
+    'm680x_cs',
+    'm68k_cs',
+    'mcore',
+    'mcs96',
+    'mips_cs',
+    'msp430',
+    'nios2',
+    'or1k',
+    'pic',
+    'ppc_cs',
+    'propeller',
+    'pyc',
+    'riscv',
+    'riscv_cs',
+    'rsp',
+    's390_cs',
+    'sh',
+    'sh_cs',
+    'snes',
+    'sparc_cs',
+    'tms320',
+    'tricore',
+    'tricore_cs',
+    'v850',
+    'vax',
+    'wasm',
+    'ws',
     'x86_cs',
+    'x86_nz',
+    'xap',
+    'xcore_cs',
   ]
 
   if use_gpl
     arch_plugins += [
-      'xtensa',
-      'loongarch_gnu',
       'arm_gnu',
-      'z80',
-      'pdp11',
-      'nds32',
-      'ppc_gnu',
-      'm68k_gnu',
-    # 'hppa_gnu',
-      'sparc_gnu',
       'lanai',
-      's390_gnu',
+      'loongarch_gnu',
+      'm68k_gnu',
       'mips_gnu',
+      'nds32',
+      'pdp11',
+      'ppc_gnu',
+      's390_gnu',
+      'sparc_gnu',
+      'xtensa',
+      'z80',
+    # 'hppa_gnu',
     ]
   endif
+
+  core_plugins += [ 'sixref' ]
 
   if get_option('use_v35')
     arch_plugins += ['arm_v35']
@@ -202,8 +202,6 @@ if no_user_plugins
   bin_plugins += [
     'art',
     'avr',
-    'bf',
-    's390',
     'bflt',
     'bios',
     'bootimg',
@@ -211,7 +209,6 @@ if no_user_plugins
     'coff',
     'dex',
     'dis',
-    'wasm',
     'dmp64',
     'dol',
     'dyldcache',
@@ -235,26 +232,28 @@ if no_user_plugins
     'nro',
     'nso',
     'omf',
-    'qnx',
     'p9',
     'pe',
     'pe64',
     'pebble',
     'prg',
     'psxexe',
+    'qnx',
     'rel',
+    's390',
     'sfc',
     'smd',
     'sms',
     'symbols',
     'te',
     'vsf',
+    'wasm',
     'xbe',
     'xcoff64',
     'xnu_kernelcache',
+    'xtac',
     'z64',
     'zimg',
-    'xtac'
   ]
 
   bin_ldr_plugins += [
@@ -278,8 +277,8 @@ if no_user_plugins
   ]
 
   core_plugins += [
-    'agD',
     'a2f',
+    'agD',
     'java'
   ]
 
@@ -304,11 +303,9 @@ if no_user_plugins
   debug_plugins += [
     'bf',
     'bochs',
-    'esil',
     'gdb',
     'native',
     'qnx',
-    'rap',
     'winkd'
   ]
 
@@ -317,11 +314,7 @@ if no_user_plugins
     #'shya',
   ]
 
-  fs_plugins += [
-    'io',
-    'posix',
-    'r2',
-  ]
+  fs_plugins += [ ]
 
   if not get_option('nogpl')
     fs_plugins += [
@@ -369,19 +362,23 @@ if no_user_plugins
       'w32',
     ]
     debug_plugins += 'windbg'
+  else
+    io_plugins += [
+      'sysgdb',
+    ]
   endif
 
   lang_plugins += [
-    'v',
-    'lib',
-    'spp',
-    'rust',
-    'go',
-    'zig',
-    's',
     'asm',
     'c',
-    'vala'
+    'go',
+    'lib',
+    'rust',
+    's',
+    'nim',
+    'v',
+    'vala',
+    'zig',
   ]
 
   if host_machine.system() != 'windows'
