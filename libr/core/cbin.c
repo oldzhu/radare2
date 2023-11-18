@@ -2280,9 +2280,8 @@ typedef struct {
 	char *methflag;  // methods flag sym.[class].[method]
 } SymName;
 
-static void snInit(RCore *r, SymName *sn, RBinSymbol *sym, const char *lang) {
-	bool bin_demangle = !!lang;
-	bool keep_lib = r_config_get_b (r->config, "bin.demangle.libs");
+static void snInit(RCore *r, SymName *sn, RBinSymbol *sym, const char *lang, bool bin_demangle) {
+	bin_demangle &= !!lang;
 	if (!r || !sym || !sym->name) {
 		return;
 	}
@@ -2297,7 +2296,7 @@ static void snInit(RCore *r, SymName *sn, RBinSymbol *sym, const char *lang) {
 	}
 	sn->nameflag = construct_symbol_flagname (pfx, sym->libname, symname, MAXFLAG_LEN_DEFAULT);
 	free (resymname);
-	if (sym->classname && sym->classname[0]) {
+	if (R_STR_ISNOTEMPTY (sym->classname)) {
 		sn->classname = strdup (sym->classname);
 		sn->classflag = r_str_newf ("sym.%s.%s", sn->classname, sn->name);
 		r_name_filter (sn->classflag, MAXFLAG_LEN_DEFAULT);
@@ -2314,6 +2313,7 @@ static void snInit(RCore *r, SymName *sn, RBinSymbol *sym, const char *lang) {
 	sn->demname = NULL;
 	sn->demflag = NULL;
 	if (bin_demangle && sym->paddr) {
+		const bool keep_lib = r_config_get_b (r->config, "bin.demangle.libs");
 		sn->demname = r_bin_demangle (r->bin->cur, lang, sn->name, sym->vaddr, keep_lib);
 		if (sn->demname) {
 			sn->demflag = construct_symbol_flagname (pfx, sym->libname, sn->demname, -1);
@@ -2477,7 +2477,7 @@ static bool bin_symbols(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at,
 			}
 		}
 		SymName sn = {0};
-		snInit (r, &sn, symbol, lang);
+		snInit (r, &sn, symbol, lang, bin_demangle);
 		char *r_symbol_name = r_str_escape_utf8 (sn.name, false, true);
 
 		if (IS_MODE_SET (mode) && (is_section_symbol (symbol) || is_file_symbol (symbol))) {
@@ -2764,11 +2764,10 @@ static RIODesc *findReusableFile(RIO *io, const char *uri, int perm) {
 	return arg.desc;
 }
 
-static bool io_create_mem_map(RIO *io, RBinSection *sec, ut64 at) {
+static bool io_create_mem_map(RIO *io, RBinSection *sec, ut64 at, ut64 gap) {
 	r_return_val_if_fail (io && sec, false);
 
 	bool reused = false;
-	ut64 gap = sec->vsize - sec->size;
 	char *uri = r_str_newf ("null://%"PFMT64u, gap);
 	RIODesc *desc = findReusableFile (io, uri, sec->perm);
 	if (desc) {
@@ -2800,6 +2799,9 @@ static bool io_create_mem_map(RIO *io, RBinSection *sec, ut64 at) {
 	return true;
 }
 
+
+
+
 static void add_section(RCore *core, RBinSection *sec, ut64 addr, int fd) {
 	if (!r_io_desc_get (core->io, fd) || UT64_ADD_OVFCHK (sec->size, sec->paddr) ||
 			UT64_ADD_OVFCHK (sec->size, addr) || !sec->vsize) {
@@ -2807,18 +2809,16 @@ static void add_section(RCore *core, RBinSection *sec, ut64 addr, int fd) {
 	}
 
 	ut64 size = sec->vsize;
+	const ut64 fdsize = r_io_fd_size (core->io, fd);
+	const ut64 psize = (sec->paddr < fdsize)? R_MIN (sec->size, fdsize - sec->paddr): 0LL;
 	// if there is some part of the section that needs to be zeroed by the loader
 	// we add a null map that takes care of it
-	if (sec->vsize > sec->size) {
-		if (!io_create_mem_map (core->io, sec, addr + sec->size)) {
-			return;
-		}
-		size = sec->size;
-		if (!size) {
+	if (sec->vsize > psize) {
+		size = psize;
+		if (!io_create_mem_map (core->io, sec, addr + psize, sec->vsize - psize) || !size) {
 			return;
 		}
 	}
-
 	// then we map the part of the section that comes from the physical file
 	char *map_name = r_str_newf ("fmap.%s", sec->name);
 	if (!map_name) {
