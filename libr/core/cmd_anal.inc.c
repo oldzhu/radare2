@@ -683,12 +683,11 @@ static RCoreHelpMessage help_msg_afll = {
 
 static RCoreHelpMessage help_msg_afn = {
 	"Usage:", "afn[sa]", " Analyze function names",
-	"afn", " [name]", "rename the function",
-	"afn", " base64:encodedname", "rename the function",
+	"afn", " [name]", "rename the function (name can start with base64:)",
 	"afn.", "", "same as afn without arguments. show the function name in current offset",
-	"afna", "", "construct a function name for the current offset",
-	"afns", "", "list all strings associated with the current function",
-	"afnsj", "", "list all strings associated with the current function in JSON format",
+	"afn*", "", "show r2 commands to set function signature, flag and function name",
+	"afna", "[j]", "construct a function name for the current offset",
+	"afns", "[j]", "list all strings associated with the current function",
 	NULL
 };
 
@@ -5612,17 +5611,32 @@ static int cmd_af(RCore *core, const char *input) {
 		switch (input[2]) {
 		case 's': // "afns"
 			if (input[3] == 'j') { // "afnsj"
-				free (r_core_anal_fcn_autoname (core, core->offset, 1, input[3]));
+				free (r_core_anal_fcn_autoname (core, core->offset, 'j'));
 			} else {
-				free (r_core_anal_fcn_autoname (core, core->offset, 1, 0));
+				free (r_core_anal_fcn_autoname (core, core->offset, 's'));
 			}
+			break;
+		case '*': // "afn*"
+			{
+				ut64 addr = core->offset;
+				RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, addr, -1);
+				if (fcn) {
+					r_cons_printf ("f %s=0x%08"PFMT64x"\n", fcn->name, addr);
+					r_cons_printf ("afn %s @ 0x%08"PFMT64x"\n", fcn->name, addr);
+					char *sig = r_core_cmd_str (core, "afs");
+					r_str_trim (sig);
+					r_str_replace_char (sig, ',', 0);
+					r_cons_printf ("afs %s @ 0x%08"PFMT64x"\n", sig, addr);
+					free (sig);
+				}
+				}
 			break;
 		case 'a': // "afna"
 			if (input[3] == '?') {
 				r_core_cmd_help (core, help_msg_afna);
 				break;
 			}
-			char *name = r_core_anal_fcn_autoname (core, core->offset, 0, 0);
+			char *name = r_core_anal_fcn_autoname (core, core->offset, 'v');
 			if (name) {
 				r_cons_printf ("afn %s 0x%08" PFMT64x "\n", name, core->offset);
 				free (name);
@@ -10042,7 +10056,69 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 		}
 		RVecAnalRef *list = r_anal_xrefs_get (core->anal, addr);
 		if (list) {
-			if (input[1] == 'q') { // "axtq"
+			if (input[1] == 'f') { // "axtf"
+				RAnalRef *ref;
+				RList *ufuncs = r_list_newf (free);
+				R_VEC_FOREACH (list, ref) {
+					fcn = r_anal_get_fcn_in (core->anal, ref->addr, 0);
+					if (fcn) {
+						r_list_append (ufuncs, ut64_new (fcn->addr));
+					}
+				}
+				r_list_uniq_inplace (ufuncs, sort64val);
+				ut64 *v;
+				RListIter *iter;
+				r_list_foreach (ufuncs, iter, v) {
+					r_cons_printf ("0x%08"PFMT64x"\n", *v);
+				}
+				r_list_free (ufuncs);
+			} else if (input[1] == ',') { // "axt,"
+				RAnalRef *ref;
+				RTable *table = r_table_new ("bbs");
+				RTableColumnType *s = r_table_type ("string");
+				RTableColumnType *n = r_table_type ("number");
+				r_table_add_column (table, n, "fcn", 0);
+				r_table_add_column (table, s, "fcname", 0);
+				r_table_add_column (table, n, "addr", 0);
+				r_table_add_column (table, n, "to", 0);
+				r_table_add_column (table, n, "size", 0);
+				r_table_add_column (table, s, "type", 0);
+				r_table_add_column (table, s, "perm", 0);
+				char *fcn_name = NULL;
+				ut64 fcn_addr = 0;
+				R_VEC_FOREACH (list, ref) {
+					fcn_name = NULL;
+					fcn_addr = 0;
+					fcn = r_anal_get_fcn_in (core->anal, ref->addr, 0);
+					if (fcn) {
+						fcn_name = fcn->name;
+						fcn_addr = fcn->addr;
+					}
+					const char *typestr = r_anal_ref_type_tostring (ref->type);
+					const char *permstr = r_anal_ref_perm_tostring (ref);
+					int size = r_anal_ref_size (ref);
+					r_table_add_rowf (table, "sxxxnss",
+							fcn_name,
+							fcn_addr,
+							ref->addr,
+							addr,
+							size,
+							typestr,
+							permstr
+							);
+				}
+				const char *q = input + 2;
+				if (*q) {
+					r_table_query (table, q);
+				}
+				if (true) {
+					char *s = r_table_tofancystring (table);
+					r_str_trim (s);
+					r_cons_println (s);
+					free (s);
+				}
+				r_table_free (table);
+			} else if (input[1] == 'q') { // "axtq"
 				RAnalRef *ref;
 				R_VEC_FOREACH (list, ref) {
 					r_cons_printf ("0x%" PFMT64x "\n", ref->addr);
@@ -13206,6 +13282,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 		case 'f': // "aanf" same as "aan" but more friendly
 		default: // "aan"
 			r_core_anal_autoname_all_fcns (core);
+			break;
 		}
 		break;
 	case 'p': // "aap"
