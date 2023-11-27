@@ -4,7 +4,8 @@
 
 #define MAX_SCAN_SIZE 0x7ffffff
 
-R_VEC_TYPE(RVecUT64, ut64);
+R_VEC_TYPE (RVecUT64, ut64);
+R_VEC_TYPE (RVecAddr, ut64); // DUPE
 
 static RCoreHelpMessage help_msg_af_plus = {
 	"Usage:", "af+", " [addr] ([name] ([type] [diff]))",
@@ -581,6 +582,7 @@ static RCoreHelpMessage help_msg_afb = {
 	"afb,", "", "show basic blocks of current function in a table (previously known as afbt)",
 	"afb=", "", "display ascii-art bars for basic block regions",
 	"afb+", " fcn_at bbat bbsz [jump] [fail] ([diff])", "add basic block by hand",
+	"afba", "[!]", "list basic blocks of current offset in analysis order (EXPERIMENTAL, see afla)",
 	"afbc", "[-] [color] ([addr])", "colorize basic block (same as 'abc', afbc- to unset)",
 	"afbd", "", "list function basic block dependency list in order and set abe values",
 	"afbe", " bbfrom bbto", "add basic-block edge for switch-cases",
@@ -645,6 +647,7 @@ static RCoreHelpMessage help_msg_afl = {
 	"afl.", "", "display function in current offset (see afi.)",
 	"afl+", "", "display sum all function sizes",
 	"afl=", "", "display ascii-art bars with function ranges",
+	"afla", "", "reverse call order (useful for afna and noret, also see afba)",
 	"aflc", "", "count of functions",
 	"aflj", "", "list functions in json",
 	"aflt", " [query]", "list functions in table format",
@@ -1941,8 +1944,8 @@ static int var_cmd(RCore *core, const char *str) {
 			return false;
 		}
 	case 'b': // "afvb"
-	case 's': // "afbs"
-	case 'r': // "afbr"
+	case 'r': // "afvr"
+	case 's': // "afvs"
 		break;
 	default:
 		if (str[0]) {
@@ -4025,6 +4028,119 @@ static void abo(RCore *core) {
 	}
 }
 
+#if 1
+typedef struct {
+	RCore *core;
+	RVecAddr *togo;
+	RVecAddr *list;
+	bool inloop;
+} ReverseCallData;
+
+static bool afba_leafs(void *user, const ut64 addr, const void *data) {
+	ReverseCallData *rcd = (ReverseCallData*)user;
+	RVecAddr *va = (RVecAddr *)data;
+	if (RVecAddr_empty (va)) {
+// 		r_cons_printf ("0x%08"PFMT64x"\n", addr);
+		RVecAddr_push_back (rcd->togo, &addr);
+		RVecAddr_push_back (rcd->list, &addr);
+	}
+	return true;
+}
+
+static bool afba_left(void *user, const ut64 addr, const void *val) {
+	ReverseCallData *rcd = (ReverseCallData*)user;
+	// r_cons_printf ("0x%08"PFMT64x"\n", addr);
+	RVecAddr_push_back (rcd->list, &addr);
+	return true;
+}
+
+static bool afba_purge(void *user, const ut64 key, const void *val) {
+	ut64 *v, *v2;
+	ReverseCallData *rcd = (ReverseCallData*)user;
+	RVecAddr *va = (RVecAddr *)val;
+	rcd->inloop = true;
+	int index = 0;
+repeat:
+	index = 0;
+	R_VEC_FOREACH (va, v) {
+		R_VEC_FOREACH (rcd->togo, v2) {
+			if (*v == *v2) {
+				RVecAddr_remove (va, index);
+				goto repeat;
+			}
+		}
+		index++;
+	}
+	return true;
+}
+
+static void cmd_afba(RCore *core, const char *input) {
+	bool reverse = true;
+	if (strchr (input, '!')) {
+		reverse = false;
+	}
+	RListIter *iter, *iter2;
+	HtUP *ht = ht_up_new0 ();
+	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
+	RVecAddr *unrefed = RVecAddr_new ();
+	RAnalBlock *bb;
+	if (!fcn) {
+		return;
+	}
+	r_list_foreach (fcn->bbs, iter, bb) {
+		ut64 key = bb->addr;
+		RVecAddr *va = RVecAddr_new ();
+		ht_up_insert (ht, key, va);
+		if (bb->jump != UT64_MAX) {
+			RVecAddr_push_back (va, &bb->jump);
+		}
+		if (bb->fail != UT64_MAX) {
+			RVecAddr_push_back (va, &bb->fail);
+		}
+		if (bb->switch_op) {
+			RAnalCaseOp *caseop;
+			r_list_foreach (bb->switch_op->cases, iter2, caseop) {
+				RVecAddr_push_back (va, &caseop->jump);
+			}
+		}
+	}
+	// first entries that have no xrefs .. wtf .. maybe this must be ignored? its main?
+	ut64 *v;
+	RVecAddr_free (unrefed);
+	ReverseCallData rcd = {
+		.core = core,
+		.togo = RVecAddr_new (),
+		.inloop = true,
+		.list = RVecAddr_new ()
+	};
+	do {
+		ht_up_foreach (ht, afba_leafs, &rcd);
+		rcd.inloop = false;
+		ht_up_foreach (ht, afba_purge, &rcd);
+		R_VEC_FOREACH (rcd.togo, v) {
+			ht_up_delete (ht, *v);
+		}
+		if (RVecAddr_empty (rcd.togo)) {
+			R_LOG_WARN ("Infinite loop detected");
+			rcd.inloop = false;
+		}
+		RVecAddr_free (rcd.togo);
+		rcd.togo = RVecAddr_new ();
+	} while (rcd.inloop);
+	// TODO: this is wrong, and created because of the infinite loop detected bug
+	ht_up_foreach (ht, afba_left, &rcd);
+	if (reverse) {
+		R_VEC_FOREACH_PREV (rcd.list, v) {
+			r_cons_printf ("0x%08"PFMT64x"\n", *v);
+		}
+	} else {
+		R_VEC_FOREACH (rcd.list, v) {
+			r_cons_printf ("0x%08"PFMT64x"\n", *v);
+		}
+	}
+}
+#endif
+
 static void afbo(RCore *core) {
 	RAnalFunction *f = r_anal_get_function_at (core->anal, core->offset);
 	if (f) {
@@ -4729,6 +4845,89 @@ fin:
 	free (s);
 }
 
+static bool afla_leafs(void *user, const ut64 addr, const void *data) {
+	ReverseCallData *rcd = (ReverseCallData*)user;
+	RVecAddr *va = (RVecAddr *)data;
+	if (RVecAddr_empty (va)) {
+		r_cons_printf ("0x%08"PFMT64x"\n", addr);
+		RVecAddr_push_back (rcd->togo, &addr);
+	}
+	return true;
+}
+
+static bool afla_purge(void *user, const ut64 key, const void *val) {
+	ut64 *v, *v2;
+	ReverseCallData *rcd = (ReverseCallData*)user;
+	RVecAddr *va = (RVecAddr *)val;
+	rcd->inloop = true;
+	int index = 0;
+repeat:
+	index = 0;
+	R_VEC_FOREACH (va, v) {
+		R_VEC_FOREACH (rcd->togo, v2) {
+			if (*v == *v2) {
+				RVecAddr_remove (va, index);
+				goto repeat;
+			}
+		}
+		index++;
+	}
+	return true;
+}
+
+static void cmd_afla(RCore *core, const char *input) {
+	RListIter *iter;
+	RAnalRef *xref;
+	RAnalFunction *fcn;
+	HtUP *ht = ht_up_new0 ();
+	RVecAddr *unrefed = RVecAddr_new ();
+	r_list_foreach (core->anal->fcns, iter, fcn) {
+		RVecAnalRef *xrefs = r_anal_xrefs_get (core->anal, fcn->addr);
+		if (!xrefs) {
+			RVecAddr_push_back (unrefed, &fcn->addr);
+			continue;
+		}
+		R_VEC_FOREACH (xrefs, xref) {
+			RAnalFunction *ff = r_anal_get_fcn_in (core->anal, xref->addr, 0);
+			if (!ff) {
+				R_LOG_DEBUG ("unknown function for ref");
+				continue;
+			}
+			const ut64 k = ff->addr;
+			const ut64 v = fcn->addr;
+			RVecAddr *va0 = ht_up_find (ht, v, NULL);
+			if (!va0) {
+				va0 = RVecAddr_new ();
+				ht_up_insert (ht, v, va0);
+			}
+			RVecAddr *va = ht_up_find (ht, k, NULL);
+			if (!va) {
+				va = RVecAddr_new ();
+				ht_up_insert (ht, k, va);
+			}
+			RVecAddr_push_back (va, &v);
+		}
+	}
+	// first entries that have no xrefs .. wtf .. maybe this must be ignored? its main?
+	ut64 *v;
+	RVecAddr_free (unrefed);
+	ReverseCallData rcd = {
+		.core = core,
+		.togo = RVecAddr_new (),
+		.inloop = true
+	};
+	do {
+		ht_up_foreach (ht, afla_leafs, &rcd);
+		rcd.inloop = false;
+		ht_up_foreach (ht, afla_purge, &rcd);
+		R_VEC_FOREACH (rcd.togo, v) {
+			ht_up_delete (ht, *v);
+		}
+		RVecAddr_free (rcd.togo);
+		rcd.togo = RVecAddr_new ();
+	} while (rcd.inloop);
+}
+
 static int cmd_af(RCore *core, const char *input) {
 	r_cons_break_timeout (r_config_get_i (core->config, "anal.timeout"));
 	switch (input[1]) {
@@ -5190,6 +5389,9 @@ static int cmd_af(RCore *core, const char *input) {
 				break;
 			}
 			break;
+		case 'a': // listing in analysis order
+			cmd_afla (core, input);
+			break;
 		case 'l': // "afll"
 			if (input[3] == '?') {
 				r_core_cmd_help (core, help_msg_afll);
@@ -5553,6 +5755,9 @@ static int cmd_af(RCore *core, const char *input) {
 		switch (input[2]) {
 		case '-': // "afb-"
 			anal_fcn_del_bb (core, r_str_trim_head_ro (input + 3));
+			break;
+		case 'a':
+			cmd_afba (core, input + 2);
 			break;
 		case 'o': // "afbo"
 			afbo (core);
@@ -13520,8 +13725,11 @@ static int cmd_anal_all(RCore *core, const char *input) {
 					logline (core, 96, "Enable anal.types.constraint for experimental type propagation");
 					r_config_set_b (core->config, "anal.types.constraint", true);
 					if (input[2] == 'a') { // "aaaa"
-						logline (core, 99, "Reanalizing graph references to improve function count (aarr)");
+						logline (core, 98, "Reanalizing graph references to improve function count (aarr)");
 						r_core_cmd_call (core, "aarr");
+
+						logline (core, 99, "Autoname all functions");
+						r_core_cmd0 (core, ".afna@@c:afla");
 					}
 				} else {
 					R_LOG_INFO ("Use -AA or aaaa to perform additional experimental analysis");
@@ -14391,9 +14599,9 @@ static bool match_prelude_internal(RCore *core, const char *input, ut64 *fcnaddr
 	r_mem_reverse (buf, bufsz);
 	//r_print_hexdump (NULL, off, buf, bufsz, 16, -16);
 	const ut8 *pos = r_mem_mem (buf, bufsz, prelude, prelude_sz);
-	free (buf);
 	if (pos) {
 		const int delta = (size_t)(pos - buf);
+		free (buf);
 		*fcnaddr = off - delta;
 		if (*fcnaddr % 4) {
 			// ignore unaligned hits
@@ -14401,6 +14609,7 @@ static bool match_prelude_internal(RCore *core, const char *input, ut64 *fcnaddr
 		}
 		return true;
 	}
+	free (buf);
 	return false;
 }
 

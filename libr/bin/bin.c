@@ -1380,17 +1380,18 @@ R_API void r_bin_load_filter(RBin *bin, ut64 rules) {
 }
 
 /* RBinField */
-R_API RBinField *r_bin_field_new(ut64 paddr, ut64 vaddr, int size, const char *name, const char *comment, const char *format, bool format_named) {
+R_API RBinField *r_bin_field_new(ut64 paddr, ut64 vaddr, ut64 value, int size, const char *name, R_NULLABLE const char *comment, R_NULLABLE const char *format, bool format_named) {
 	RBinField *ptr = R_NEW0 (RBinField);
 	if (ptr) {
 		ptr->name = r_bin_name_new (name);
 		ptr->comment = R_STR_ISNOTEMPTY (comment)? strdup (comment): NULL;
 		ptr->format = R_STR_ISNOTEMPTY (format)? strdup (format): NULL;
 		ptr->format_named = format_named;
+		ptr->vaddr = vaddr;
 		ptr->paddr = paddr;
 		ptr->size = size;
+		ptr->value = value;
 	//	ptr->attr = default attributes for fields?
-		ptr->vaddr = vaddr;
 	}
 	return ptr;
 }
@@ -1488,6 +1489,26 @@ R_API RBinName *r_bin_name_new(const char *name) {
 	return bn;
 }
 
+R_API void r_bin_name_update(RBinName *bn, const char *name) {
+	r_return_if_fail (bn && name);
+	free (bn->oname);
+	bn->oname = strdup (name);
+}
+
+R_API RBinName *r_bin_name_clone(RBinName *bn) {
+	RBinName *nn = R_NEW0 (RBinName);
+	if (bn->name) {
+		nn->name = strdup (bn->name);
+	}
+	if (bn->oname) {
+		nn->oname = strdup (bn->oname);
+	}
+	if (bn->fname) {
+		nn->oname = strdup (bn->fname);
+	}
+	return nn;
+}
+
 R_API void r_bin_name_filtered(RBinName *bn, const char *fname) {
 	r_return_if_fail (bn && fname);
 	free (bn->fname);
@@ -1505,7 +1526,9 @@ R_API void r_bin_name_demangled(RBinName *bn, const char *dname) {
 }
 
 R_API char *r_bin_name_tostring(RBinName *bn) {
-	r_return_val_if_fail (bn, NULL);
+	if (!bn) {
+		return NULL;
+	}
 	if (bn->name) {
 		return bn->name;
 	}
@@ -1517,7 +1540,9 @@ R_API char *r_bin_name_tostring(RBinName *bn) {
 
 // prefered type
 R_API char *r_bin_name_tostring2(RBinName *bn, int type) {
-	r_return_val_if_fail (bn, NULL);
+	if (!bn) {
+		return NULL;
+	}
 	if (type == 'd' && bn->name) {
 		return bn->name;
 	} else if (type == 'f' && bn->fname) {
