@@ -256,7 +256,7 @@ static void striptrim(RList *list) {
 
 static void r2pm_upgrade(bool force) {
 #if R2__UNIX__
-	char *s = r_sys_cmd_str ("radare2 -qcq -- 2>&1 | grep r2pm | sed -e 's,$,;,g'", NULL, 0);
+	char *s = r_sys_cmd_str ("radare2 -NNqcq -- 2>&1 | grep r2pm | sed -e 's,$,;,g'", NULL, 0);
 	r_str_trim (s);
 	RList *list = r_str_split_list (s, "\n", -1);
 	striptrim (list);
@@ -343,7 +343,7 @@ static void r2pm_setenv(void) {
 	r_sys_setenv ("R2PM_GITDIR", gdir);
 	free (gdir);
 
-	char *pd = r_sys_cmd_str ("radare2 -H R2_USER_PLUGINS", NULL, NULL);
+	char *pd = r_sys_cmd_str ("radare2 -NN -H R2_USER_PLUGINS", NULL, NULL);
 	if (pd) {
 		if (R_STR_ISNOTEMPTY (pd)) {
 			r_str_trim (pd);
@@ -378,9 +378,13 @@ static void r2pm_setenv(void) {
 	r_sys_setenv ("R2PM_BINDIR", bindir);
 	free (bindir);
 
-	char *libdir = r_str_newf ("%s/bin", r2_prefix);
+	char *libdir = r_str_newf ("%s/lib", r2_prefix);
 	r_sys_setenv ("R2PM_LIBDIR", libdir);
 	free (libdir);
+
+	char *incdir = r_str_newf ("%s/include", r2_prefix);
+	r_sys_setenv ("R2PM_INCDIR", incdir);
+	free (incdir);
 
 	char *oldpath = r_sys_getenv ("PATH");
 	if (!oldpath) {
@@ -423,7 +427,7 @@ static void r2pm_setenv(void) {
 		free (ldpath);
 		ldpath = newpath;
 	}
-	char *gr2_prefix = r_sys_cmd_str ("radare2 -H R2_PREFIX", NULL, NULL);
+	char *gr2_prefix = r_sys_cmd_str ("radare2 -NN -H R2_PREFIX", NULL, NULL);
 	if (gr2_prefix) {
 		r_str_trim (gr2_prefix);
 		if (R_STR_ISNOTEMPTY (gr2_prefix)) {
@@ -702,6 +706,30 @@ static int r2pm_install_pkg(const char *pkg, bool clean, bool global) {
 			return -1;
 		}
 	}
+	char *conflict = r2pm_get (pkg, "\nR2PM_CONFLICT ", TT_TEXTLINE);
+	if (conflict) {
+		RListIter *iter, *iter2;
+		RList *l = r_str_split_list (conflict, " ", 0); // conflictive packages
+		char *pkgdir = r2pm_pkgdir (); // installed packages
+		RList *files = r_sys_dir (pkgdir);
+		free (pkgdir);
+		if (!files) {
+			return -1;
+		}
+		const char *file, *dep;
+		r_list_foreach (files, iter, file) {
+			if (*file != '.') {
+				r_list_foreach (l, iter2, dep) {
+					if (!strcmp (dep, file)) {
+						R_LOG_ERROR ("This package conflicts with %s", file);
+						return -1;
+					}
+				}
+			}
+		}
+		r_list_free (files);
+		r_list_free (l);
+	}
 	char *deps = r2pm_get (pkg, "\nR2PM_DEPS ", TT_TEXTLINE);
 	if (deps) {
 		char *dep;
@@ -775,7 +803,7 @@ static int r2pm_install_pkg(const char *pkg, bool clean, bool global) {
 #else
 	char *script = r2pm_get (pkg, "\nR2PM_INSTALL() {\n", TT_CODEBLOCK);
 	if (!script) {
-		R_LOG_ERROR ("Cannot find the R2PM_INSTALL() {} script block for '%s'", pkg);
+		R_LOG_ERROR ("Cannot find '%s' package or missing R2PM_INSTALL block", pkg);
 		free (srcdir);
 		return 1;
 	}
@@ -821,7 +849,7 @@ static int r2pm_install(RList *targets, bool uninstall, bool clean, bool force, 
 	RListIter *iter;
 	const char *t;
 	int rc = 0;
-	char *r2v = r_sys_cmd_str ("radare2 -qv", NULL, NULL);
+	char *r2v = r_sys_cmd_str ("radare2 -NNqv", NULL, NULL);
 	if (R_STR_ISEMPTY (r2v)) {
 		R_LOG_ERROR ("Cannot run radare2 -qv");
 		free (r2v);
@@ -1049,6 +1077,7 @@ static void r2pm_envhelp(bool verbose) {
 			"R2PM_TIME\n"
 			"R2PM_PLUGDIR\n"
 			"R2PM_BINDIR\n"
+			"R2PM_INCDIR\n"
 			"R2PM_LIBDIR\n"
 			"R2PM_OFFLINE\n"
 			"R2PM_PREFIX\n"
