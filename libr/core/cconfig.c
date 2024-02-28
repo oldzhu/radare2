@@ -1601,6 +1601,7 @@ static bool cb_scr_color_ophex(void *user, void *data) {
 	} else {
 		core->print->flags &= (~R_PRINT_FLAGS_COLOROP);
 	}
+	r_config_set_b (core->config, "log.color", node->i_value);
 	return true;
 }
 
@@ -2735,7 +2736,7 @@ static bool cb_consbreak(void *user, void *data) {
 	return true;
 }
 
-static bool cb_teefile(void *user, void *data) {
+static bool cb_config_file_output(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	r_cons_singleton ()->teefile = node->value;
 	return true;
@@ -3285,7 +3286,7 @@ static bool cb_malloc(void *user, void *data) {
 	return true;
 }
 
-static bool cb_log_config_level(void *coreptr, void *nodeptr) {
+static bool cb_config_log_level(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	if (!strcmp (node->value, "?")) {
 		r_cons_printf ("0 - fatal\n");
@@ -3300,26 +3301,26 @@ static bool cb_log_config_level(void *coreptr, void *nodeptr) {
 	return true;
 }
 
-static bool cb_log_config_traplevel(void *coreptr, void *nodeptr) {
+static bool cb_config_log_traplevel(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	r_log_set_traplevel (node->i_value);
 	return true;
 }
 
-static bool cb_log_config_ts(void *coreptr, void *nodeptr) {
+static bool cb_config_log_ts(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	r_log_show_ts (node->i_value);
 	return true;
 }
 
-static bool cb_log_config_filter(void *coreptr, void *nodeptr) {
+static bool cb_config_log_filter(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	const char *value = node->value;
 	r_log_set_filter (value);
 	return true;
 }
 
-static bool cb_log_config_file(void *coreptr, void *nodeptr) {
+static bool cb_config_log_file(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	const char *value = node->value;
 	r_log_set_file (value);
@@ -3338,13 +3339,37 @@ static bool cb_log_source(void *coreptr, void *nodeptr) {
 	return true;
 }
 
-static bool cb_log_config_colors(void *coreptr, void *nodeptr) {
+static bool cb_config_log_colors(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	r_log_set_colors (r_str_is_true (node->value));
 	return true;
 }
 
-static bool cb_log_config_quiet(void *coreptr, void *nodeptr) {
+static bool cb_log_cons(void *user, int level, const char *origin, const char *msg) {
+	if (!msg) {
+		// log level doesn't match
+		return false;
+	}
+	const char *levelstr = r_log_level_tostring (level);
+	const char *originstr = origin? origin: "";
+	r_cons_printf ("%s: [%s] %s\n", levelstr, originstr, msg);
+	return true;
+}
+
+static bool cb_config_log_cons(void *coreptr, void *nodeptr) {
+	RCore *core = (RCore*)coreptr;
+	RConfigNode *node = (RConfigNode *)nodeptr;
+	if (r_str_is_true (node->value)) {
+		r_config_set_b (core->config, "log.quiet", true);
+		r_log_add_callback (cb_log_cons, NULL);
+	} else {
+		r_config_set_b (core->config, "log.quiet", false);
+		r_log_del_callback (cb_log_cons);
+	}
+	return true;
+}
+
+static bool cb_config_log_quiet(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	r_log_set_quiet (r_str_is_true (node->value));
 	return true;
@@ -3867,15 +3892,16 @@ R_API int r_core_config_init(RCore *core) {
 	SETI ("cfg.cpuaffinity", 0, "run on cpuid");
 
 	/* log */
-	SETICB ("log.level", R_LOGLVL_DEFAULT, cb_log_config_level, "Target log level/severity (0:FATAL 1:ERROR 2:INFO 3:WARN 4:TODO 5:DEBUG)");
-	SETCB ("log.ts", "false", cb_log_config_ts, "Show timestamp in log messages");
+	SETICB ("log.level", R_LOG_LEVEL_DEFAULT, cb_config_log_level, "Target log level/severity (0:FATAL 1:ERROR 2:INFO 3:WARN 4:TODO 5:DEBUG)");
+	SETCB ("log.ts", "false", cb_config_log_ts, "Show timestamp in log messages");
 
-	SETICB ("log.traplevel", 0, cb_log_config_traplevel, "Log level for trapping R2 when hit");
-	SETCB ("log.filter", "", cb_log_config_filter, "Filter only messages matching given origin");
+	SETICB ("log.traplevel", 0, cb_config_log_traplevel, "Log level for trapping R2 when hit");
+	SETCB ("log.filter", "", cb_config_log_filter, "Filter only messages matching given origin");
 	SETCB ("log.origin", "false", cb_log_origin, "Show [origin] in log messages");
 	SETCB ("log.source", "false", cb_log_source, "Show source [file:line] in the log message");
-	SETCB ("log.color", "false", cb_log_config_colors, "Should the log output use colors");
-	SETCB ("log.quiet", "false", cb_log_config_quiet, "Be quiet, dont log anything to console");
+	SETCB ("log.color", "true", cb_config_log_colors, "Should the log output use colors");
+	SETCB ("log.quiet", "false", cb_config_log_quiet, "Be quiet, dont log anything to console");
+	SETCB ("log.cons", "false", cb_config_log_cons, "Log messages using rcons (handy for monochannel r2pipe)");
 
 	// zign
 	SETPREF ("zign.prefix", "sign", "default prefix for zignatures matches");
@@ -4389,11 +4415,11 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("file.type", "", "type of current file");
 	SETI ("file.loadalign", 1024, "alignment of load addresses");
 #if R2_580
-	SETCB ("file.log", "", cb_log_config_file, "Save log messages to given filename (log.file)");
-	SETCB ("file.output", "", &cb_teefile, "pipe output to file of this name (scr.tee)");
+	SETCB ("file.log", "", cb_config_log_file, "Save log messages to given filename (alias for log.file)");
+	SETCB ("file.output", "", &cb_config_file_output, "pipe output to file of this name (scr.tee)");
 #else
-	SETCB ("log.file", "", cb_log_config_file, "Save log messages to given filename");
-	SETCB ("scr.tee", "", &cb_teefile, "pipe output to file of this name");
+	SETCB ("log.file", "", cb_config_log_file, "Save log messages to given filename");
+	SETCB ("scr.tee", "", &cb_config_file_output, "pipe output to file of this name (same as file.output)");
 #endif
 	/* rap */
 	SETBPREF ("rap.loop", "true", "run rap as a forever-listening daemon (=:9090)");
