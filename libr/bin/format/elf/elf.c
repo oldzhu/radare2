@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2023 - nibble, pancake, alvaro_fe */
+/* radare - LGPL - Copyright 2008-2024 - nibble, pancake, alvaro_fe */
 
 // R2R db/formats/elf/versioninfo
 #define R_LOG_ORIGIN "elf"
@@ -3248,7 +3248,6 @@ const RVector *Elf_(load_relocs) (ELFOBJ *eo) {
 	if (!populate_relocs_record (eo)) {
 		return NULL;
 	}
-
 	return &eo->g_relocs;
 }
 
