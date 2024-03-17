@@ -23,8 +23,8 @@ on forensics. Today, r2 is a featureful low-level command-line tool with
 support for scripting with the embedded Javascript interpreter or via r2pipe.
 
 r2 can edit files on local hard drives, view kernel memory, and debug programs
-locally or via a remote gdb server. r2's wide architecture support allows you
-to analyze, emulate, debug, modify, and disassemble any binary.
+locally or via a remote gdb/windbg servers. r2's wide architecture support allows
+you to analyze, emulate, debug, modify, and disassemble any binary.
 
 <p align="center">
 <a href="https://www.radare.org/"><img src="doc/images/shot.png" alt="screenshot" align="center" border=0 width="600px"></a>
@@ -62,7 +62,7 @@ Using the `r2pm` tool you can browse and install many plugins and tools that use
 * [esilsolve](https://github.com/radareorg/esilsolve): The symbolic execution plugin, based on esil and z3
 * [iaito](https://github.com/radareorg/iaito): The official Qt graphical interface
 * [keystone](https://github.com/radareorg/radare2-extras/tree/master/keystone) Assembler instructions using the Keystone library
-* [r2ai](https://github.com/radareorg/radare2-extras/tree/master/r2ai/local) Run a Language Model in localhost with Llama inside r2!
+* [r2ai](https://github.com/radareorg/r2ai) Run a Language Model in localhost with Llama inside r2!
 * [r2dec](https://github.com/wargio/r2dec-js): A decompiler based on r2 written in JS, accessed with the `pdd` command
 * [r2diaphora](https://github.com/FernandoDoming/r2diaphora): [Diaphora](https://github.com/joxeankoret/diaphora)'s diffing engine working on top of radare2
 * [r2frida](https://github.com/nowsecure/r2frida): The frida io plugin. Start r2 with `r2 frida://0` to use it
@@ -72,6 +72,7 @@ Using the `r2pm` tool you can browse and install many plugins and tools that use
 * [r2poke](https://github.com/radareorg/radare2-extras/tree/master/r2poke) Integration with GNU/Poke for extended binary parsing capabilities
 * [r2yara](https://github.com/radareorg/r2yara) Run Yara from r2 or use r2 primitives from Yara
 * [radius2](https://github.com/nowsecure/radius2): A fast symbolic execution engine based on boolector and esil
+* [r2sarif](https://github.com/radareorg/radare2-extras/tree/master/sarif/local) Run a Language Model in localhost with Llama inside r2!
 
 ## Usage
 
@@ -101,14 +102,6 @@ r2pm -u <pkg>   # uninstall the given package
 r2pm -l <pkg>   # list installed packages
 ```
 
-Alternatively you can use r2env to switch between different versions.
-
-```sh
-pip install -U r2env
-r2env init
-r2env add radare2@git
-```
-
 ## Resources
 
 * [Official Book](https://book.rada.re): Read about r2 usage
@@ -120,35 +113,16 @@ r2env add radare2@git
 * [USAGE.md](USAGE.md): Some example commands
 * [INSTALL.md](INSTALL.md): Installation instructions using make or meson
 
-# Contributing
-
-There are many ways to contribute to the project. Contact the
-[community](#community), check out the github issues, or grep for
-TODO/FIXME/XXX comments in the source.
-
-To contribute code, push your changes to a branch on your fork of the
-repository. Please ensure that you follow the coding and style guidelines and
-that your changes pass the testing suite, which you can run with the `r2r`
-tool. If you are adding significant code, it may be necessary to modify or add
-additional tests in the `test/` directory.
-
-For more details, see [CONTRIBUTING.md](CONTRIBUTING.md) and
-[DEVELOPERS.md](DEVELOPERS.md).
-
 ## Documentation
 
-To learn more about r2 we encourage you to watch [youtube
-talks](https://www.youtube.com/c/r2con) from [r2con](https://rada.re/con). In
-addition to reading blogposts, slides or the [official radare2
-book](https://book.rada.re), here are some methods to contact us:
+Learn more about r2 watching [youtube talks](https://www.youtube.com/c/r2con) from [r2con](https://rada.re/con). There are also many blogposts, slidedecks and the [official radare2 book](https://book.rada.re), but it's always a good idea to join any of the official chats and drop your questions/feedback around.
 
 ## Community
 
 * [irc.libera.chat](https://libera.chat): `#radare`, `#radare_side`
 * [Matrix](https://matrix.to/#/#radare:matrix.org): `#radare:matrix.org`
-* Telegram: [Main Channel](https://t.me/radare) and [Side Channel](https://t.me/radare_side)
+* Telegram: [Main](https://t.me/radare) and [Side](https://t.me/radare_side) channels
 * [Discord server](https://discord.gg/YBey7CR9jf)
-
 * Mastodon: [@radareorg](https://infosec.exchange/@radareorg)
 * Website: [https://www.radare.org/](https://www.radare.org/)
 
