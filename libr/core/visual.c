@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2023 - pancake */
+/* radare - LGPL - Copyright 2009-2024 - pancake */
 
 #include <r_core.h>
 #include <r_vec.h>
@@ -801,7 +801,7 @@ R_API int r_core_visual_prompt(RCore *core) {
 		}
 	} else {
 		ret = false;
-		//r_cons_any_key (NULL);
+		// r_cons_any_key (NULL);
 		r_cons_clear00 ();
 		r_core_visual_showcursor (core, false);
 	}
@@ -865,7 +865,7 @@ static int visual_nkey(RCore *core, int ch) {
 	switch (ch) {
 	case R_CONS_KEY_F1:
 		cmd = r_config_get (core->config, "key.f1");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			visual_help (core);
@@ -873,7 +873,7 @@ static int visual_nkey(RCore *core, int ch) {
 		break;
 	case R_CONS_KEY_F2:
 		cmd = r_config_get (core->config, "key.f2");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			visual_breakpoint (core);
@@ -881,13 +881,13 @@ static int visual_nkey(RCore *core, int ch) {
 		break;
 	case R_CONS_KEY_F3:
 		cmd = r_config_get (core->config, "key.f3");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
 	case R_CONS_KEY_F4:
 		cmd = r_config_get (core->config, "key.f4");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			if (core->print->cur_enabled) {
@@ -899,55 +899,58 @@ static int visual_nkey(RCore *core, int ch) {
 		break;
 	case R_CONS_KEY_F5:
 		cmd = r_config_get (core->config, "key.f5");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
 	case R_CONS_KEY_F6:
 		cmd = r_config_get (core->config, "key.f6");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
 	case R_CONS_KEY_F7:
 		cmd = r_config_get (core->config, "key.f7");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			visual_single_step_in (core);
+			oseek = UT64_MAX;
 		}
 		break;
 	case R_CONS_KEY_F8:
 		cmd = r_config_get (core->config, "key.f8");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			__core_visual_step_over (core);
+			oseek = UT64_MAX;
 		}
 		break;
 	case R_CONS_KEY_F9:
 		cmd = r_config_get (core->config, "key.f9");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		} else {
 			visual_continue (core);
+			oseek = UT64_MAX;
 		}
 		break;
 	case R_CONS_KEY_F10:
 		cmd = r_config_get (core->config, "key.f10");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
 	case R_CONS_KEY_F11:
 		cmd = r_config_get (core->config, "key.f11");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
 	case R_CONS_KEY_F12:
 		cmd = r_config_get (core->config, "key.f12");
-		if (cmd && *cmd) {
+		if (R_STR_ISNOTEMPTY (cmd)) {
 			ch = r_core_cmd0 (core, cmd);
 		}
 		break;
@@ -4010,7 +4013,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 	return true;
 }
 
-R_API void r_core_visual_title(RCore *core, int color) {
+static void visual_title(RCore *core, int color) {
 	bool showDelta = r_config_get_b (core->config, "asm.slow");
 	core->visual.oldpc = 0;
 	const char *BEGIN = core->cons->context->pal.prompt;
@@ -4481,7 +4484,7 @@ R_IPI void visual_refresh(RCore *core) {
 	if (R_STR_ISNOTEMPTY (vi)) {
 		r_core_cmd0 (core, vi);
 	}
-	r_core_visual_title (core, core->visual.color);
+	visual_title (core, core->visual.color);
 	const char *vi2 = r_config_get (core->config, "cmd.vprompt2");
 	if (R_STR_ISNOTEMPTY (vi2)) {
 		r_core_cmd0 (core, vi2);
