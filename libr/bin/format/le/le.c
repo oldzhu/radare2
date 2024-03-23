@@ -436,16 +436,33 @@ R_IPI RList *r_bin_le_get_sections(RBinLEObj *bin) {
 					s->paddr = ((ut64)page.offset << pageshift) + pages_start_off;
 				}
 			}
-			s->vsize = h->pagesize;
+			s->vsize = R_MIN (h->pagesize, sec->vsize - page_size_sum);
 			s->vaddr = sec->vaddr + page_size_sum;
 			s->perm = sec->perm;
-			s->size = page.size;
+			s->size = R_MIN (page.size, s->vsize);
 			s->add = true;
 			s->bits = sec->bits;
 			r_list_append (l, s);
 			page_size_sum += s->vsize;
 		}
 		if (entry->page_tbl_entries) {
+			if (page_size_sum < sec->vsize) {
+				RBinSection *s = R_NEW0 (RBinSection);
+				if (!s) {
+					r_bin_section_free (sec);
+					return l;
+				}
+				ut64 remainder_size = sec->vsize - page_size_sum;
+				s->vsize = remainder_size;
+				s->vaddr = sec->vaddr + page_size_sum;
+				s->perm = sec->perm;
+				s->size = 0;
+				s->add = true;
+				s->bits = sec->bits;
+				s->name = r_str_newf ("%s.page.zerofill", sec->name);
+				s->is_data = sec->is_data;
+				r_list_append (l, s);
+			}
 			r_bin_section_free (sec);
 		}
 	}
@@ -517,16 +534,13 @@ R_IPI RList *r_bin_le_get_relocs(RBinLEObj *bin) {
 			break;
 		}
 		ut64 repeat = 0;
-		ut64 source = 0;
+		st16 source = 0;
 		if (header.source & F_SOURCE_LIST) {
 			repeat = r_buf_read8_at (bin->buf, offset);
 			offset += sizeof (ut8);
 		} else {
 			source = r_buf_read_ble16_at (bin->buf, offset, h->worder);
-			if (source == UT16_MAX) {
-				break;
-			}
-			offset += sizeof (ut16);
+			offset += sizeof (st16);
 		}
 		ut32 ordinal;
 		if (header.target & F_TARGET_ORD16) {
@@ -618,14 +632,19 @@ R_IPI RList *r_bin_le_get_relocs(RBinLEObj *bin) {
 			}
 			rel->addend += additive;
 		}
-		if (!repeat) {
-			rel->vaddr = cur_page_offset + source;
-			rel->paddr = cur_section ? cur_section->paddr + source : 0;
+		if (!repeat && source >= 0) {
+			/* Negative source means we already handled the cross-page
+			 * fixup in the previous page, so there's no need to dupe it
+			 */
+			rel->vaddr = cur_page_offset + (st64) source;
+			rel->paddr = cur_section ? cur_section->paddr + (st64) source : 0;
 			r_list_append (l, rel);
 			rel_appended = true;
 		}
 
 		if (header.target & F_TARGET_CHAIN) {
+			// TODO: add tests for this case
+			ut64 source = 0;
 			ut32 fixupinfo = r_buf_read_ble32_at (bin->buf, cur_page_offset + source, h->worder);
 			ut64 base_target_address = rel->addend - (fixupinfo & 0xFFFFF);
 			do {
