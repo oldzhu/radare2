@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2008-2022 pancake, inisider */
+/* radare - LGPL - Copyright 2008-2024 pancake, inisider */
 
 #include <r_util.h>
 #include "coff.h"
@@ -92,24 +92,30 @@ R_IPI char *r_coff_symbol_name(RBinCoffObj *obj, void *ptr) {
 	int len = 0;
 	ut32 offset = 0; // offset into the string table.
 
-	union {
-		char name[8];
+	typedef union {
+		char name[9];
 		struct {
 			ut32 zero;
 			ut32 offset;
 		};
-	} *p = ptr;
+	} NameOff;
+	NameOff no;
+	memcpy (&no, ptr, sizeof (no));
+	NameOff *p = &no;
 	if (!ptr) {
 		return NULL;
 	}
 
 	if (p->zero && *p->name != '/') {
 		return r_str_ndup (p->name, 8);
-	} else if (*p->name == '/') {
+	}
+	if (*p->name == '/') {
 		char *offset_str = (p->name + 1);
+		no.name[8] = 0;
 		if (*offset_str == '/') {
 			r_coff_decode_base64 (p->name + 2, 6, &offset);
 		} else {
+			// ensure null termination
 			offset = atoi (offset_str);
 		}
 	} else {
@@ -117,15 +123,29 @@ R_IPI char *r_coff_symbol_name(RBinCoffObj *obj, void *ptr) {
 	}
 
 	// Calculate the actual pointer to the symbol/section name we're interested in.
-	ut64 name_ptr;
+	st64 name_ptr;
 	if (obj->type == COFF_TYPE_BIGOBJ) {
-		name_ptr = obj->bigobj_hdr.f_symptr + (obj->bigobj_hdr.f_nsyms * sizeof (struct coff_bigobj_symbol) + offset);
+		ut32 f_nsyms = obj->bigobj_hdr.f_nsyms;
+		if (f_nsyms < 1 || f_nsyms > UT24_MAX) {
+		//	R_LOG_WARN ("Invalid amount of big fsyms %d", f_nsyms);
+		//	f_nsyms &= 0xff;
+		//	return NULL;
+		}
+		name_ptr = obj->bigobj_hdr.f_symptr + (f_nsyms * sizeof (struct coff_bigobj_symbol) + offset);
 	} else {
-		name_ptr = obj->hdr.f_symptr + (obj->hdr.f_nsyms * sizeof (struct coff_symbol) + offset);
+		ut32 f_nsyms = obj->hdr.f_nsyms;
+		if (f_nsyms < 1 || f_nsyms > UT24_MAX) {
+		//	R_LOG_WARN ("Invalid amount of fsyms %d", f_nsyms);
+		//	f_nsyms &= 0xff;
+		//	return NULL;
+		}
+		name_ptr = obj->hdr.f_symptr + (f_nsyms * sizeof (struct coff_symbol) + offset);
 	}
-	if (name_ptr > obj->size) {
+#if 0
+	if (name_ptr < 0 || name_ptr >= obj->size) {
 		return NULL;
 	}
+#endif
 	len = r_buf_read_at (obj->b, name_ptr, (ut8 *)n, sizeof (n));
 	if (len < 1) {
 		return NULL;
@@ -148,7 +168,11 @@ static int r_coff_rebase_sym(RBinCoffObj *obj, RBinAddr *addr, int symbol_index)
 		n_value = obj->symbols[symbol_index].n_value;
 		f_nscns = obj->hdr.f_nscns;
 	}
-
+#if 0
+	if (n_scnum < 1 || n_scnum > UT16_MAX) {
+		return 0;
+	}
+#endif
 	if (n_scnum < 1 || n_scnum > f_nscns) {
 		return 0;
 	}
@@ -227,7 +251,11 @@ static bool r_coff_get_entry_helper(RBinCoffObj *obj, RBinAddr *address) {
 	}
 
 	int i;
-
+#if 0
+	if (symbol_count < 1 || symbol_count > UT16_MAX) {
+		return false;
+	}
+#endif
 	for (i = 0; i < symbol_count; i++) {
 		const char *name = (const char *)symbols + (i * symbol_size);
 		if ((!strcmp (name, "_start") || !strcmp (name, "start")) &&
@@ -365,7 +393,8 @@ static bool r_bin_xcoff_init_opt_hdr(RBinCoffObj *obj) {
 #endif
 
 static bool r_bin_coff_init_scn_hdr(RBinCoffObj *obj) {
-	int ret, size, f_nscns;
+	int ret, size;
+	ut32 f_nscns;
 
 	ut64 offset = 0;
 	ut16 f_magic;
@@ -377,6 +406,16 @@ static bool r_bin_coff_init_scn_hdr(RBinCoffObj *obj) {
 		offset = sizeof (struct coff_hdr) + obj->hdr.f_opthdr;
 		f_nscns = obj->hdr.f_nscns;
 		f_magic = obj->hdr.f_magic;
+	}
+	if (ST32_MUL_OVFCHK (sizeof (struct coff_scn_hdr), f_nscns)) {
+	// if ((st32)f_nscns < 1 || f_nscns > UT16_MAX)
+		R_LOG_WARN ("Dimming f_nscns count because is poluted or too large");
+		f_nscns &= 0xff;
+		if (obj->type == COFF_TYPE_BIGOBJ) {
+			obj->bigobj_hdr.f_nscns = f_nscns;
+		} else {
+			obj->hdr.f_nscns = f_nscns;
+		}
 	}
 
 	if (f_magic == COFF_FILE_TI_COFF) {
@@ -390,7 +429,9 @@ static bool r_bin_coff_init_scn_hdr(RBinCoffObj *obj) {
 	if (!obj->scn_hdrs) {
 		return false;
 	}
-	ret = r_buf_fread_at (obj->b, offset, (ut8 *)obj->scn_hdrs, obj->endian? "8c6I2S1I": "8c6i2s1i", f_nscns);
+	ret = r_buf_fread_at (obj->b, offset, (ut8 *)obj->scn_hdrs,
+			obj->endian? "8c6I2S1I": "8c6i2s1i", f_nscns);
+	// 8 + (6*4) + (2*2) + (4) = 40
 	if (ret != size) {
 		R_FREE (obj->scn_hdrs);
 		return false;
@@ -451,7 +492,7 @@ static bool r_bin_xcoff_init_ldsyms(RBinCoffObj *obj) {
 }
 
 static bool r_bin_coff_init_symtable(RBinCoffObj *obj) {
-	int ret, size;
+	int ret;
 	ut32 f_symptr = obj->type == COFF_TYPE_BIGOBJ? obj->bigobj_hdr.f_symptr: obj->hdr.f_symptr;
 	ut32 f_nsyms = obj->type == COFF_TYPE_BIGOBJ? obj->bigobj_hdr.f_nsyms: obj->hdr.f_nsyms;
 	ut64 offset = f_symptr;
@@ -462,10 +503,18 @@ static bool r_bin_coff_init_symtable(RBinCoffObj *obj) {
 		return true;
 	}
 
-	if (obj->type != COFF_TYPE_BIGOBJ && f_nsyms >= 0xffff) { // too much symbols, probably not allocatable
+	if (obj->type != COFF_TYPE_BIGOBJ && f_nsyms >= 0xffff) {
+		// too much symbols, probably not allocatable
 		return false;
 	}
-	size = f_nsyms * symbol_size;
+#if 0
+	if (ST32_MUL_OVFCHK (symbol_size, f_nsyms)) {
+		R_LOG_WARN ("Dimming f_nsyms count because is poluted or too large");
+//		f_nsyms &= 0xff;
+		return false;
+	}
+#endif
+	int size = f_nsyms * symbol_size;
 	if (size < 0 ||
 		size > obj->size ||
 		offset > obj->size ||
@@ -492,6 +541,21 @@ static bool r_bin_coff_init_symtable(RBinCoffObj *obj) {
 
 static bool r_bin_coff_init_scn_va(RBinCoffObj *obj) {
 	int f_nscns = obj->type == COFF_TYPE_BIGOBJ? obj->bigobj_hdr.f_nscns: obj->hdr.f_nscns;
+#if 0
+	if (f_nscns < 1) {
+		R_LOG_WARN ("Invalid amount of f_nscns %d", f_nscns);
+		return true;
+	}
+	if (f_nscns > UT16_MAX) {
+		R_LOG_WARN ("Invalid amount of f_nscns %d", f_nscns);
+		return true;
+	}
+	if (ST32_MUL_OVFCHK (sizeof (struct coff_scn_hdr), f_nscns)) {
+		R_LOG_WARN ("Dimming f_nscns count because is poluted or too large");
+		f_nscns &= 0xff;
+		return false;
+	}
+#endif
 	obj->scn_va = R_NEWS (ut64, f_nscns);
 	if (!obj->scn_va) {
 		return false;
@@ -511,9 +575,7 @@ static bool r_bin_coff_init_scn_va(RBinCoffObj *obj) {
 }
 
 static bool r_bin_coff_init(RBinCoffObj *obj, RBuffer *buf, bool verbose) {
-	if (!obj || !buf) {
-		return false;
-	}
+	R_RETURN_VAL_IF_FAIL (obj && buf, false);
 	obj->b = r_buf_ref (buf);
 	obj->size = r_buf_size (buf);
 	obj->verbose = verbose;
