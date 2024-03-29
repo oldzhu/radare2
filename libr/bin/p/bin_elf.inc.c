@@ -530,6 +530,9 @@ static RBinReloc *reloc_convert(ELFOBJ* eo, RBinElfReloc *rel, ut64 got_addr) {
 		case R_X86_64_GOTPCREL:  ADD(64, got_addr - P); break;
 		case R_X86_64_COPY:      ADD(64, 0); break; // XXX: copy symbol at runtime
 		case R_X86_64_IRELATIVE: r->is_ifunc = true; SET(64); break;
+		case R_X86_64_TPOFF64:   ADD(64, 0); break;
+		case R_X86_64_DTPMOD64:  break; // id of module containing symbol (keep it as zero)
+		case R_X86_64_DTPOFF64:  ADD(64, 0); break; // offset inside module's tls
 		default:
 			R_LOG_WARN ("Unsupported reloc type %d for x64", rel->type);
 			break;
@@ -736,7 +739,13 @@ static RList* relocs(RBinFile *bf) {
 			if (ptr) {
 				ht_up_insert (reloc_ht, reloc->rva, ptr);
 			} else {
-				R_LOG_ERROR ("reloc conversion failed for 0x%"PFMT64x, got_addr);
+				if (reloc->rva != reloc->offset) {
+					ht_up_insert (reloc_ht, reloc->rva, ptr);
+					R_LOG_DEBUG ("Suspicious reloc patching at 0x%"PFMT64x" for 0x%08"PFMT64x" via 0x%"PFMT64x,
+						got_addr, reloc->rva, reloc->offset);
+				} else {
+					R_LOG_ERROR ("reloc conversion failed for 0x%"PFMT64x, got_addr);
+				}
 			}
 		}
 	}
@@ -844,6 +853,7 @@ static void _patch_reloc(ELFOBJ *bo, ut16 e_machine, RIOBind *iob, RBinElfReloc 
  			r_write_le32 (buf, v);
 			iob->overlay_write_at (iob->io, rel->rva, buf, 4);
 			}
+			break;
  		default:
  			break;
  		}
@@ -851,6 +861,18 @@ static void _patch_reloc(ELFOBJ *bo, ut16 e_machine, RIOBind *iob, RBinElfReloc 
 	case EM_X86_64: {
 		int word = 0;
 		switch (rel->type) {
+		case R_X86_64_DTPMOD64:
+			word = 0;
+			// do nothing
+			break;
+		case R_X86_64_DTPOFF64:
+			word = 8;
+			V = S + A;
+			break;
+		case R_X86_64_TPOFF64:
+			word = 8;
+			V = S + A;
+			break;
 		case R_X86_64_8:
 			word = 1;
 			V = S + A;
@@ -1200,6 +1222,8 @@ static RList* fields(RBinFile *bf) {
 	if (!ret) {
 		return NULL;
 	}
+	ELFOBJ *eo = bf->bo->bin_obj;
+	const bool be = eo->endian;
 	#define ROW(nam, siz, val, fmt, cmt) \
 		r_list_append (ret, r_bin_field_new (addr, addr, val, siz, nam, cmt, fmt, false));
 	if (r_buf_size (bf->buf) < sizeof (Elf_ (Ehdr))) {
@@ -1208,45 +1232,45 @@ static RList* fields(RBinFile *bf) {
 	ut64 addr = 0;
 	ROW ("ELF", 4, r_buf_read_le32_at (bf->buf, addr), "x", NULL);
 	addr += 0x10;
-	ROW ("Type", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("Type", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("Machine", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("Machine", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("Version", 4, r_buf_read_le32_at (bf->buf, addr), "x", NULL);
+	ROW ("Version", 4, r_buf_read_ble32_at (bf->buf, addr, be), "x", NULL);
 	addr += 0x4;
 
 	if (r_buf_read8_at (bf->buf, 0x04) == 1) {
-		ROW ("EntryPoint", 4, r_buf_read_le32_at (bf->buf, addr), "x", NULL);
+		ROW ("EntryPoint", 4, r_buf_read_ble32_at (bf->buf, addr, be), "x", NULL);
 		addr += 0x4;
-		ROW ("PhOff", 4, r_buf_read_le32_at (bf->buf, addr), "x", NULL);
+		ROW ("PhOff", 4, r_buf_read_ble32_at (bf->buf, addr, be), "x", NULL);
 		addr += 0x4;
-		ut32 shoff = r_buf_read_le32_at (bf->buf, addr);
+		ut32 shoff = r_buf_read_ble32_at (bf->buf, addr, be);
 		ROW ("ShOff", 4, shoff, "x", NULL);
 		addr += 0x4;
 	} else {
-		ROW ("EntryPoint", 8, r_buf_read_le64_at (bf->buf, addr), "q", NULL);
+		ROW ("EntryPoint", 8, r_buf_read_ble64_at (bf->buf, addr, be), "q", NULL);
 		addr += 0x8;
-		ut64 phoff = r_buf_read_le64_at (bf->buf, addr);
+		ut64 phoff = r_buf_read_ble64_at (bf->buf, addr, be);
 		ROW ("PhOff", 8, phoff, "q", NULL);
 		addr += 0x8;
-		ut64 shoff = r_buf_read_le64_at (bf->buf, addr);
+		ut64 shoff = r_buf_read_ble64_at (bf->buf, addr, be);
 		ROW ("ShOff", 8, shoff, "q", NULL);
 		addr += 0x8;
 	}
 
-	ROW ("Flags", 4, r_buf_read_le32_at (bf->buf, addr), "x", NULL);
+	ROW ("Flags", 4, r_buf_read_ble32_at (bf->buf, addr, be), "x", NULL);
 	addr += 0x4;
-	ROW ("EhSize", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("EhSize", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("PhentSize", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("PhentSize", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("PhNum", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("PhNum", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("ShentSize", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("ShentSize", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("ShNum", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("ShNum", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 	addr += 0x2;
-	ROW ("ShrStrndx", 2, r_buf_read_le16_at (bf->buf, addr), "w", NULL);
+	ROW ("ShrStrndx", 2, r_buf_read_ble16_at (bf->buf, addr, be), "w", NULL);
 
 	return ret;
 }
