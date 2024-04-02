@@ -158,6 +158,7 @@ typedef struct r_disasm_state_t {
 	bool bblined;
 	bool show_bytes;
 	bool show_bytes_align;
+	bool show_bytes_ascii;
 	bool show_bytes_asbits;
 	bool show_bytes_right;
 	bool show_bytes_opcolor;
@@ -786,6 +787,7 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->show_offseg = r_config_get_b (core->config, "asm.offset.segment");
 	ds->show_flags = r_config_get_b (core->config, "asm.flags");
 	ds->show_bytes = r_config_get_b (core->config, "asm.bytes");
+	ds->show_bytes_ascii = r_config_get_b (core->config, "asm.bytes.ascii");
 	ds->show_bytes_asbits = r_config_get_i (core->config, "asm.bytes.asbits");
 	ds->show_bytes_align = r_config_get_i (core->config, "asm.bytes.align");
 	ds->show_bytes_right = r_config_get_i (core->config, "asm.bytes.right");
@@ -1392,10 +1394,18 @@ static void ds_begin_comment(RDisasmState *ds) {
 }
 
 static void ds_print_pins(RDisasmState *ds) {
-	const char *lepin = r_anal_pin_at (ds->core->anal, ds->at);
+	RCore *core = ds->core;
+	const char *lepin = r_anal_pin_at (core->anal, ds->at);
 	if (R_STR_ISNOTEMPTY (lepin)) {
 	 	ds_begin_comment (ds);
 		ds_comment (ds, true, "%s [aep: %s]", ds->cmtoken, lepin);
+		if (r_str_startswith (lepin, "soft.")) {
+			const char *cmd = r_anal_pin_get (core->anal, lepin);
+			if (cmd) {
+				r_cons_newline ();
+				r_core_cmd0 (core, cmd);
+			}
+		}
 	}
 }
 
@@ -3744,11 +3754,30 @@ static void ds_print_bytes(RDisasmState *ds) {
 			}
 			pad[j] = '\0';
 			str = strdup ("");
+		} else if (ds->show_bytes_ascii) {
+			int i;
+			const int bb = nb / 2;
+			const int chrlen = R_MIN (ds->oplen, bb);
+			const int padlen = bb - chrlen;
+			for (i = 0; i < padlen; i++) {
+				pad[i] = ' ';
+			}
+			pad[padlen] = 0;
+			str = malloc (chrlen + 1);
+			const ut8 *bytes = ds->analop.bytes;
+			for (i = 0; i < chrlen; i++) {
+				if (IS_PRINTABLE (bytes[i])) {
+					str[i] = bytes[i];
+				} else {
+					str[i] = '.';
+				}
+			}
+			str[chrlen] = 0;
 		} else if (ds->show_bytes_asbits) {
 			// TODO: use C api instead of calling commands
 			char *_opsize = r_core_cmd_strf (core, "aos@0x%08"PFMT64x, ds->at);
 			int opsize = atoi (_opsize);
-			int len = 8 * R_MIN (opsize, nb);
+			const int len = 8 * R_MIN (opsize, nb);
 			*pad = 0;
 			str = r_core_cmd_strf (core, "pb1 %d @ 0x%08"PFMT64x, len, ds->at);
 			r_str_trim (str);
