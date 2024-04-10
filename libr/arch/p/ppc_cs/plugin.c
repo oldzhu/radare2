@@ -249,6 +249,7 @@ static char *regs(RArchSession *as) {
 	const char *p =
 		"=PC	pc\n"
 		"=SP	r1\n"
+		"=BP	r31\n"
 		"=SR	srr1\n" // status register ??
 		"=SN	r0\n" // also for ret
 		"=R0	r3\n" // ret
@@ -523,6 +524,7 @@ static char *shrink(char *op) {
 	return op;
 }
 
+#undef PPC
 #define CSINC PPC
 #if 0
 #define CSINC_MODE \
