@@ -78,8 +78,9 @@ static RCoreHelpMessage help_msg_aae = {
 
 static RCoreHelpMessage help_msg_aav = {
 	"Usage:", "aav", "[sat] # find values referencing a specific section or map",
-	"aav", "", "find absolute reference values",
-	"aavr", "", "find relative reference values (address + 4 byte signed int)",
+	"aav", "", "find absolute reference values (see aav0)",
+	"aav0", "", "find absolute reference values (accept maps at address zero)",
+	"aavr", "[0]", "find relative reference values (address + 4 byte signed int)",
 	NULL
 };
 
@@ -2692,14 +2693,16 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 					*sp = 0;
 				}
 				char *d = r_asm_describe (core->rasm, opname);
-				if (d && *d) {
+				if (R_STR_ISNOTEMPTY (d)) {
 					printline ("description", "%s\n", d);
 				}
 				free (d);
 				free (opname);
 			}
 			{
-				ut8 *mask = r_anal_mask (core->anal, len - idx, buf + idx, core->offset + idx);
+				const int left = len - idx;
+				const int instlen = R_MIN (op.size, left);
+				ut8 *mask = r_anal_mask (core->anal, instlen, buf + idx, core->offset + idx);
 				if (smart_mask) {
 					char *maskstr = r_core_cmd_strf (core, "aobm@0x%08"PFMT64x, op.addr);
 					r_str_trim (maskstr);
@@ -6659,6 +6662,7 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 	int tail_return_value = 0;
 	int ret;
 	ut8 code[32];
+	int maxopsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MAX_OP_SIZE);
 	RAnalOp op = {0};
 	REsil *esil = core->anal->esil;
 	// esil->trap = 0;
@@ -6684,6 +6688,10 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 	int dataAlign = r_anal_archinfo (esil->anal, R_ANAL_ARCHINFO_DATA_ALIGN);
 	ut64 naddr = addr + minopsz;
 	bool notfirst = false;
+	if (maxopsz > sizeof (code)) {
+		R_LOG_WARN ("Max instruction size is larger than %d, Dimming down", sizeof (code));
+		maxopsz = sizeof (code);
+	}
 	for (; true; r_anal_op_fini (&op)) {
 		esil->trap = 0;
 		oaddr = addr;
@@ -6741,10 +6749,12 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 				}
 			}
 		}
-		(void) r_io_read_at (core->io, addr, code, sizeof (code));
-		// TODO: sometimes this is dupe
-		ret = r_anal_op (core->anal, &op, addr, code, sizeof (code), R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_ESIL | R_ARCH_OP_MASK_HINT);
-		naddr = addr + op.size;
+		int re = r_io_read_at (core->io, addr, code, maxopsz);
+		if (re < 1) {
+			ret = 0;
+		} else {
+			ret = r_anal_op (core->anal, &op, addr, code, sizeof (code), R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_ESIL | R_ARCH_OP_MASK_HINT);
+		}
 		// if type is JMP then we execute the next N instructions
 		// update the esil pointer because RAnal.op() can change it
 		esil = core->anal->esil;
@@ -6761,6 +6771,7 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 				op.size = 1; // avoid inverted stepping
 			}
 		}
+		naddr = addr + op.size;
 		if (stepOver) {
 			switch (op.type) {
 			case R_ANAL_OP_TYPE_SWI:
@@ -7478,6 +7489,7 @@ static bool cmd_aea(RCore* core, int mode, ut64 addr, int length, const char *es
 	if (!buf) {
 		return false;
 	}
+	int minopsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
 	(void)r_io_read_at (core->io, addr, (ut8 *)buf, buf_sz);
 	aea_stats_init (&stats);
 	r_reg_arena_push (core->anal->reg);
@@ -7508,6 +7520,11 @@ static bool cmd_aea(RCore* core, int mode, ut64 addr, int length, const char *es
 		} else {
 			len = r_anal_op (core->anal, &aop, addr + ptr, buf + ptr, buf_sz - ptr, R_ARCH_OP_MASK_ESIL | R_ARCH_OP_MASK_HINT);
 			esilstr = R_STRBUF_SAFEGET (&aop.esil);
+		}
+		if (len < 1) {
+			len += minopsz;
+			R_LOG_DEBUG ("Skip invalid instruction");
+			continue;
 		}
 		if (R_STR_ISNOTEMPTY (esilstr)) {
 			if (len < 1) {
@@ -12768,8 +12785,9 @@ static void cmd_anal_aav(RCore *core, const char *input) {
 #define seti(x,y) r_config_set_i(core->config, x, y);
 #define geti(x) r_config_get_i(core->config, x);
 	r_return_if_fail (*input == 'v');
-	bool relative = input[1] == 'r';
-	bool verbose = input[1] != 'q';
+	const bool relative = input[1] == 'r';
+	const bool verbose = input[1] != 'q';
+	const bool forcemode = input[1] == '0' || (input[1] && input[2] == '0');
 	ut64 o_align = geti ("search.align");
 	const char *analin = r_config_get (core->config, "anal.in");
 	char *tmp = strdup (analin);
@@ -12796,8 +12814,13 @@ static void cmd_anal_aav(RCore *core, const char *input) {
 			if (r_cons_is_breaked ()) {
 				break;
 			}
+			ut64 from = r_io_map_begin (map);
+			if (!forcemode && from == 0) {
+				R_LOG_WARN ("Skipping aav because base address is zero. Use -B 0x800000 or aav0");
+				continue;
+			}
 			(void)r_core_search_value_in_range (core, relative, map->itv,
-				r_io_map_begin (map), r_io_map_end (map), vsize, _CbInRangeAav, (void *)(size_t)asterisk);
+				from, r_io_map_end (map), vsize, _CbInRangeAav, (void *)(size_t)asterisk);
 		}
 		r_list_free (list);
 	} else {
@@ -12814,7 +12837,7 @@ static void cmd_anal_aav(RCore *core, const char *input) {
 			if (r_cons_is_breaked ()) {
 				break;
 			}
-			//TODO: Reduce multiple hits for same addr
+			// TODO: Reduce multiple hits for same addr
 			from = r_itv_begin (map2->itv);
 			to = r_itv_end (map2->itv);
 			if ((to - from) > MAX_SCAN_SIZE) {
@@ -12831,6 +12854,10 @@ static void cmd_anal_aav(RCore *core, const char *input) {
 					char *unit = r_num_units (NULL, 0, end - begin);
 					R_LOG_WARN ("Skipping huge range (%s)", unit);
 					free (unit);
+					continue;
+				}
+				if (!forcemode && from == 0) {
+					R_LOG_WARN ("Skipping aav because base address is zero. Use -B 0x800000 or aav0");
 					continue;
 				}
 				if (verbose) {
