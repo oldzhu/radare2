@@ -238,6 +238,14 @@ static RCoreHelpMessage help_msg_pxu = {
 	NULL
 };
 
+static RCoreHelpMessage help_msg_prc = {
+	"Usage:", "prc=[#] ([size]) ", "see p=? to find valid values for #",
+	"prc", "", "print bytes as colors in palette",
+	"prcb", "", "print nibble bits as colors in palette",
+	"prcn", "", "print nibbles as colors in palette",
+	"prc=e", "", "entropy",
+	NULL
+};
 static RCoreHelpMessage help_msg_p_equal = {
 	"Usage:", "p=[=bep?][qj] [N] ([len]) ([offset]) ", "show entropy/printable chars/chars bars",
 	"e ", "zoom.in", "specify range for zoom",
@@ -592,13 +600,13 @@ static RCoreHelpMessage help_msg_pz = {
 	"e ", "zoom.from", "start address",
 	"e ", "zoom.to", "end address",
 	"e ", "zoom.byte", "specify how to calculate each byte",
-	"pzp", "", "number of printable chars",
-	"pzf", "", "count of flags in block",
-	"pzs", "", "strings in range",
 	"pz0", "", "number of bytes with value '0'",
 	"pzF", "", "number of bytes with value 0xFF",
 	"pze", "", "calculate entropy and expand to 0-255 range",
+	"pzf", "", "count of flags in block",
 	"pzh", "", "head (first byte value); This is the default mode",
+	"pzp", "", "number of printable chars",
+	"pzs", "", "strings in range",
 	// "WARNING: On big files, use 'zoom.byte=h' or restrict ranges\n");
 	NULL
 };
@@ -630,6 +638,25 @@ static RCoreHelpMessage help_msg_pg = {
 	"pg", "*", "print the gadgets as r2 commands",
 	"pg-", "*", "remove all the gadgets",
 	NULL
+};
+
+static const ut32 colormap16[16] = {
+	0x303030,
+	0xffff00,
+	0x00ff00,
+	0x00ff00,
+	0x00ffff,
+	0x0000ff,
+	0x8a2be2,
+	0x4b0082,
+	0x800080,
+	0xff00ff,
+	0xff69b4,
+	0xfa8072,
+	0xffdab9,
+	0xffd700,
+	0xc0c0c0,
+	0xff0000,
 };
 
 static const ut32 colormap[256] = {
@@ -678,6 +705,98 @@ static void first_flag_chars(const char *name, char *ch, char *ch2) {
 	const bool two = name[0] && name[1];
 	*ch = two? name[0]: ' ';
 	*ch2 = two? name[1]: name[0]; // two? 1: 0];
+}
+
+// nibble-level colordump
+static char *get_color(ut8 ch) {
+	ut32 c0 = colormap16[ch];
+	const int brightness = ((c0 & 0xff0000) >> 16) + 2 * ((c0 & 0xff00) >> 8) + (c0 & 0xff) / 2;
+	// char *str = r_str_newf ("rgb:%s rgb:%06x", brightness <= 0x7f * 3 ? "fff" : "000", c0);
+	char *str = r_str_newf ("rgb:%s rgb:%06x", brightness <= 0x7f * 3 ? "aaa" : "333", c0);
+	char *res = r_cons_pal_parse (str, NULL);
+	free (str);
+	return res;
+}
+
+static void cmd_prcn(RCore *core, const ut8* block, int len, bool bitsmode) {
+	int i, j;
+	char *color0;
+	char *color1;
+	int cols = r_config_get_i (core->config, "hex.cols");
+	const bool show_color = r_config_get_b (core->config, "scr.color");
+	const bool show_flags = r_config_get_b (core->config, "asm.flags");
+	const bool show_section = r_config_get_b (core->config, "hex.section");
+	const bool show_offset = r_config_get_b (core->config, "hex.offset");
+	// const bool show_cursor = core->print->cur_enabled;
+	const bool show_unalloc = core->print->flags & R_PRINT_FLAGS_UNALLOC;
+	if (cols < 1 || cols > 0xfffff) {
+		cols = 32;
+	}
+	for (i = 0; i < len; i += cols) {
+		if (show_section) {
+			const char * name = r_core_get_section_name (core, core->offset + i);
+			r_cons_printf ("%20s ", r_str_get (name));
+		}
+		if (show_offset) {
+			r_print_addr (core->print, core->offset + i);
+		}
+		for (j = i; j < i + cols; j ++) {
+			if (j >= len) {
+				break;
+			}
+			ut8 ch0 = (block[j] >> 4) & 0xf;
+			ut8 ch1 = block[j] & 0xf;
+			if (show_unalloc && !core->print->iob.is_valid_offset (core->print->iob.io, core->offset + j, false)) {
+				ch0 = core->print->io_unalloc_ch;
+				ch1 = core->print->io_unalloc_ch;
+			}
+			if (show_color) {
+				color0 = get_color (ch0);
+				color1 = get_color (ch1);
+#if 0
+				if (show_cursor && core->print->cur == j) {
+					ch = '_';
+				} else {
+					ch = ' ';
+				}
+#endif
+			} else {
+				color0 = strdup ("");
+				color1 = strdup ("");
+#if 0
+				if (show_cursor && core->print->cur == j) {
+					ch = '_';
+				} else {
+					const int idx = (int)(((double)block[j] / 255) * (strlen (chars) - 1));
+					ch = chars[idx];
+				}
+#endif
+			}
+			if (bitsmode) {
+				char color0bits[8] = {0};
+				char color1bits[8] = {0};
+				ut8 b0 = ch0 | ch0 << 4;
+				ut8 b1 = ch1 | ch1 << 4;
+				r_str_bits (color0bits, &b0, 4, NULL);
+				r_str_bits (color1bits, &b1, 4, NULL);
+				r_cons_printf ("%s%s%s%s"Color_RESET" ", color0, color0bits, color1, color1bits);
+			} else {
+				r_cons_printf ("%s%01x%s%01x"Color_RESET, color0, ch0, color1, ch1);
+			}
+			free (color0);
+			free (color1);
+		}
+		if (show_color) {
+			r_cons_printf (Color_RESET);
+		}
+		if (show_flags) {
+			RFlagItem *fi = r_flag_get_i (core->flags, core->offset + j);
+			if (fi) {
+				r_cons_printf (" ; %s", fi->name);
+			}
+		}
+		r_cons_newline ();
+	}
 }
 
 // colordump
@@ -7183,36 +7302,57 @@ static int cmd_print(void *data, const char *input) {
 	case 'r': // "pr"
 		switch (input[1]) {
 		case 'i': // "pri" // color raw image
-			if (input[2] == '?') {
+			switch (input[2]) {
+			case '?':
 				r_core_cmd_help_match (core, help_msg_pr, "pri");
-			} else if (input[2] == 'n') {
+				break;
+			case 'n':
 				cmd_printmsg (core, input + 4);
-			} else if (input[2] == '1') {
+				break;
+			case '1':
 				bitimage (core, 1);
-			} else if (input[2] == 's') {
-				int cols = r_config_get_i (core->config, "hex.cols");
-				r_cons_image (core->block, core->blocksize, cols, 's');
-			} else {
-				// TODO: do colormap and palette conversions here
-				int mode = r_config_get_i (core->config, "scr.color")? 0: 'a';
-				int cols = r_config_get_i (core->config, "hex.cols");
-				r_cons_image (core->block, core->blocksize, cols, mode);
+				break;
+			case 's':
+				{
+					const int cols = r_config_get_i (core->config, "hex.cols");
+					r_cons_image (core->block, core->blocksize, cols, 's');
+				}
+				break;
+			default:
+				{
+					// TODO: do colormap and palette conversions here
+					int mode = r_config_get_i (core->config, "scr.color")? 0: 'a';
+					int cols = r_config_get_i (core->config, "hex.cols");
+					r_cons_image (core->block, core->blocksize, cols, mode);
+					break;
+				}
+				break;
 			}
 			break;
 		case 'c': // "prc" // color raw dump
-			if (input[2] == '?') {
+			switch (input[2]) {
+			case '?':
 				// TODO: change =e to colorized =mode
-				r_cons_printf ("prc=e # colorblocks of entropy\n");
+				R_LOG_INFO ("See pz? and p=?");
 				// TODO: replace pz? help text with "See also"
-				r_core_cmd0 (core, "pz?");
-			} else if (input[2] == '=') {
+				r_core_cmd_help (core, help_msg_prc);
+				break;
+			case '=':
 				if (input[3] == '?') {
 					r_core_cmd_help (core, help_msg_p_equal);
 				} else {
 					cmd_prc_zoom (core, input + 2);
 				}
-			} else {
+				break;
+			case 'b':
+				cmd_prcn (core, block, len, true);
+				break;
+			case 'n':
+				cmd_prcn (core, block, len, false);
+				break;
+			default:
 				cmd_prc (core, block, len);
+				break;
 			}
 			break;
 		case '?':
