@@ -8,7 +8,7 @@ typedef struct {
 	uint32_t ext_offset;
 	uint32_t size;
 	uint32_t line_index;
-	unsigned char *data;
+	const ut8 *data;
 } datablock;
 
 char *stm8_disasm(ut64 pc, const ut8 *data, int size, unsigned int *type, ut64 *jump, int *len) {
@@ -76,9 +76,8 @@ char *stm8_disasm(ut64 pc, const ut8 *data, int size, unsigned int *type, ut64 *
 
 		if (err || !ins.size) {
 			*len = 0;
-			return NULL;
-			r_strbuf_appendf (sb, ".byte 0x%02x", oc[1]);
 			ins.size = 1;
+			return NULL;
 		} else {
 			if (ins.type) {
 				*type = ins.type;
