@@ -61,9 +61,12 @@ static RCoreHelpMessage help_msg_slash_pattern = {
 };
 
 static RCoreHelpMessage help_msg_slash_ad = {
-	"Usage: /ad<jq>", "[value]", "Backward search subcommands",
+	"Usage: /ad[/<*jq>]", "[value]", "Backward search subcommands",
 	"/ad", " rax", "search in disasm plaintext for matching instructions",
+	"/adj", " rax", "json output searching in disasm with plaintext",
 	"/adq", " rax", "quiet mode ideal for scripting",
+	"/ad/", " ins1;ins2", "search for regex instruction 'ins1' followed by regex 'ins2'",
+	"/ad/a", " instr", "search for every byte instruction that matches regexp 'instr'",
 	NULL
 };
 
@@ -104,7 +107,7 @@ static RCoreHelpMessage help_msg_slash = {
 	"/p", "[?][p] patternsize", "search for pattern of given size",
 	"/P", " patternsize", "search similar blocks",
 	"/s", "[*] [threshold]", "find sections by grouping blocks with similar entropy",
-	"/r[erwx]", "[?] sym.printf", "analyze opcode reference an offset (/re for esil)",
+	"/r", "[?][erwx] sym.printf", "analyze opcode reference an offset (/re for esil)",
 	"/R", "[?] [grepopcode]", "search for matching ROP gadgets, semicolon-separated",
 	// moved into /as "/s", "", "search for all syscalls in a region (EXPERIMENTAL)",
 	"/v", "[1248] value", "look for an `cfg.bigendian` 32bit value",
@@ -146,9 +149,7 @@ static RCoreHelpMessage help_msg_slash_a = {
 	"/aa", " mov eax", "linearly find aproximated assembly (case insensitive strstr)",
 	"/ab", " [delta]", "search for backward jumps (usually loops)",
 	"/ac", " mov eax", "same as /aa, but case-sensitive",
-	"/ad", "[/*j] push;mov", "match ins1 followed by ins2 in linear disasm",
-	"/ad/", " ins1;ins2", "search for regex instruction 'ins1' followed by regex 'ins2'",
-	"/ad/a", " instr", "search for every byte instruction that matches regexp 'instr'",
+	"/ad", "[?][/*jq] push;mov", "match ins1 followed by ins2 in linear disasm",
 	"/ae", " esil", "search for esil expressions matching substring",
 	"/af", "[l] family", "search for instruction of specific family (afl=list)",
 	"/aF", "[d] opstr", "find instructions matching given opstr only in analyzed code",
@@ -157,7 +158,7 @@ static RCoreHelpMessage help_msg_slash_a = {
 	"/am", " opcode", "search for specific instructions of specific mnemonic",
 	"/ao", " instr", "search for instruction 'instr' (in all offsets)",
 	"/as", "[qjl] ([type])", "search for syscalls (See /at swi and /af priv)",
-	"/at", "[qjl] ([type])", "search for instructions of given type",
+	"/at", "[?][qjl] ([type])", "search for instructions of given type",
 	"/az[q]", " ([minstr])", "search assembly constructed strings (q)uiet reduces FP (uses bin.minsz)",
 	NULL
 };
@@ -165,7 +166,7 @@ static RCoreHelpMessage help_msg_slash_a = {
 static RCoreHelpMessage help_msg_slash_c = {
 	"Usage: /c", "", "Search for crypto materials",
 	"/ca", "[?] [algo]", "search for keys expanded in memory (algo can be 'aes' or 'sm4')",
-	"/cc", "[algo] [digest]", "find collisions (bruteforce block length values until given checksum is found)",
+	"/cc", "[?] [algo] [digest]", "find collisions (bruteforce block length values until given checksum is found)",
 	"/cd", "", "search for ASN1/DER certificates",
 	"/cg", "", "search for GPG/PGP keys and signatures (Plaintext and binary form)",
 	"/ck", "", "find well known constant tables from different hash and crypto algorithms",
@@ -173,7 +174,7 @@ static RCoreHelpMessage help_msg_slash_c = {
 	NULL
 };
 
-static RCoreHelpMessage help_msg_slash_cc  = {
+static RCoreHelpMessage help_msg_slash_cc = {
 	"Usage: /cc[aAldpb]", "[algo] [digest]", "find collisions",
 	"/cca", " [algo] [digest]", "lowercase alphabet chars only",
 	"/ccA", " [algo] [digest]", "uppercase alphabet chars only",
@@ -224,10 +225,6 @@ static RCoreHelpMessage help_msg_slash_x = {
 	NULL
 };
 
-static R_TH_LOCAL int preludecnt = 0;
-static R_TH_LOCAL int searchflags = 0;
-static R_TH_LOCAL int searchshow = 0;
-static R_TH_LOCAL const char *searchprefix = NULL;
 
 struct search_parameters {
 	RCore *core;
@@ -239,6 +236,9 @@ struct search_parameters {
 	bool inverse;
 	bool key_search;
 	int key_search_len;
+	int searchflags;
+	int searchshow;
+	const char *searchprefix;
 	int c; // used for progress
 	int count;
 };
@@ -361,6 +361,7 @@ static void cmd_search_bin(RCore *core, RInterval itv) {
 typedef struct {
 	RCore *core;
 	bool forward;
+	int preludecnt;
 } UserPrelude;
 
 static int __backward_prelude_cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
@@ -373,7 +374,8 @@ static int __backward_prelude_cb_hit(RSearchKeyword *kw, void *user, ut64 addr) 
 }
 
 static int __prelude_cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
-	RCore *core = (RCore *) user;
+	UserPrelude *up = (UserPrelude*) user;
+	RCore *core = up->core;
 	if (r_config_get_b (core->config, "anal.calls")) {
 		// XXX dont use RCore.cmdf here its slow
 		r_core_cmdf (core, "afr@0x%"PFMT64x, addr);
@@ -381,7 +383,7 @@ static int __prelude_cb_hit(RSearchKeyword *kw, void *user, ut64 addr) {
 		int depth = r_config_get_i (core->config, "anal.depth");
 		r_core_anal_fcn (core, addr, -1, R_ANAL_REF_TYPE_NULL, depth);
 	}
-	preludecnt++;
+	up->preludecnt++;
 	return 1;
 }
 
@@ -406,8 +408,8 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 	r_search_reset (core->search, R_SEARCH_KEYWORD);
 	r_search_kw_add (core->search, r_search_keyword_new (buf, blen, mask, mlen, NULL));
 	r_search_begin (core->search);
-	r_search_set_callback (core->search, &__prelude_cb_hit, core);
-	preludecnt = 0;
+	UserPrelude up = {core, false, 0};
+	r_search_set_callback (core->search, &__prelude_cb_hit, &up);
 	for (at = from; at < to; at += core->blocksize) {
 		if (r_cons_is_breaked ()) {
 			break;
@@ -427,12 +429,13 @@ R_API int r_core_search_prelude(RCore *core, ut64 from, ut64 to, const ut8 *buf,
 		}
 	}
 	free (zeropage);
-	// r_search_reset might also benifet from having an if (s->data) R_FREE(s->data), but im not sure.
-	//add a commit that puts it in there to this PR if it wouldn't break anything. (don't have to worry about this happening again, since all searches start by resetting core->search)
-	//For now we will just use r_search_kw_reset
+	// r_search_reset might also benifet from having an if (s->data) R_FREE(s->data),
+	// but im not sure. Add a commit that puts it in there to this PR if it wouldn't
+	// break anything. (don't have to worry about this happening again, since all
+	// searches start by resetting core->search) For now we use `r_search_kw_reset`
 	r_search_kw_reset (core->search);
 	free (b);
-	return preludecnt;
+	return up.preludecnt;
 }
 
 R_API int r_core_search_uds(RCore *core, int mode) {
@@ -610,7 +613,7 @@ static int _cb_hit_sz(RSearchKeyword *kw, int klen, void *user, ut64 addr) {
 	ut64 base_addr = 0;
 	bool use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
 
-	if (searchshow && kw && kw->keyword_length > 0) {
+	if (param->searchshow && kw && kw->keyword_length > 0) {
 		int len, i, extra, mallocsize;
 		char *s = NULL, *str = NULL, *p = NULL;
 		extra = (param->outmode == R_MODE_JSON)? 3: 1;
@@ -686,7 +689,7 @@ static int _cb_hit_sz(RSearchKeyword *kw, int klen, void *user, ut64 addr) {
 			pj_end (param->pj);
 		} else {
 			r_cons_printf ("0x%08"PFMT64x " %s%d_%d %s\n",
-				base_addr + addr, searchprefix, kw->kwidx, kw->count, s);
+				base_addr + addr, param->searchprefix, kw->kwidx, kw->count, s);
 		}
 		free (s);
 		free (buf);
@@ -698,16 +701,16 @@ static int _cb_hit_sz(RSearchKeyword *kw, int klen, void *user, ut64 addr) {
 			pj_ki (param->pj, "len", klen);
 			pj_end (param->pj);
 		} else {
-			if (searchflags) {
-				r_cons_printf ("%s%d_%d\n", searchprefix, kw->kwidx, kw->count);
+			if (param->searchflags) {
+				r_cons_printf ("%s%d_%d\n", param->searchprefix, kw->kwidx, kw->count);
 			} else {
-				r_cons_printf ("f %s%d_%d %d 0x%08"PFMT64x "\n", searchprefix,
+				r_cons_printf ("f %s%d_%d %d 0x%08"PFMT64x "\n", param->searchprefix,
 					kw->kwidx, kw->count, klen, base_addr + addr);
 			}
 		}
 	}
-	if (searchflags && kw) {
-		char *flag = r_str_newf ("%s%d_%d", searchprefix, kw->kwidx, kw->count);
+	if (param->searchflags && kw) {
+		char *flag = r_str_newf ("%s%d_%d", param->searchprefix, kw->kwidx, kw->count);
 		r_flag_set (core->flags, flag, base_addr + addr, klen);
 		free (flag);
 	}
@@ -1972,7 +1975,7 @@ static const char *get_syscall_register(RCore *core) {
 static int emulateSyscallPrelude(RCore *core, ut64 at, ut64 curpc) {
 	int i, bsize = R_MIN (64, core->blocksize);
 	RAnalOp aop;
-	const int mininstrsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
+	const int mininstrsz = r_anal_archinfo (core->anal, R_ARCH_INFO_MINOP_SIZE);
 	const int minopcode = R_MAX (1, mininstrsz);
 	const char *a0 = get_syscall_register (core);
 	const char *pc = r_reg_get_name (core->dbg->reg, R_REG_NAME_PC);
@@ -2040,7 +2043,7 @@ static void do_syscall_search(RCore *core, struct search_parameters *param) {
 	int kwidx = core->search->n_kws;
 	RIOMap* map;
 	RListIter *iter;
-	const int mininstrsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
+	const int mininstrsz = r_anal_archinfo (core->anal, R_ARCH_INFO_MINOP_SIZE);
 	const int minopcode = R_MAX (1, mininstrsz);
 	REsil *esil;
 	int align = core->search->align;
@@ -2193,8 +2196,8 @@ static void do_syscall_search(RCore *core, struct search_parameters *param) {
 					R_LOG_DEBUG ("Cant find an syscall for %d %d", scNumber, scVector);
 				}
 				memset (previnstr, 0, (MAXINSTR + 1) * sizeof (*previnstr)); // clearing the buffer
-				if (searchflags) {
-					char *flag = r_str_newf ("%s%d_%d.%s", searchprefix, kwidx, count, item? item->name: "syscall");
+				if (param->searchflags) {
+					char *flag = r_str_newf ("%s%d_%d.%s", param->searchprefix, kwidx, count, item? item->name: "syscall");
 					r_flag_set (core->flags, flag, at, ret);
 					free (flag);
 				}
@@ -2387,7 +2390,7 @@ static void search_hit_at(RCore *core, struct search_parameters *param, RCoreAsm
 		break;
 	case R_MODE_RADARE:
 		r_cons_printf ("f %s%d_%i = 0x%08"PFMT64x "\n",
-				searchprefix, kwidx, param->count, hit->addr);
+				param->searchprefix, kwidx, param->count, hit->addr);
 		break;
 	default:
 		if (asm_sub_names) {
@@ -2412,10 +2415,10 @@ static void search_hit_at(RCore *core, struct search_parameters *param, RCoreAsm
 		}
 		break;
 	}
-	if (searchflags) {
+	if (param->searchflags) {
 		char *flagname = (R_STR_ISNOTEMPTY (str)) // XXX i think hit->code is not used anywhere
 			? r_str_newf ("asm.str.%d_%s_%d", kwidx, str, param->count)
-			: r_str_newf ("%s%d_%d", searchprefix, kwidx, param->count);
+			: r_str_newf ("%s%d_%d", param->searchprefix, kwidx, param->count);
 		if (flagname) {
 			r_flag_set (core->flags, flagname, hit->addr, hit->len);
 			free (flagname);
@@ -2980,10 +2983,10 @@ static bool do_anal_search(RCore *core, struct search_parameters *param, const c
 						break;
 					}
 					R_FREE (opstr);
-					if (*input && searchflags) {
+					if (*input && param->searchflags) {
 						char flag[64];
 						snprintf (flag, sizeof (flag), "%s%d_%d",
-							searchprefix, kwidx, count);
+							param->searchprefix, kwidx, count);
 						r_flag_set (core->flags, flag, at, ret);
 					}
 					if (*param->cmd_hit) {
@@ -3091,11 +3094,14 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 	RCoreAsmHit *hit; // WTF LOL must use RSearchHit in here!
 	RListIter *iter, *itermap;
 	int count = 0;
-	RList *hits;
 	RIOMap *map;
-	bool regexp = input[0] && input[1] == '/'; // "/c/"
+	bool regexp = input[0] && input[1] == '/'; // "/ad/"
 	bool everyByte = regexp && input[0] && input[1] && input[2] == 'a';
 	char *end_cmd = strchr (input, ' ');
+	if (regexp && input[2] == '?') {
+		r_core_cmd_help_contains (core, help_msg_slash_ad, "/ad/");
+		return;
+	}
 	switch ((end_cmd ? *(end_cmd - 1) : input[0]? input[1]: 0)) {
 	case 'j':
 		param->outmode = R_MODE_JSON;
@@ -3136,8 +3142,7 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 		if (maxhits && count >= maxhits) {
 			break;
 		}
-		hits = r_core_asm_strsearch (core, end_cmd,
-				from, to, maxhits, regexp, everyByte, mode);
+		RList *hits; hits = r_core_asm_strsearch (core, end_cmd, from, to, maxhits, regexp, everyByte, mode);
 		if (hits) {
 			r_cons_singleton ()->context->breaked = false;
 			r_list_foreach (hits, iter, hit) {
@@ -3153,6 +3158,8 @@ static void do_asm_search(RCore *core, struct search_parameters *param, const ch
 		pj_end (param->pj);
 	}
 	r_cons_break_pop ();
+	// increment search index
+	r_config_set_i (core->config, "search.kwidx", ++core->search->n_kws);
 }
 
 static void do_string_search(RCore *core, RInterval search_itv, struct search_parameters *param) {
@@ -3165,7 +3172,7 @@ static void do_string_search(RCore *core, RInterval search_itv, struct search_pa
 	}
 	RListIter *iter;
 	RIOMap *map;
-	if (!searchflags && param->outmode != R_MODE_JSON) {
+	if (!param->searchflags && param->outmode != R_MODE_JSON) {
 		r_cons_printf ("fs hits\n");
 	}
 	core->search->inverse = param->inverse;
@@ -3790,8 +3797,8 @@ static void __core_cmd_search_backward(RCore *core, int delta) {
 	RAnalOp analop;
 	ut64 at;
 	r_cons_break_push (NULL, NULL);
-	int minopsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MIN_OP_SIZE);
-	int maxopsz = r_anal_archinfo (core->anal, R_ANAL_ARCHINFO_MAX_OP_SIZE);
+	int minopsz = r_anal_archinfo (core->anal, R_ARCH_INFO_MINOP_SIZE);
+	int maxopsz = r_anal_archinfo (core->anal, R_ARCH_INFO_MAXOP_SIZE);
 	if (minopsz < 1 || maxopsz < 1) {
 		R_LOG_ERROR ("Invalid MAX_OPSIZE. assuming 4");
 		minopsz = 4;
@@ -3904,6 +3911,9 @@ static int cmd_search(void *data, const char *input) {
 		.inverse = false,
 		.key_search = false,
 		.key_search_len = 0,
+		.searchflags = r_config_get_i (core->config, "search.flags"),
+		.searchshow = r_config_get_i (core->config, "search.show"),
+		.searchprefix = r_config_get (core->config, "search.prefix"),
 		.count = 0,
 		.c = 0,
 	};
@@ -3956,7 +3966,6 @@ static int cmd_search(void *data, const char *input) {
 		search_itv.size = UT64_MAX;
 	}
 
-	searchshow = r_config_get_i (core->config, "search.show");
 	param.mode = r_config_get (core->config, "search.in");
 	param.boundaries = r_core_get_boundaries_prot (core, -1, param.mode, "search");
 
@@ -3973,11 +3982,9 @@ static int cmd_search(void *data, const char *input) {
 	 */
 
 	core->search->align = r_config_get_i (core->config, "search.align");
-	searchflags = r_config_get_i (core->config, "search.flags");
 	core->search->maxhits = r_config_get_i (core->config, "search.maxhits");
-	searchprefix = r_config_get (core->config, "search.prefix");
 	if (r_config_get_b (core->config, "search.named")) {
-		searchprefix = r_str_newf ("hit.%s.", r_str_trim_head_ro (input));
+		param.searchprefix = r_str_newf ("hit.%s.", r_str_trim_head_ro (input));
 	}
 	core->search->overlap = r_config_get_i (core->config, "search.overlap");
 	core->search->bckwrds = false;

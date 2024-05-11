@@ -423,7 +423,7 @@ R_API R_DEPRECATE int r_anal_archinfo(RAnal *anal, int query) { // R2_590
 }
 
 R_API bool r_anal_is_aligned(RAnal *anal, const ut64 addr) {
-	const int align = r_anal_archinfo (anal, R_ANAL_ARCHINFO_ALIGN);
+	const int align = r_anal_archinfo (anal, R_ARCH_INFO_CODE_ALIGN);
 	return align <= 1 || !(addr % align);
 }
 
@@ -708,7 +708,7 @@ R_API bool r_anal_is_prelude(RAnal *anal, ut64 addr, const ut8 *data, int len) {
 		}
 	}
 	if (!data) {
-		const int maxis = r_anal_archinfo (anal, R_ANAL_ARCHINFO_MAX_OP_SIZE);
+		const int maxis = r_anal_archinfo (anal, R_ARCH_INFO_MAXOP_SIZE);
 		owned = malloc (maxis);
 		if (!owned) {
 			return false;
