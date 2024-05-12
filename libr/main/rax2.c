@@ -15,8 +15,8 @@ typedef struct {
 	bool hexstr2raw;	// -s
 	bool swapendian;	// -e
 	bool raw2hexstr;	// -S
-	bool binstr2raw;	// -l
-	bool hashstr;		// -X
+	bool binstr2raw;	// -Z
+	bool hashstr;		// -H
 	bool keepbase;		// -k
 	bool floating;		// -f
 	bool decimal;		// -d
@@ -29,12 +29,12 @@ typedef struct {
 	bool slurphex;		// -F
 	bool binaryraw;		// -c
 	bool signedword;	// -w
-	bool str2hexstr;	// -B
+	bool str2hexstr;	// -z
 	bool manybases;		// -r
-	bool binstr2hex;	// -L
-	bool dumpcstr;		// -i
+	bool binstr2hex;	// -X
+	bool dumpcstr;		// -C
 	bool octal2raw;		// -o
-	bool ipaddr2num;	// -I
+	bool ipaddr2num;	// -i
 	bool newline;		// -n
 	bool jsonbases;		// -j
 	bool forcebase;		// -b
@@ -177,8 +177,8 @@ static int help(void) {
 		"  hex        ->  raw              ;  rax2 -s 414141\n"
 		"  -a         show ascii table     ;  rax2 -a\n"
 		"  -b <base>  output in <base>     ;  rax2 -b 10 0x46\n"
-		"  -B         str -> bin           ;  rax2 -B hello\n"
 		"  -c         output in C string   ;  rax2 -c 0x1234 # \\x34\\x12\\x00\\x00\n"
+		"  -C         dump as C byte array ;  rax2 -C < bytes\n"
 		"  -d         force integer        ;  rax2 -d 3 -> 3 instead of 0x3\n"
 		"  -e         swap endianness      ;  rax2 -e 0x33\n"
 		"  -D         base64 decode        ;  rax2 -D \"aGVsbG8=\"\n"
@@ -186,13 +186,11 @@ static int help(void) {
 		"  -f         floating point       ;  rax2 -f 6.3+2.1\n"
 		"  -F         stdin slurp code hex ;  rax2 -F < shellcode.[c/py/js]\n"
 		"  -h         help                 ;  rax2 -h\n"
-		"  -i         dump as C byte array ;  rax2 -i < bytes\n"
-		"  -I         IP address <-> LONG  ;  rax2 -I 3530468537\n"
+		"  -H         hash string          ;  rax2 -H linux osx\n"
+		"  -i         IP address <-> LONG  ;  rax2 -i 3530468537\n"
 		"  -j         json format output   ;  rax2 -j 0x1234 # same as r2 -c '?j 0x1234'\n"
 		"  -k         keep base            ;  rax2 -k 33+3 -> 36\n"
 		"  -K         randomart            ;  rax2 -K 0x34 1020304050\n"
-		"  -l         bin -> str           ;  rax2 -l 01000101 01110110\n"
-		"  -L         bin -> hex(bignum)   ;  rax2 -L 111111111 # 0x1ff\n"
 		"  -n         newline              ;  append newline to output (for -E/-D/-r/..)\n"
 		"  -o         octalstr -> raw      ;  rax2 -o \\162 \\62 # r2\n"
 		"  -r         r2 style output      ;  rax2 -r 0x1234 # same as r2 -c '? 0x1234'\n"
@@ -204,7 +202,9 @@ static int help(void) {
 		"  -v         version              ;  rax2 -v\n"
 		"  -w         signed word          ;  rax2 -w 16 0xffff\n"
 		"  -x         output in hexpairs   ;  rax2 -x 0x1234 # 34120000\n"
-		"  -X         hash string          ;  rax2 -X linux osx\n"
+		"  -X         bin -> hex(bignum)   ;  rax2 -X 111111111 # 0x1ff\n"
+		"  -z         str -> bin           ;  rax2 -z hello\n"
+		"  -Z         bin -> str           ;  rax2 -Z 01000101 01110110\n"
 	);
 	return true;
 }
@@ -244,8 +244,8 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, RaxM
 			case 's': flags->hexstr2raw = !flags->hexstr2raw; break;
 			case 'e': flags->swapendian = !flags->swapendian; break;
 			case 'S': flags->raw2hexstr = !flags->raw2hexstr; break;
-			case 'l': flags->binstr2raw = !flags->binstr2raw; break;
-			case 'X': flags->hashstr = !flags->hashstr; break;
+			case 'Z': flags->binstr2raw = !flags->binstr2raw; break;
+			case 'H': flags->hashstr = !flags->hashstr; break;
 			case 'k': flags->keepbase = !flags->keepbase; break;
 			case 'f': flags->floating = !flags->floating; break;
 			case 'd': flags->decimal = !flags->decimal; break;
@@ -258,12 +258,12 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, RaxM
 			case 'F': flags->slurphex = !flags->slurphex; break;
 			case 'c': flags->binaryraw = !flags->binaryraw; break;
 			case 'w': flags->signedword = !flags->signedword; break;
-			case 'B': flags->str2hexstr = !flags->str2hexstr; break;
+			case 'z': flags->str2hexstr = !flags->str2hexstr; break;
 			case 'r': flags->manybases = !flags->manybases; break;
-			case 'L': flags->binstr2hex = !flags->binstr2hex; break;
-			case 'i': flags->dumpcstr = !flags->dumpcstr; break;
+			case 'X': flags->binstr2hex = !flags->binstr2hex; break;
+			case 'C': flags->dumpcstr = !flags->dumpcstr; break;
 			case 'o': flags->octal2raw = !flags->octal2raw; break;
-			case 'I': flags->ipaddr2num = !flags->ipaddr2num; break;
+			case 'i': flags->ipaddr2num = !flags->ipaddr2num; break;
 			case 'j': flags->jsonbases = !flags->jsonbases; break;
 			case 'b': flags->forcebase = !flags->forcebase; break;
 			case 'v': return r_main_version_print ("rax2", 0);
@@ -335,7 +335,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->binstr2raw) { // -l
+	if (flags->binstr2raw) { // -Z
 		ut8 out[256] = {0};
 		if (r_mem_from_binstring (str, out, sizeof (out) - 1)) {
 			printf ("%s\n", out); // TODO accept non null terminated strings
@@ -344,7 +344,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->hashstr) { // -X
+	if (flags->hashstr) { // -H
 		int h = r_str_hash (str);
 		printf ("0x%x\n", h);
 		return true;
@@ -412,7 +412,7 @@ dotherax:
 			}
 		}
 		return true;
-	} else if (flags->str2hexstr) { // -B (bin -> str)
+	} else if (flags->str2hexstr) { // -z (bin -> str)
 		char *newstr = r_mem_to_binstring((const ut8*)str, strlen (str));
 		printf ("%s\n", newstr);
 		free (newstr);
@@ -657,11 +657,11 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->binstr2hex) { // -L
+	if (flags->binstr2hex) { // -X
 		r_print_hex_from_bin (NULL, str);
 		return true;
 	}
-	if (flags->dumpcstr) { // -i
+	if (flags->dumpcstr) { // -C
 		RStrBuf *sb = r_strbuf_new ("unsigned char buf[] = {");
 		const int byte_per_col = 12;
 		for (i = 0; i < len - 1; i++) {
@@ -710,7 +710,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->ipaddr2num) { // -I
+	if (flags->ipaddr2num) { // -i
 		if (strchr (str, '.')) {
 			ut8 ip[4];
 			sscanf (str, "%hhd.%hhd.%hhd.%hhd", ip, ip + 1, ip + 2, ip + 3);

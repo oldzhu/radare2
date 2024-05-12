@@ -81,10 +81,7 @@ static void pair_ut64x(PJ *pj, const char *key, ut64 val) {
 
 static void pair_str(PJ *pj, const char *key, const char *val) {
 	if (pj) {
-		if (!val) {
-			val = "";
-		}
-		pj_ks (pj, key, val);
+		pj_ks (pj, key, val? val: "");
 	} else {
 		pair (key, val);
 	}
@@ -153,7 +150,7 @@ R_API void r_core_bin_export_info(RCore *core, int mode) {
 		}
 		if (strstr (dup, ".cparse")) {
 			if (IS_MODE_RAD (mode)) {
-				r_cons_printf ("\"td %s\"\n", v);
+				r_cons_printf ("'td %s\n", v);
 			} else if (IS_MODE_SET (mode)) {
 				char *code = r_str_newf ("%s;", v);
 				char *errmsg = NULL;
@@ -262,7 +259,7 @@ R_API bool r_core_bin_load_structs(RCore *core, const char *file) {
 			return false;
 		}
 	}
-	if (strchr (file, '\"')) { // TODO: escape "?
+	if (strchr (file, '\'') || strchr (file, '\"')) { // TODO: escape "?
 		R_LOG_ERROR ("Invalid char found in filename");
 		return false;
 	}
@@ -3009,7 +3006,6 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 	RBinInfo *info = NULL;
 	RListIter *iter;
 	RTable *table = r_core_table (r, "sections");
-	r_return_val_if_fail (table, false);
 	int i = 0;
 	int fd = -1;
 	bool printHere = false;
@@ -3031,6 +3027,9 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 	}
 
 	if (chksum && *chksum == '.') {
+		if (at == UT64_MAX) {
+			at = r->offset;
+		}
 		printHere = true;
 		chksum++;
 	}
@@ -3111,21 +3110,20 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 	r_list_foreach (sections, iter, section) {
 		char perms[] = "----";
 		int va_sect = va;
-		ut64 addr, size;
 
 		if (va && !(section->perm & R_PERM_R)) {
 			va_sect = VA_NOREBASE;
 		}
-		addr = rva (r->bin, section->paddr, section->vaddr, va_sect);
-		size = va ? section->vsize : section->size;
+		ut64 addr = rva (r->bin, section->paddr, section->vaddr, va_sect);
+		ut64 size = va ? section->vsize : section->size;
 		if (name && strcmp (section->name, name)) {
 			continue;
 		}
-
+#if 0
 		if (printHere && !(addr <= r->offset && r->offset < (addr + size))) {
 			continue;
 		}
-
+#endif
 		if (at != UT64_MAX && (!size || !is_in_range (at, addr, size))) {
 			continue;
 		}

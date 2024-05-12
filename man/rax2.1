@@ -31,10 +31,10 @@ Force output mode (numeric base)
   8    octal
   10   decimal
   16   hexadecimal
-.It Fl B
-Convert from character string to binary (rax2 \-B hello)
 .It Fl c
 Show hexadecimal C string from integer value
+.It Fl C
+Dump stdin to C array in stdout (xxd replacement)
 .It Fl d
 Print the result in decimal (base 10)
 .It Fl D
@@ -54,17 +54,12 @@ Show usage help message
 Keep the same base as the input data
 .It Fl K
 Show randomart key asciiart for values or hexpairs
+.It Fl H
+Convert a string into a hash
 .It Fl i
-Dump stdin to C array in stdout (xxd replacement)
-.It Fl I
 Convert LONG to/from IP ADDRESS
 .It Fl j
 Show the output in json format, the same as the r2 `?j 0x804` command.
-.It Fl l
-Convert from binary string to character (rax2 \-l 01000101)
-.It Fl L
-Convert a bit stream (an arbitrary sequence of 0 and 1 of any length) to
-hexadecimal. The result can be larger than 64bits
 .It Fl n
 Append newline to the decoded output for human friendlyness
 .It Fl o
@@ -87,7 +82,12 @@ Display the result as 16bit signed integer value
 .It Fl x
 Show hexpairs from integer value
 .It Fl X
-Convert a string into a hash
+Convert a bit stream (an arbitrary sequence of 0 and 1 of any length) to
+hexadecimal. The result can be larger than 64bits
+.It Fl z
+Convert from character string to binary (rax2 \-z hello)
+.It Fl Z
+Convert from binary string to string (rax2 \-l 01000101)
 .Sh USAGE
 Available variable types are:
 .Pp
@@ -132,11 +132,11 @@ Encode and decode binary file using base64:
   $ cmp /bin/ls ls && echo $?
   0
 .Pp
-Use -l/-B to convert between binary and string:
+Use -z/-Z to convert between binary and string:
 .Pp
-  $ rax2 -B hello
+  $ rax2 -z hello
   001100000111100000110001001100010011001000110011
-  $ rax2 -l 0110100001100101011011000110110001101111
+  $ rax2 -Z 0110100001100101011011000110110001101111
   hello
 .Pp
 It is a very useful tool for scripting, so you can read floating point values, or get the integer offset of a jump or a stack delta when analyzing programs.
