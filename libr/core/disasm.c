@@ -2847,7 +2847,11 @@ static int ds_disassemble(RDisasmState *ds, ut8 *buf, int len) {
 						r_asm_op_set_asm (&ds->asmop, r_strf (".int32 %d%s", (st32)ds->analop.val, tail));
 						break;
 					case 32:
-						r_asm_op_set_asm (&ds->asmop, r_strf (".ipaddr 0x%08x%s", (ut32)ds->analop.val, tail));
+						{
+							ut32 oval = ds->analop.val;
+							ut32 eval  = r_read_le32 (&oval);
+							r_asm_op_set_asm (&ds->asmop, r_strf (".ipaddr 0x%08x%s", (ut32)eval, tail));
+						}
 						break;
 					default:
 						r_asm_op_set_asm (&ds->asmop, r_strf (".dword 0x%08x%s", (ut32)ds->analop.val, tail));
@@ -4897,13 +4901,14 @@ static void ds_print_ptr(RDisasmState *ds, int len, int idx) {
 						string_printed = true;
 					}
 				} else if (!strcmp (kind, "invalid")) {
-					int *n = (int*)&refaddr;
+					int n32 = (int)refaddr;
+					int *n = &n32; // (int*)&refaddr;
 					ut64 p = ds->analop.val;
 					if (p == UT64_MAX || p == UT32_MAX) {
 						p = ds->analop.ptr;
 					}
 					/* avoid double ; -1 */
-					if (p != UT64_MAX && p != UT32_MAX) {
+					if (p && p != UT64_MAX && p != UT32_MAX) {
 						if (*n > -0xfff && *n < 0xfff) {
 							if (!aligned) {
 								ds_begin_comment (ds);
