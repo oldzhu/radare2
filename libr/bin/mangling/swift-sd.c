@@ -1,5 +1,5 @@
 /* work-in-progress reverse engineered swift-demangler in C
- * Copyright MIT 2015-2023 by pancake@nopcode.org */
+ * Copyright MIT 2015-2024 by pancake@nopcode.org */
 
 #include <r_cons.h>
 #include <r_lib.h>
@@ -200,6 +200,40 @@ static inline const char *str_removeprefix(const char *s, const char *prefix) {
 	return s;
 }
 
+static const char *conformsto(char p) {
+	switch (p) {
+	case 'Q':
+		return "Equatable";
+	case 'Y':
+		return "RawRepresentable";
+	case 'X':
+		return "RangeExpression";
+	case 'Z':
+		return "SignedInteger";
+	case 'U':
+		return "UnsignedInteger";
+	case 'T':
+		return "Sequence";
+	case 'M':
+		return "MutableCollection";
+	case 'L':
+		return "Comparable";
+	case 'K':
+		return "BidirectionalCollection";
+	case 'G':
+		return "RandomNumberGenerator";
+	case 'F':
+		return "FloatingPoint";
+	case 'E':
+		return "Encodable";
+	case 'B':
+		return "BinaryFloatingPoint";
+	case 'H':
+		return "Hashable";
+	}
+	return NULL;
+}
+
 static bool looks_valid(char p) {
 	if (IS_DIGIT (p)) {
 		return true;
@@ -209,7 +243,10 @@ static bool looks_valid(char p) {
 	case 'I':
 	case 'M':
 	case 'o':
+	case 'f':
+	case 'N': // ON
 	case 's':
+	case 'S': // SHA SQAAMc
 	case 't':
 	case 'T':
 	case 'v':
@@ -233,10 +270,13 @@ typedef struct {
 	const char *tail;
 } SwiftState;
 
-static char *get_mangled_tail(const char **pp, RStrBuf *out) {
+static const char *get_mangled_tail(const char **pp, RStrBuf *out) {
 	const char *p = *pp;
 	if (R_STR_ISEMPTY (p)) {
 		return NULL;
+	}
+	if (p[1] == 'f') {
+		p++;
 	}
 	switch (p[1]) {
 	case 'T':
@@ -247,6 +287,8 @@ static char *get_mangled_tail(const char **pp, RStrBuf *out) {
 		switch (p[2]) {
 		case 'a':
 			return "..protocol";
+		case 'C':
+			return "..enum.case";
 		}
 		break;
 	case 'F':
@@ -259,16 +301,24 @@ static char *get_mangled_tail(const char **pp, RStrBuf *out) {
 	case 's':
 		// nothing here
 		break;
+	case 'd':
+		return "..deinit";
+	case 'D':
+		return "..deinit.deallocating";
+	case 'N':
+		return "..metadata.type";
 	case 'M':
 		switch (p[2]) {
-		case 'a':
-			return "..accessor.metadata";
 		case 'e':
 			return "..override";
 		case 'm':
 			return "..metaclass";
+		case 'n':
+			return "..nominal.type.descriptor";
+		case 'a':
+			return "..metadata.accessor";
 		case 'L':
-			return "..lazy.metadata";
+			return "..metadata.lazy";
 		default:
 			return "..metadata";
 		}
@@ -420,6 +470,43 @@ static char *my_swift_demangler(const char *s) {
 					q++;
 				}
 				switch (*q) {
+				case 'A': // skip 'AAC' cases
+					if (!isdigit (q[1])) {
+						q += 2;
+						r_strbuf_append (out, ".");
+						continue;
+					}
+					// ignored stuff here
+					break;
+				case 'C': // "s16IOSSecuritySuiteAACMu"
+				case 'O':
+					if (!isdigit (q[1]) && looks_valid (q[1])) {
+						if (q[1] == 'S') {
+							const char *tail = conformsto (q[2]);
+							if (tail) {
+								r_strbuf_append (out, ".conformsto.");
+								r_strbuf_append (out, tail);
+							} else {
+								R_LOG_DEBUG ("Unhandled s9Alamofire10HTTPMethodO8rawValueACSgSS_tcfC");
+								r_strbuf_append (out, ".");
+								r_strbuf_append (out, q);
+								q = q_end;
+								continue;
+							}
+						} else {
+							const char *tail = get_mangled_tail (&q, out);
+							if (tail) {
+								r_strbuf_append (out, tail);
+							} else {
+								r_strbuf_append (out, ".");
+							}
+						}
+						q++;
+						continue;
+					} else {
+						r_strbuf_append (out, ".");
+						// fallthorugh
+					}
 				case 's':
 					{
 						int n = 0;
@@ -586,7 +673,7 @@ static char *my_swift_demangler(const char *s) {
 			}
 		}
 	} else {
-		//printf ("Unsupported type: %c\n", *p);
+		R_LOG_DEBUG ("Unsupported swift mangling type: %c", *p);
 	}
 	// https://www.guardsquare.com/blog/swift-native-method-swizzling
 	if (r_str_endswith (s, "FTX")) {
