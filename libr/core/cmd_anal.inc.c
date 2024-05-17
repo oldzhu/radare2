@@ -3209,9 +3209,14 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 		one = true;
 		input++;
 	}
-	if (*input) {
+	if (*input) { // "afbj"
 		mode = *input;
 		input++;
+		if (mode == 'i') { // "afbi"
+			if (*input == 'j') {
+				mode = 'J'; // afbij"
+			}
+		}
 	}
 	if (*input == '.') {
 		one = true;
@@ -3229,7 +3234,7 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 	if (one) {
 		bbaddr = addr;
 	}
-	if (mode == 'j') {
+	if (mode == 'j' || mode == 'J') {
 		pj = r_core_pj_new (core);
 		if (!pj) {
 			r_cons_println ("[]");
@@ -3323,16 +3328,10 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 			print_bb (pj, b, fcn, addr);
 			break;
 		case 'i': // "afbi"
-			if (*input == 'j') { // "afbij"
-				PJ *pj = r_core_pj_new (core);
-				if (pj) {
-					print_bb (pj, b, fcn, addr);
-					r_cons_println (pj_string (pj));
-					pj_free (pj);
-				}
-			} else {
-				print_bb (NULL, b, fcn, addr);
-			}
+			print_bb (NULL, b, fcn, addr);
+			break;
+		case 'J': // "afbij"
+			print_bb (pj, b, fcn, addr);
 			break;
 		default:
 			tp = r_debug_trace_get (core->dbg, b->addr);
@@ -3366,7 +3365,7 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 			free (ts);
 		}
 		r_table_free (t);
-	} else if (mode == 'j') {
+	} else if (pj) {
 		pj_end (pj);
 		r_cons_println (pj_string (pj));
 		pj_free (pj);
@@ -13751,7 +13750,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 				}
 
 				if (!r_str_startswith (asm_arch, "x86") && !r_str_startswith (asm_arch, "hex")) {
-					logline (core, 68, "Finding xrefs in noncode section (e anal.in=io.maps.x)");
+					logline (core, 68, "Finding xrefs in noncode sections (e anal.in=io.maps.x; aav)");
 					int isvm = r_arch_info (core->anal->arch, R_ARCH_INFO_ISVM) == R_ARCH_INFO_ISVM;
 					if (!isvm) {
 						r_core_cmd_call (core, "aavq");
