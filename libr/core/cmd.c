@@ -4,6 +4,7 @@
 
 #include <r_core.h>
 #include <r_vec.h>
+#include <r_util/r_json.h>
 #if R2__UNIX__
 #include <sys/utsname.h>
 #ifndef __wasi__
@@ -596,7 +597,6 @@ static bool print_aliases(void *use_b64, const void *key, const void *val) {
 		char *val_str = base64
 			? r_cmd_alias_val_strdup_b64 (v)
 			: r_cmd_alias_val_strdup (v);
-
 		r_cons_printf ("$%s=%s%s\n", k, base64? "base64:": "", val_str);
 		free (val_str);
 	}
@@ -956,8 +956,10 @@ static int cmd_alias(void *data, const char *input) {
 			} else {
 				r_core_cmd0 (core, (char *)v->data);
 			}
+			r_core_return_value (core, 0);
 		} else {
-			R_LOG_WARN ("No such alias \"$%s\"", buf);
+			R_LOG_ERROR ("No such alias \"$%s\"", buf);
+			r_core_return_value (core, 1);
 		}
 	}
 	free (buf);
@@ -2121,7 +2123,7 @@ static void cmd_table_header(RCore *core, char *s) {
 }
 
 static bool display_table_filter(RCore *core, const char *input) {
-	r_return_val_if_fail (core && input, false);
+	R_RETURN_VAL_IF_FAIL (core && input, false);
 	if (!core->table) {
 		return false;
 	}
@@ -3304,6 +3306,100 @@ static int cmd_last(void *data, const char *input) {
 	return 0;
 }
 
+static bool stderr_cb(void *user, int type, const char *origin, const char *msg) {
+	RList *stderr_list = (RList*)user;
+	if (!msg) {
+		return false;
+	}
+	PJ *j = pj_new ();
+	pj_o (j);
+	pj_ks (j, "type", r_log_level_tostring (type));
+	if (origin) {
+		pj_ks (j, "origin", origin);
+	}
+	if (msg) {
+		pj_ks (j, "message", msg);
+	}
+	pj_end (j);
+	r_list_append (stderr_list, pj_drain (j));
+	return true;
+}
+
+static int cmd_json(void *data, const char *input) {
+	RCore *core = (RCore *)data;
+	if (*input == '?') {
+		r_cons_printf ("Usage: {\"cmd\":\"...\",\"json\":false,\"trim\":true}\n");
+		r_cons_printf ("| The only required element is `cmd`\n");
+		return 0;
+	}
+	char *s_input = strdup (input - 1);
+	const RJson *j_cmd = NULL;
+	RJson *j = r_json_parse (s_input);
+	if (j) {
+		j_cmd = r_json_get (j, "cmd");
+	}
+	PJ *pj = pj_new ();
+	pj_o (pj);
+	if (j_cmd) {
+		const RJson *j_json = r_json_get (j, "json");
+		const RJson *j_trim = r_json_get (j, "trim");
+		bool is_json = false;
+		if (j_json && j_json->type == R_JSON_BOOLEAN) {
+			is_json = j_json->num.u_value == 1;
+		}
+		bool is_trim = false;
+		if (j_trim && j_trim->type == R_JSON_BOOLEAN) {
+			is_trim = j_trim->num.u_value == 1;
+		}
+		const char *r_cmd = j_cmd->str_value;
+		RList *stderr_list = r_list_newf (free);
+		// capture stderr
+		r_log_add_callback (stderr_cb, stderr_list);
+		char *res = r_core_cmd_str (core, r_cmd);
+		r_log_del_callback (stderr_cb);
+		if (res) {
+			if (is_trim) {
+				r_str_trim (res);
+			}
+			if (is_json) {
+				pj_k (pj, "res");
+				pj_raw (pj, res);
+			} else {
+				pj_ks (pj, "res", res);
+			}
+			free (res);
+			pj_kb (pj, "error", false);
+		} else {
+			pj_kb (pj, "error", true);
+		}
+		pj_kn (pj, "value", core->num->value);
+		pj_kn (pj, "code", core->rc);
+		if (!r_list_empty (stderr_list)) {
+			pj_ka (pj, "logs");
+			char *m;
+			RListIter *iter;
+			r_list_foreach (stderr_list, iter, m) {
+				pj_raw (pj, m);
+			}
+			pj_end (pj);
+		}
+		r_list_free (stderr_list);
+		pj_kn (pj, "code", core->rc);
+	} else {
+		pj_ks (pj, "res", "");
+		pj_kb (pj, "error", true);
+		pj_kn (pj, "value", core->num->value);
+		pj_kn (pj, "code", core->rc);
+	}
+	pj_end (pj);
+	char *j_res = pj_drain (pj);
+	r_cons_printf ("%s\n", j_res);
+	free (j_res);
+	r_json_free (j);
+	free (s_input);
+	return 0;
+}
+
 static int cmd_system(void *data, const char *input) {
 	RCore *core = (RCore*)data;
 	ut64 n;
@@ -3971,7 +4067,7 @@ static void tmpenvs_free(void *item) {
 }
 
 static bool set_tmp_arch(RCore *core, char *arch, char **tmparch) {
-	r_return_val_if_fail (tmparch, false);
+	R_RETURN_VAL_IF_FAIL (tmparch, false);
 	*tmparch = strdup (r_config_get (core->config, "asm.arch"));
 	r_config_set (core->config, "asm.arch", arch);
 	core->fixedarch = true;
@@ -4423,7 +4519,6 @@ repeat:;
 
 		char *nextgt = strchr (r_str_trim_head_ro (ptr + 1), '>');
 		if (nextgt) {
-			R_LOG_DEBUG ("CHUM!");
 			char *back = ptr + 1;
 			while (nextgt > back) {
 				if (!isdigit (*nextgt) && *nextgt != 'H') {
@@ -4452,22 +4547,24 @@ repeat:;
 			// register output of command as an alias
 			r_config_set_i (core->config, "scr.color", COLOR_MODE_DISABLED);
 			RBuffer *cmd_out = r_core_cmd_tobuf (core, cmd);
-			int alias_len;
-			ut8 *alias_data = r_buf_read_all (cmd_out, &alias_len);
-			const char *arg = r_str_trim_head_ro (str + 1);
-			if (appendResult) {
-				if (r_cmd_alias_append_raw (core->rcmd, arg, alias_data, alias_len)) {
-					R_LOG_INFO ("Alias '$%s' is a command - will not attempt to append", arg);
+			if (cmd_out) {
+				int alias_len;
+				ut8 *alias_data = r_buf_read_all (cmd_out, &alias_len);
+				const char *arg = r_str_trim_head_ro (str + 1);
+				if (appendResult) {
+					if (r_cmd_alias_append_raw (core->rcmd, arg, alias_data, alias_len)) {
+						R_LOG_INFO ("Alias '$%s' is a command - will not attempt to append", arg);
+					} else {
+						/* No existing alias */
+						r_cmd_alias_set_raw (core->rcmd, arg, alias_data, alias_len);
+					}
 				} else {
-					/* No existing alias */
 					r_cmd_alias_set_raw (core->rcmd, arg, alias_data, alias_len);
 				}
-			} else {
-				r_cmd_alias_set_raw (core->rcmd, arg, alias_data, alias_len);
+				ret = 0;
+				r_buf_free (cmd_out);
+				free (alias_data);
 			}
-			ret = 0;
-			r_buf_free (cmd_out);
-			free (alias_data);
 		} else if (fdn > 0) {
 			// pipe to file (or append)
 			pipefd = r_cons_pipe_open (str, fdn, appendResult);
@@ -6109,8 +6206,9 @@ static int run_cmd_depth(RCore *core, char *cmd) {
 }
 
 R_API int r_core_cmd(RCore *core, const char *cstr, bool log) {
-	r_return_val_if_fail (core && cstr, 0);
+	R_RETURN_VAL_IF_FAIL (core && cstr, 0);
 	R_LOG_DEBUG ("RCoreCmd: %s", cstr);
+	r_core_return_code (core, 0);
 	int ret = handle_command_call (core, cstr);
 	if (ret != -1) {
 		if (log) {
@@ -6198,7 +6296,7 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 	int r, ret = true;
 	char *nl, *data, *odata;
 
-	if (!lines || !*lines) {
+	if (R_STR_ISEMPTY (lines)) {
 		return true;
 	}
 	data = odata = strdup (lines);
@@ -6207,11 +6305,7 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 	}
 	size_t line_count = r_str_char_count(lines, '\n');
 
-#if R2__UNIX__
 	const bool istty = r_cons_is_tty ();
-#else
-	const bool istty = true;
-#endif
 	const bool show_progress_bar = core->print->enable_progressbar && r_config_get_b (core->config, "scr.interactive") && r_config_get_i (core->config, "scr.progressbar") && istty;
 	size_t current_line = 0;
 	nl = strchr (odata, '\n');
@@ -6252,7 +6346,7 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 			r_cons_newline ();
 		}
 	}
-	if (ret >= 0 && data && *data) {
+	if (ret >= 0 && R_STR_ISNOTEMPTY (data)) {
 		r_core_cmd (core, data, 0);
 		r_cons_flush ();
 		r_core_task_yield (&core->tasks);
@@ -6295,7 +6389,7 @@ R_API int r_core_cmd_command(RCore *core, const char *command) {
 	return ret;
 }
 
-//TODO: Fix disasm loop is mandatory
+// TODO: Fix disasm loop is mandatory
 R_API char *r_core_disassemble_instr(RCore *core, ut64 addr, int l) {
 	char *cmd, *ret = NULL;
 	cmd = r_str_newf ("pd %i @ 0x%08"PFMT64x, l, addr);
@@ -6307,8 +6401,9 @@ R_API char *r_core_disassemble_instr(RCore *core, ut64 addr, int l) {
 }
 
 R_API char *r_core_disassemble_bytes(RCore *core, ut64 addr, int b) {
-	char *cmd, *ret = NULL;
-	cmd = r_str_newf ("pD %i @ 0x%08"PFMT64x, b, addr);
+	R_RETURN_VAL_IF_FAIL (core, NULL);
+	char *ret = NULL;
+	char *cmd = r_str_newf ("pD %i @ 0x%08"PFMT64x, b, addr);
 	if (cmd) {
 		ret = r_core_cmd_str (core, cmd);
 		free (cmd);
@@ -6316,7 +6411,9 @@ R_API char *r_core_disassemble_bytes(RCore *core, ut64 addr, int b) {
 	return ret;
 }
 
+// R2_600 - return boolean here
 R_API int r_core_cmd_buffer(RCore *core, const char *buf) {
+	R_RETURN_VAL_IF_FAIL (core && buf, false);
 	char *ptr, *optr, *str = strdup (buf);
 	if (!str) {
 		return false;
@@ -6335,6 +6432,7 @@ R_API int r_core_cmd_buffer(RCore *core, const char *buf) {
 }
 
 R_API int r_core_cmdf_at(RCore *core, ut64 addr, const char *fmt, ...) {
+	R_RETURN_VAL_IF_FAIL (core && fmt, -1);
 	va_list ap;
 	va_start (ap, fmt);
 	ut64 oaddr = core->offset;
@@ -6352,6 +6450,7 @@ R_API int r_core_cmdf_at(RCore *core, ut64 addr, const char *fmt, ...) {
 }
 
 R_API int r_core_cmdf(RCore *core, const char *fmt, ...) {
+	R_RETURN_VAL_IF_FAIL (core && fmt, -1);
 	va_list ap;
 	va_start (ap, fmt);
 	char *cmd = r_str_newvf (fmt, ap);
@@ -6422,6 +6521,7 @@ R_API char *r_core_cmd_strf_at(RCore *core, ut64 addr, const char *fmt, ...) {
 }
 
 R_API char *r_core_cmd_strf(RCore *core, const char *fmt, ...) {
+	R_RETURN_VAL_IF_FAIL (core && fmt, NULL);
 	va_list ap;
 	va_start (ap, fmt);
 	char *cmd = r_str_newvf (fmt, ap);
@@ -6432,6 +6532,7 @@ R_API char *r_core_cmd_strf(RCore *core, const char *fmt, ...) {
 }
 
 R_API int r_core_cmd_call_at(RCore *core, ut64 addr, const char *cmd) {
+	R_RETURN_VAL_IF_FAIL (core && cmd, -1);
 	ut64 oaddr = core->offset;
 	if (addr != core->offset) {
 		r_core_seek (core, addr, 1);
@@ -6468,7 +6569,7 @@ R_API char *r_core_cmd_str_at(RCore *core, ut64 addr, const char *cmd) {
 
 /* return: pointer to a buffer with the output of the command */
 R_API char *r_core_cmd_str(RCore *core, const char *cmd) {
-	r_return_val_if_fail (core, NULL);
+	R_RETURN_VAL_IF_FAIL (core, NULL);
 	if (cmd && *cmd != '"' && strchr (cmd, '>')) {
 		r_core_cmd0 (core, cmd);
 		return strdup ("");
@@ -6561,6 +6662,7 @@ R_API void r_core_cmd_init(RCore *core) {
 	} cmds[] = {
 		{ "!", "run system command", cmd_system },
 		{ "_", "print last output", cmd_last },
+		{ "{", "run a command in json", cmd_json },
 		{ "#", "calculate hash", cmd_hash },
 		{ "$", "alias", cmd_alias },
 		{ "%", "short version of 'env' command", cmd_env },
