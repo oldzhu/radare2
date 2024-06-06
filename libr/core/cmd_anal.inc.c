@@ -875,7 +875,7 @@ static RCoreHelpMessage help_msg_ah = {
 	"ahr", " val", "set hint for return value of a function",
 	"ahs", " 4", "set opcode size=4",
 	"ahS", " jz", "set asm.syntax=jz for this opcode",
-	"aht", "[s][?] <type>", "mark immediate as a type offset (deprecated, moved to \"aho\")",
+	"aht", "[?][s] <type>", "mark immediate as a type offset (deprecated, moved to \"aho\")",
 	"ahv", " val", "change opcode's val field (useful to set jmptbl sizes in jmp rax)",
 	NULL
 };
@@ -6760,7 +6760,8 @@ R_API int r_core_esil_step(RCore *core, ut64 until_addr, const char *until_expr,
 		if (re < 1) {
 			ret = 0;
 		} else {
-			ret = r_anal_op (core->anal, &op, addr, code, sizeof (code), R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_ESIL | R_ARCH_OP_MASK_HINT);
+			ret = r_anal_op (core->anal, &op, addr, code, sizeof (code),
+				R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_ESIL | R_ARCH_OP_MASK_HINT);
 		}
 		// if type is JMP then we execute the next N instructions
 		// update the esil pointer because RAnal.op() can change it
@@ -13373,7 +13374,7 @@ static bool isSkippable(RBinSymbol *s) {
 	return false;
 }
 
-R_API int r_core_anal_all(RCore *core) {
+static bool cmd_aa(RCore *core, bool aaa) {
 	const RList *list;
 	RListIter *iter;
 	RAnalFunction *fcni;
@@ -13449,21 +13450,23 @@ R_API int r_core_anal_all(RCore *core) {
 		}
 	}
 	r_core_task_yield (&core->tasks);
-	// R2_600 - drop this code? we already recover vars later in aaa. should be fine to if 0
-	if (anal_vars) {
-		logline (core, 22, "Recovering variables");
-		/* Set fcn type to R_ANAL_FCN_TYPE_SYM for symbols */
-		r_list_foreach_prev (core->anal->fcns, iter, fcni) {
-			if (r_cons_is_breaked ()) {
-				break;
-			}
-			r_core_recover_vars (core, fcni, true);
-			const char *fname = fcni->name;
-			if (r_str_startswith (fname, "dbg.")
-			||  r_str_startswith (fname, "rsym.")
-			||  r_str_startswith (fname, "sym.")
-			||  r_str_startswith (fname, "main")) {
-				fcni->type = R_ANAL_FCN_TYPE_SYM;
+	if (!aaa) {
+		// R2_600 - drop this code? we already recover vars later in aaa. should be fine to if 0
+		if (anal_vars) {
+			logline (core, 22, "Recovering variables (afva@@@F)");
+			/* Set fcn type to R_ANAL_FCN_TYPE_SYM for symbols */
+			r_list_foreach_prev (core->anal->fcns, iter, fcni) {
+				if (r_cons_is_breaked ()) {
+					break;
+				}
+				r_core_recover_vars (core, fcni, true);
+				const char *fname = fcni->name;
+				if (r_str_startswith (fname, "dbg.")
+				||  r_str_startswith (fname, "rsym.")
+				||  r_str_startswith (fname, "sym.")
+				||  r_str_startswith (fname, "main")) {
+					fcni->type = R_ANAL_FCN_TYPE_SYM;
+				}
 			}
 		}
 	}
@@ -13471,26 +13474,39 @@ R_API int r_core_anal_all(RCore *core) {
 	return true;
 }
 
+#if R2_USE_NEW_ABI
+// deprecated call
+#else
+R_API int r_core_anal_all(RCore *core) {
+	cmd_aa (core, true);
+	return true;
+}
+#endif
+
 static int cmd_anal_all(RCore *core, const char *input) {
 	switch (*input) {
 	case '?':
 		r_core_cmd_help (core, help_msg_aa);
 		break;
 	case 'b': // "aab"
-		cmd_anal_blocks (core, input + 1);
+		if (input[1] == '?') {
+			r_core_cmd_help_match (core, help_msg_aa, "aab");
+		} else {
+			cmd_anal_blocks (core, input + 1);
+		}
 		break;
 	case 'f':
 		if (input[1] == 'e') {  // "aafe"
 			r_core_cmd0 (core, "aef@@F");
 		} else if (input[1] == 'r') {
 			ut64 cur = core->offset;
-			bool hasnext = r_config_get_b (core->config, "anal.hasnext");
 			RListIter *iter;
 			RIOMap *map;
 			RList *list = r_core_get_boundaries_prot (core, R_PERM_X, NULL, "anal");
 			if (!list) {
 				break;
 			}
+			bool hasnext = r_config_get_b (core->config, "anal.hasnext");
 			r_list_foreach (list, iter, map) {
 				r_core_seek (core, r_io_map_begin (map), true);
 				r_config_set_b (core->config, "anal.hasnext", true);
@@ -13552,7 +13568,11 @@ static int cmd_anal_all(RCore *core, const char *input) {
 		}
 		break;
 	case 'x': // "aax"
-		r_core_cmd0 (core, "af@@=`axlq~CALL[2]`");
+		if (input[1] == '?') {
+			r_core_cmd_help_match (core, help_msg_aa, "aax");
+		} else {
+			r_core_cmd0 (core, "af@@=`axlq~CALL[2]`");
+		}
 		break;
 	case 'w': // "aaw"
 		if (input[1] == '?') {
@@ -13592,10 +13612,14 @@ static int cmd_anal_all(RCore *core, const char *input) {
 		}
 		break;
 	case 'F': // "aaF" "aaFa"
-		if (!input[1] || input[1] == ' ' || input[1] == 'a') {
-			r_core_anal_inflags (core, input + 1);
+		if (input[1] == '?') {
+			r_core_cmd_help_match (core, help_msg_aa, "aaF");
 		} else {
-			r_core_cmd_help_contains (core, help_msg_aa, "aaF");
+			if (!input[1] || input[1] == ' ' || input[1] == 'a') {
+				r_core_anal_inflags (core, input + 1);
+			} else {
+				r_core_cmd_help_contains (core, help_msg_aa, "aaF");
+			}
 		}
 		break;
 	case 'n': // "aan"
@@ -13661,18 +13685,21 @@ static int cmd_anal_all(RCore *core, const char *input) {
 				anal_imports = true;
 			}
 			r_config_set_b (core->config, "anal.imports", false);
-			r_core_anal_all (core);
+			cmd_aa (core, input[0] == 'a');
 			r_config_set_b (core->config, "anal.imports", anal_imports);
 			r_core_task_yield (&core->tasks);
 			if (r_cons_is_breaked ()) {
 				goto jacuzzi;
 			}
+#if 1
+			// TODO: should not be run sometimes
 			// Run afvn in all fcns
 			if (r_config_get_b (core->config, "anal.vars")) {
 				logline (core, 25, "Analyze all functions arguments/locals (afva@@@F)");
 				// r_core_cmd0 (core, "afva@@f");
 				r_core_cmd0 (core, "afva@@@F");
 			}
+#endif
 
 			// Run pending analysis immediately after analysis
 			// Usefull when running commands with ";" or via r2 -c,-i
@@ -13742,7 +13769,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 				r_core_task_yield (&core->tasks);
 				logline (core, 60, "Finding and parsing C++ vtables (avrr)");
 				r_core_cmd_call (core, "avrr");
-				logline (core, 65, "Analyzing methods");
+				logline (core, 65, "Analyzing methods (af @@ method.*)");
 				r_core_cmd0 (core, "af @@ method.*");
 				r_core_task_yield (&core->tasks);
 				// r_config_set_b (core->config, "anal.calls", c);
@@ -13788,7 +13815,7 @@ static int cmd_anal_all(RCore *core, const char *input) {
 					r_core_task_yield (&core->tasks);
 				}
 				if (core->anal->opt.vars) {
-					logline (core, 80, "Recovering local variables (afva)");
+					logline (core, 80, "Recovering local variables (afva@@@F)");
 					RAnalFunction *fcni;
 					RListIter *iter;
 					r_list_foreach (core->anal->fcns, iter, fcni) {

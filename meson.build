@@ -329,6 +329,17 @@ else
   message('Not using libuv, thus using fallback server implementations')
 endif
 
+if get_option('use_libsqsh')
+  libsqsh_dep = dependency('libsqsh', version: '>=1.4.0', required: false)
+  use_libsqsh = libsqsh_dep.found()
+  if not libsqsh_dep.found()
+    use_libsqsh = false
+    warning('use_libsqsh option was set to true, but libsqsh was not found.')
+  endif
+else
+  use_libsqsh = false
+endif
+
 has_debugger = get_option('debugger')
 have_ptrace = not ['haiku', 'windows', 'cygwin', 'sunos', 'aix'].contains(host_machine.system())
 can_ptrace_wrap = ['linux'].contains(host_machine.system())
