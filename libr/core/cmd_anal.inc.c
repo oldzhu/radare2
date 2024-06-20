@@ -2959,7 +2959,7 @@ static void anal_bb_list(RCore *core, const char *input) {
 		return;
 	}
 	if (mode == 'j') {
-		pj = pj_new ();
+		pj = r_core_pj_new (core);
 		pj_o (pj);
 		pj_ka (pj, "blocks");
 	} else if (mode == ',' || mode == 't') {
@@ -3752,7 +3752,7 @@ static void cmd_anal_fcn_sig(RCore *core, const char *input) {
 	}
 
 	if (json) {
-		PJ *j = pj_new ();
+		PJ *j = r_core_pj_new (core);
 		if (!j) {
 			return;
 		}
@@ -4873,6 +4873,7 @@ static bool afla_leafs(void *user, const ut64 addr, const void *data) {
 	RVecAddr *va = (RVecAddr *)data;
 	if (RVecAddr_empty (va)) {
 		r_cons_printf ("0x%08"PFMT64x"\n", addr);
+		RVecAddr_push_back (rcd->list, &addr);
 		RVecAddr_push_back (rcd->togo, &addr);
 	}
 	return true;
@@ -4898,7 +4899,7 @@ repeat:
 		index++;
 	}
 	if (!hasdone) {
-		R_LOG_WARN ("Leaving an infinite loop before it's too late");
+		R_LOG_DEBUG ("Leaving an infinite loop before it's too late");
 		rcd->inloop = false;
 	}
 	return true;
@@ -4912,8 +4913,13 @@ static void cmd_afla(RCore *core, const char *input) {
 	RVecAddr *unrefed = RVecAddr_new ();
 	r_list_foreach (core->anal->fcns, iter, fcn) {
 		RVecAnalRef *xrefs = r_anal_xrefs_get (core->anal, fcn->addr);
-		if (!xrefs) {
-			RVecAddr_push_back (unrefed, &fcn->addr);
+		if (!xrefs || RVecAnalRef_length (xrefs) == 0) {
+			const ut64 v = fcn->addr;
+			RVecAddr_push_back (unrefed, &v);
+			RVecAddr *va0 = RVecAddr_new ();
+			RVecAddr_push_back (va0, &v);
+			ht_up_insert (ht, v, va0);
+			// RVecAddr *va = ht_up_find (ht, k, NULL);
 			continue;
 		}
 		R_VEC_FOREACH (xrefs, xref) {
@@ -4943,6 +4949,7 @@ static void cmd_afla(RCore *core, const char *input) {
 	ReverseCallData rcd = {
 		.core = core,
 		.togo = RVecAddr_new (),
+		.list = RVecAddr_new (),
 		.inloop = true
 	};
 	do {
@@ -4955,6 +4962,20 @@ static void cmd_afla(RCore *core, const char *input) {
 		RVecAddr_free (rcd.togo);
 		rcd.togo = RVecAddr_new ();
 	} while (rcd.inloop);
+
+	// add missing entries here
+	r_list_foreach (core->anal->fcns, iter, fcn) {
+		bool found = false;
+		R_VEC_FOREACH (rcd.list, v) {
+			if (*v == fcn->addr) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			r_cons_printf ("0x%08"PFMT64x"\n", fcn->addr);
+		}
+	}
 }
 
 static int cmd_af(RCore *core, const char *input) {
@@ -5315,10 +5336,10 @@ static int cmd_af(RCore *core, const char *input) {
 						r_anal_function_cost (fcn), r_anal_function_complexity (fcn));
 					r_cons_printf ("  attr:  ");
 					if (r_anal_function_islineal (fcn)) {
-						r_cons_printf ("lineal");
+						r_cons_print ("lineal");
 					}
 					if (fcn->is_noreturn) {
-						r_cons_printf ("noreturn");
+						r_cons_print ("noreturn");
 					}
 					r_cons_newline ();
 				}
@@ -5941,6 +5962,9 @@ static int cmd_af(RCore *core, const char *input) {
 		}
 		break;
 	}
+	case 'e': // "afe" used by "anal.emu" - see aef
+		r_core_anal_esil (core, "f", NULL);
+		break;
 #if 0
 	/* this is undocumented, broken and probably have no uses. plz discuss */
 	case 'e': // "afe"
@@ -6254,7 +6278,7 @@ void cmd_anal_reg(RCore *core, const char *str) {
 		if (rs) {
 			RRegItem *r;
 			RListIter *iter;
-			PJ *pj = pj_new ();
+			PJ *pj = r_core_pj_new (core);
 			pj_a (pj);
 			r_list_foreach (rs->regs, iter, r) {
 				if (use_json) {
@@ -6282,7 +6306,7 @@ void cmd_anal_reg(RCore *core, const char *str) {
 		break;
 	case 'A': // "arA"
 		if (str[1] == 'j') { // "arAj"
-			PJ *pj = pj_new ();
+			PJ *pj = r_core_pj_new (core);
 			pj_o (pj);
 			int nargs = 4;
 			RReg *reg = core->anal->reg;
@@ -7068,7 +7092,7 @@ static void cmd_anal_info(RCore *core, const char *input) {
 		break;
 	case 'a': // "aia"
 		if (input[1] == 'j') { // "aiaj"
-			PJ *pj = pj_new ();
+			PJ *pj = r_core_pj_new (core);
 			pj_o (pj);
 			int v = r_anal_archinfo (core->anal, R_ARCH_INFO_MINOP_SIZE);
 			pj_ki (pj, "minopsz", v);
@@ -7600,7 +7624,7 @@ static bool cmd_aea(RCore* core, int mode, ut64 addr, int length, const char *es
 	} else if ((mode >> 3) & 1) {
 		showregs (regnow);
 	} else if ((mode >> 4) & 1) {
-		pj = pj_new ();
+		pj = r_core_pj_new (core);
 		if (!pj) {
 			return false;
 		}
@@ -9874,7 +9898,7 @@ static void cmd_anal_syscall(RCore *core, const char *input) {
 		}
 		break;
 	case 'j': // "asj"
-		pj = pj_new ();
+		pj = r_core_pj_new (core);
 		pj_a (pj);
 		list = r_syscall_list (core->anal->syscall);
 		r_list_foreach (list, iter, si) {
@@ -10257,7 +10281,7 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 			if (input[1] == '*') {
 				anal_axg (core, input + 2, 0, db, R_CORE_ANAL_GRAPHBODY, NULL); // r2 commands
 			} else if (input[1] == 'j') {
-				PJ *pj = pj_new ();
+				PJ *pj = r_core_pj_new (core);
 				anal_axg (core, input + 2, 0, db, R_CORE_ANAL_JSON, pj);
 				const char *pjs = pj_string (pj);
 				r_cons_printf ("%s\n", *pjs? pjs: "{}");
@@ -13806,23 +13830,33 @@ static int cmd_anal_all(RCore *core, const char *input) {
 						r_core_cmd_call (core, "aavq");
 					}
 					r_core_task_yield (&core->tasks);
+				}
+				const bool run_aaef = r_config_get_b (core->config, "anal.emu");
+				/// if (!r_str_startswith (asm_arch, "x86") && !r_str_startswith (asm_arch, "hex")) {
+				if (run_aaef) { // emulate all functions
+					// if (!r_str_startswith (asm_arch, "hex"))  maybe?
 					// XXX moving this oustide the x86 guard breaks some tests, missing types
 					if (cfg_debug) {
 						logline (core, 70, "Skipping function emulation in debugger mode (aaef)");
 						// nothing to do
 					} else {
-						const bool io_cache = r_config_get_i (core->config, "io.pcache");
-						r_config_set_b (core->config, "io.pcache", true);
+						bool use_pcache = true; // false;
+						const bool io_cache = r_config_get_b (core->config, "io.pcache");
+						if (use_pcache) {
+							r_config_set_b (core->config, "io.pcache", true);
+						}
 						logline (core, 70, "Emulate functions to find computed references (aaef)");
 						r_core_cmd_call (core, "aaef");
 						r_core_task_yield (&core->tasks);
-						r_config_set_b (core->config, "io.pcache", io_cache);
+						if (use_pcache) {
+							r_config_set_b (core->config, "io.pcache", io_cache);
+						}
 					}
 				}
 				if (r_cons_is_breaked ()) {
 					goto jacuzzi;
 				}
-				if (r_config_get_i (core->config, "anal.autoname")) {
+				if (r_config_get_b (core->config, "anal.autoname")) {
 					logline (core, 75, "Speculatively constructing a function name for fcn.* and sym.func.* functions (aan)");
 					r_core_anal_autoname_all_fcns (core);
 					r_core_task_yield (&core->tasks);
@@ -13954,14 +13988,25 @@ static int cmd_anal_all(RCore *core, const char *input) {
 			} else {
 				r_core_cmd0 (core, "aeim");
 				RListIter *it;
-				RAnalFunction *fcn;
 				ut64 cur_seek = core->offset;
-				r_list_foreach (core->anal->fcns, it, fcn) {
-					r_core_seek (core, fcn->addr, true);
+				char *offsets = r_core_cmd_str (core, "afla");
+				RList *list = r_str_split_list (offsets, "\n", 0);
+
+				char *of;
+				r_list_foreach (list, it, of) {
+					ut64 addr = r_num_get (NULL, of);
+					r_core_seek (core, addr, true);
 					r_core_anal_esil (core, "f", NULL);
 					// __anal_esil_function (core, fcn->addr);
 				}
+				RAnalFunction *fcn = r_anal_get_function_at (core->anal, cur_seek);
+				if (fcn) {
+					r_core_seek (core, fcn->addr, true);
+					r_core_anal_esil (core, "f", NULL);
+				}
 				r_core_seek (core, cur_seek, true);
+				r_list_free (list);
+				free (offsets);
 			}
 		} else if (input[1] == '?') { // "aae?"
 			r_core_cmd_help (core, help_msg_aae);
@@ -14944,6 +14989,7 @@ static void cmd_ap(RCore *core, const char *input) {
 			free (hex0);
 			free (hex1);
 		}
+		r_list_free (list);
 		break;
 	case 't': // "apt"
 		cmd_apt (core, input + 2);
@@ -14957,6 +15003,7 @@ static void cmd_ap(RCore *core, const char *input) {
 		break;
 	}
 }
+
 static int cmd_anal(void *data, const char *input) {
 	const char *r;
 	RCore *core = (RCore *)data;
