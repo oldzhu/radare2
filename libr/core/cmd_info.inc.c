@@ -570,22 +570,6 @@ static bool is_equal_file_hashes(RList *lfile_hashes, RList *rfile_hashes, bool 
 	return true;
 }
 
-static int __r_core_bin_reload(RCore *r, const char *file, ut64 baseaddr) {
-	int result = 0;
-	RIODesc *cd = r->io->desc;
-	if (baseaddr == UT64_MAX) {
-		baseaddr = 0;
-	}
-	if (cd) {
-		RBinFile *bf = r_bin_file_find_by_fd (r->bin, cd->fd);
-		if (bf) {
-			result = r_bin_reload (r->bin, bf->id, baseaddr);
-		}
-	}
-	r_core_bin_set_env (r, r_bin_cur (r->bin));
-	return result;
-}
-
 static RList *r_core_bin_files(RCore *core) {
 	RList *list = r_list_newf (NULL);
 	if (core->allbins) {
@@ -1618,6 +1602,24 @@ static void cmd_ik(RCore *core, const char *input) {
 	}
 }
 
+struct fdof_t {
+	RCore *core;
+	const char *fn;
+	int fd;
+};
+
+static bool fdof_cb(void *user, void *data, ut32 id) {
+	struct fdof_t *fof = (struct fdof_t *)user;
+	RIODesc *desc = (RIODesc *)data;
+	if (fof && desc) {
+		if (!strcmp (desc->uri, fof->fn)) {
+			fof->fd = desc->fd;
+			return false;
+		}
+	}
+	return true;
+}
+
 static int cmd_info(void *data, const char *input) {
 	RCore *core = (RCore *) data;
 	int fd = r_io_fd_get_current (core->io);
@@ -1911,21 +1913,6 @@ static int cmd_info(void *data, const char *input) {
 			r_bin_list_archs (core->bin, NULL, 1);
 		}
 		break;
-	case 'b': // "ib"
-		{
-			const char *arg = strchr (input, ' ');
-			if (arg) {
-				arg++;
-			}
-			ut64 baddr = arg? r_num_math (core->num, arg) : r_config_get_i (core->config, "bin.baddr");
-			// XXX: this will reload the bin using the buffer.
-			// An assumption is made that assumes there is an underlying
-			// plugin that will be used to load the bin (e.g. malloc://)
-			// TODO: Might be nice to reload a bin at a specified offset?
-			__r_core_bin_reload (core, NULL, baddr);
-			r_core_block_read (core);
-		}
-		break;
 	case 'e': // "ie"
 		{
 			  RList *objs = r_core_bin_files (core);
@@ -1964,9 +1951,21 @@ static int cmd_info(void *data, const char *input) {
 		break;
 	case 'o': // "io"
 		if (desc) {
-			const char *fn = input[1] == ' '? input + 2: desc->name;
+			int oldfd = -1;
+			const char *fn = (input[1] == ' ')
+				? r_str_trim_head_ro (input + 2): desc->name;
+			struct fdof_t fof = { core, fn, -1 };
+			r_id_storage_foreach (core->io->files, fdof_cb, &fof);
+			if (fof.fd != -1) {
+				oldfd = fof.fd;
+			}
 			ut64 baddr = r_config_get_i (core->config, "bin.baddr");
+			fof.fd = -1;
 			r_core_bin_load (core, fn, baddr);
+			r_id_storage_foreach (core->io->files, fdof_cb, &fof);
+			if (fof.fd != oldfd) {
+				r_core_cmdf (core, "o-%d", fof.fd);
+			}
 		} else {
 			R_LOG_ERROR ("Core file not open");
 			return 0;
