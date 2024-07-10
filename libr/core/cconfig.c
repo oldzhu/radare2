@@ -3487,7 +3487,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("anal.vars", "true", &cb_analvars, "analyze local variables and arguments");
 	SETCB ("anal.vars.stackname", "false", &cb_analvars_stackname, "name variables based on their offset on the stack");
 	SETCB ("anal.vars.newstack", "false", &cb_analvars_newstack, "use new sp-relative variable analysis (EXPERIMENTAL)");
-	SETBPREF ("anal.vinfun", "true",  "search values in functions (aav) (false by default to only find on non-code)");
+	SETBPREF ("anal.vinfun", "false",  "search values in functions (aav) (false by default to only find on non-code)");
 	SETBPREF ("anal.vinfunrange", "false",  "search values outside function ranges (requires anal.vinfun=false)\n");
 	SETCB ("anal.norevisit", "false", &cb_analnorevisit, "do not visit function analysis twice (EXPERIMENTAL)");
 	SETCB ("anal.nopskip", "true", &cb_analnopskip, "skip nops at the beginning of functions");
@@ -3869,6 +3869,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETI ("zign.maxsz", 500, "maximum zignature length");
 	SETI ("zign.minsz", 16, "minimum zignature length for matching");
 	SETI ("zign.mincc", 10, "minimum cyclomatic complexity for matching");
+	SETBPREF ("zign.dups", "false", "allow duplicate zignatures");
 	SETBPREF ("zign.graph", "true", "use graph metrics for matching");
 	SETBPREF ("zign.bytes", "true", "use bytes patterns for matching");
 	SETBPREF ("zign.offset", "false", "use original offset for matching");
