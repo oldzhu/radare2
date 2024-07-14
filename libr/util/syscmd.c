@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2013-2023 - pancake */
+/* radare - LGPL - Copyright 2013-2024 - pancake */
 
 #include <r_core.h>
 #include <errno.h>
@@ -373,9 +373,8 @@ R_API char *r_syscmd_head(const char *file, int count) {
 		}
 		free (filename);
 		return data;
-	} else {
-		eprintf ("Usage: head 7 [file]\n");
 	}
+	R_LOG_INFO ("Usage: head 7 [file]");
 	return NULL;
 }
 
@@ -388,7 +387,7 @@ R_API char *r_syscmd_tail(const char *file, int count) {
 			p = file;
 		}
 	}
-	if (p && *p) {
+	if (R_STR_ISNOTEMPTY (p)) {
 		char *filename = strdup (p);
 		r_str_trim (filename);
 		char *data = r_file_slurp_lines_from_bottom (filename, count);
@@ -397,9 +396,8 @@ R_API char *r_syscmd_tail(const char *file, int count) {
 		}
 		free (filename);
 		return data;
-	} else {
-		eprintf ("Usage: tail 7 [file]\n");
 	}
+	R_LOG_INFO ("Usage: tail 7 [file]");
 	return NULL;
 }
 
@@ -436,10 +434,6 @@ R_API char *r_syscmd_uniq(const char *file) {
 
 R_API char *r_syscmd_join(const char *file1, const char *file2) {
 	const char *p1 = NULL, *p2 = NULL;
-	RList *list1, *list2, *list = r_list_newf (free);
-	if (!list) {
-		return NULL;
-	}
 	if (file1) {
 		if ((p1 = strchr (file1, ' '))) {
 			p1++;
@@ -449,62 +443,66 @@ R_API char *r_syscmd_join(const char *file1, const char *file2) {
 	}
 	if (file2) {
 		if ((p2 = strchr (file2, ' '))) {
-			p2 = p2 + 1;
+			p2++;
 		} else {
 			p2 = file2;
 		}
 	}
-	if (R_STR_ISNOTEMPTY (p1) && R_STR_ISNOTEMPTY (p2)) {
-		char *filename1 = strdup (p1);
-		char *filename2 = strdup (p2);
-		r_str_trim (filename1);
-		r_str_trim (filename2);
-		char *data1 = r_file_slurp (filename1, NULL);
-		char *data2 = r_file_slurp (filename2, NULL);
-		char *data = NULL;
-		RListIter *iter1, *iter2;
-		if (!data1 || !data2) {
-			R_LOG_ERROR ("No such files or directory");
-		} else {
-			list1 = r_str_split_list (data1, "\n",  0);
-			list2 = r_str_split_list (data2, "\n", 0);
-
-			char *str1, *str2;
-			r_list_foreach (list1, iter1, str1) {
-				char *field = strdup (str1); // extract comman field
-				char *end = strchr (field, ' ');
-				if (end) {
-					*end = '\0';
-				} else {
-					free (field);
-					continue;
-				}
-				r_list_foreach (list2, iter2, str2) {
-					if (r_str_startswith (str2, field)) {
-						char *out = r_str_new (field);
-						char *first = strchr (str1, ' ');
-						char *second = strchr (str2, ' ');
-						out = r_str_append (out, r_str_get_fail (first, " "));
-						out = r_str_append (out, r_str_get_fail (second, " "));
-						r_list_append (list, out);
-					}
-				}
-				free (field);
-			}
-			data = r_list_to_str (list, '\n');
-			r_list_free (list1);
-			r_list_free (list2);
-		}
-		r_list_free (list);
-		free (filename1);
-		free (filename2);
-		free (data1);
-		free (data2);
-		return data;
-	} else {
-		eprintf ("Usage: join file1 file2\n");
+	if (R_STR_ISEMPTY (p1) || R_STR_ISEMPTY (p2)) {
+		R_LOG_INFO ("Usage: join file1 file2");
+		return NULL;
 	}
-	return NULL;
+
+	RList *list = r_list_newf (free);
+	if (!list) {
+		return NULL;
+	}
+	char *filename1 = strdup (p1);
+	char *filename2 = strdup (p2);
+	r_str_trim (filename1);
+	r_str_trim (filename2);
+	char *data1 = r_file_slurp (filename1, NULL);
+	char *data2 = r_file_slurp (filename2, NULL);
+	char *data = NULL;
+	RListIter *iter1, *iter2;
+	if (!data1 || !data2) {
+		R_LOG_ERROR ("No such files or directory");
+	} else {
+		RList *list1 = r_str_split_list (data1, "\n",  0);
+		RList *list2 = r_str_split_list (data2, "\n", 0);
+
+		char *str1, *str2;
+		r_list_foreach (list1, iter1, str1) {
+			char *field = strdup (str1); // extract command field
+			char *end = strchr (field, ' ');
+			if (end) {
+				*end = '\0';
+			} else {
+				free (field);
+				continue;
+			}
+			r_list_foreach (list2, iter2, str2) {
+				if (r_str_startswith (str2, field)) {
+					char *out = r_str_new (field);
+					char *first = strchr (str1, ' ');
+					char *second = strchr (str2, ' ');
+					out = r_str_append (out, r_str_get_fail (first, " "));
+					out = r_str_append (out, r_str_get_fail (second, " "));
+					r_list_append (list, out);
+				}
+			}
+			free (field);
+		}
+		data = r_list_to_str (list, '\n');
+		r_list_free (list1);
+		r_list_free (list2);
+	}
+	r_list_free (list);
+	free (filename1);
+	free (filename2);
+	free (data1);
+	free (data2);
+	return data;
 }
 
 R_API char *r_syscmd_cat(const char *file) {
