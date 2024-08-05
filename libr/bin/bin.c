@@ -35,9 +35,11 @@ static int __getoffset(RBin *bin, int type, int idx) {
 
 static const char *__getname(RBin *bin, int type, int idx, bool sd) {
 	RBinFile *a = r_bin_cur (bin);
-	RBinPlugin *plugin = r_bin_file_cur_plugin (a);
-	if (plugin && plugin->get_name) {
-		return plugin->get_name (a, type, idx, sd);
+	if (a) {
+		RBinPlugin *plugin = r_bin_file_cur_plugin (a);
+		if (plugin && plugin->get_name) {
+			return plugin->get_name (a, type, idx, sd);
+		}
 	}
 	return NULL;
 }
@@ -1688,6 +1690,55 @@ R_API char *r_bin_attr_tostring(ut64 attr, bool singlechar) {
 }
 
 // TODO : not implemented yet
+#if R2_USE_NEW_ABI
+R_API ut64 r_bin_attr_fromstring(const char *s, bool compact) {
+#else
 R_API ut64 r_bin_attr_fromstring(const char *s) {
-	return 0ULL;
+	const bool compact = false;
+#endif
+	int i;
+	ut64 bits = 0LL;
+	const char *word;
+	RListIter *iter;
+	if (compact) {
+		const char *w = s;
+		while (*w) {
+			for (i = 0; i < 64; i++) {
+				const char *bn = attr_bit_name (i, true);
+				if (bn && *w == *bn) {
+					bits |= (1 << i);
+					break;
+				}
+			}
+			w++;
+		}
+	} else {
+		char *a = strdup (s);
+		RList *words = r_str_split_list (a, " ", 0);
+		r_list_foreach (words, iter, word) {
+			for (i = 0; i < 64; i++) {
+				const char *bn = attr_bit_name (i, false);
+				if (!strcmp (bn, word)) {
+					bits |= (1 << i);
+					break;
+				}
+			}
+		}
+		r_list_free (words);
+		free (a);
+	}
+	return bits;
 }
+
+#if R2_USE_NEW_ABI
+R_API bool r_bin_command(RBin *bin, const char *input) {
+	RBinFile *a = r_bin_cur (bin);
+	if (a) {
+		RBinPlugin *plugin = r_bin_file_cur_plugin (a);
+		if (plugin && plugin->cmd) {
+			return plugin->cmd(a, input);
+		}
+	}
+	return false;
+}
+#endif

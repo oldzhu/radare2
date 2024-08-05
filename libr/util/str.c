@@ -672,7 +672,7 @@ R_API char *r_str_trunc_ellipsis(const char *str, int len) {
 	if (strlen (str) < len) {
 		return strdup (str);
 	}
-	char *buf = r_str_newlen (str, len);
+	char *buf = r_str_ndup (str, len);
 	if (buf && len > 4) {
 		strcpy (buf + len - 4, "...");
 	}
@@ -817,7 +817,7 @@ R_API char *r_str_prepend(char *ptr, const char *string) {
 
 R_API char *r_str_appendlen(char *ptr, const char *string, int slen) {
 	r_return_val_if_fail (string, NULL);
-	char *msg = r_str_newlen (string, slen);
+	char *msg = R_STR_NDUP (string, slen); // only fails for token.c
 	char *ret = r_str_append (ptr, msg);
 	free (msg);
 	return ret;
@@ -2417,7 +2417,7 @@ R_API bool r_str_glob(const char* str, const char *glob) {
 				needle_end++;
 			}
 			// Find the pattern in between wildcards
-			char* needle = r_str_ndup(glob, needle_end - glob);
+			char* needle = r_str_ndup (glob, needle_end - glob);
 			const char *advance_to = strstr (str, needle);
 			free (needle);
 			if (!advance_to) {
@@ -3437,11 +3437,11 @@ R_API RVecStringSlice *r_str_split_vec(const char *str, const char *c, int n) {
 }
 
 // Splits the string <str> by string <c> and returns the result in a list.
-// XXX should take const char * as argument!!
+// R2_600 - char *arg must be const!!
 R_API RList *r_str_split_list(char *str, const char *c, int n)  {
 	r_return_val_if_fail (str && c, NULL);
 	RList *lst = r_list_newf (NULL);
-	char *aux = str; // XXX should be an strdup
+	char *aux = str; // R2_600 - XXX should be an strdup
 	int i = 0;
 	char *e = aux;
 	const size_t clen = strlen (c);

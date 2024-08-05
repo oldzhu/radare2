@@ -10,8 +10,6 @@ R_VEC_TYPE(RVecAnalRef, RAnalRef);
 
 R_IPI void visual_refresh(RCore *core);
 
-#define PROMPTSTR "> "
-
 typedef struct {
 	int x;
 	int y;
@@ -218,7 +216,7 @@ static const char *__core_visual_print_command(RCore *core) {
 	}
 	if (r_config_get_b (core->config, "scr.dumpcols")) {
 		free (core->stkcmd);
-		core->stkcmd = r_str_new (stackPrintCommand (core));
+		core->stkcmd = R_STR_DUP (stackPrintCommand (core));
 		return printfmtColumns[PIDX];
 	}
 	return printfmtSingle[PIDX];
@@ -492,9 +490,8 @@ static inline void prevPrintFormat(RCore *core) {
 
 R_API bool r_core_visual_hud(RCore *core) {
 	const char *c = r_config_get (core->config, "hud.path");
-	char *f = r_str_newf (R_JOIN_3_PATHS ("%s", R2_HUD, "main"),
-		r_sys_prefix (NULL));
-	int use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
+	char *f = r_str_newf (R_JOIN_3_PATHS ("%s", R2_HUD, "main"), r_sys_prefix (NULL));
+	const int use_color = core->print->flags & R_PRINT_FLAGS_COLOR;
 	char *homehud = r_xdg_datadir ("hud");
 	bool ready = false;
 	char *res = NULL;
@@ -516,8 +513,10 @@ R_API bool r_core_visual_hud(RCore *core) {
 	r_cons_clear ();
 	if (res) {
 		char *p = strchr (res, ';');
-		r_cons_println (res);
-		r_cons_flush ();
+		if (res) {
+			r_cons_println (res);
+			r_cons_flush ();
+		}
 		if (R_STR_ISNOTEMPTY (p)) {
 			r_core_cmd0 (core, p + 1);
 		}
@@ -751,7 +750,6 @@ static void restore_current_addr(RCore *core, ut64 addr, ut64 bsze, ut64 newaddr
 				cursor_moved = true;
 			}
 		}
-
 		if (!cursor_moved) {
 			restore_seek = false;
 			reset_print_cur (core->print);
@@ -773,7 +771,7 @@ R_API void r_core_visual_prompt_input(RCore *core) {
 	//r_cons_printf ("\nPress <enter> to return to Visual mode.\n");
 	r_cons_show_cursor (true);
 	core->vmode = false;
-	int ovtmode = r_config_get_i (core->config, "scr.vtmode");
+	const int ovtmode = r_config_get_i (core->config, "scr.vtmode");
 	r_config_set_i (core->config, "scr.vtmode", 1);
 
 	int curbs = core->blocksize;
@@ -799,31 +797,28 @@ R_API void r_core_visual_prompt_input(RCore *core) {
 
 R_API int r_core_visual_prompt(RCore *core) {
 	char buf[1024];
-	int ret;
 	if (PIDX != 2) {
 		core->seltab = 0;
 	}
-	r_line_set_prompt (PROMPTSTR);
+	r_line_set_prompt ("> ");
 	r_core_visual_showcursor (core, true);
 	r_cons_fgets (buf, sizeof (buf), 0, NULL);
 	if (!strcmp (buf, "q")) {
-		ret = false;
-	} else if (*buf) {
+		return 0;
+	}
+	if (*buf) {
 		r_line_hist_add (buf);
 		r_core_cmd (core, buf, 0);
 		r_cons_echo (NULL);
 		r_cons_flush ();
-		ret = true;
 		if (r_config_get_b (core->config, "cfg.debug")) {
 			r_core_cmd (core, ".dr*", 0);
 		}
-	} else {
-		ret = false;
-		// r_cons_any_key (NULL);
-		r_cons_clear00 ();
-		r_core_visual_showcursor (core, false);
+		return 1;
 	}
-	return ret;
+	r_cons_clear00 ();
+	r_core_visual_showcursor (core, false);
+	return 0;
 }
 
 static void visual_single_step_in(RCore *core) {
@@ -1115,7 +1110,7 @@ static void visual_search(RCore *core) {
 			core->print->ocur = -1;
 		}
 		r_core_visual_showcursor (core, true);
-		eprintf ("Found in offset 0x%08"PFMT64x" + %d\n", core->offset, core->print->cur);
+		R_LOG_INFO ("Found in offset 0x%08"PFMT64x" + %d", core->offset, core->print->cur);
 		r_cons_any_key (NULL);
 	} else {
 		R_LOG_ERROR ("Cannot find bytes");
@@ -1148,15 +1143,13 @@ R_API void r_core_visual_seek_animation(RCore *core, ut64 addr) {
 		return;
 	}
 	r_cons_gotoxy (1, 2);
+	r_cons_printf (".----.\n");
 	if (addr > core->offset) {
-		r_cons_printf (".----.\n");
 		r_cons_printf ("| \\/ |\n");
-		r_cons_printf ("'----'\n");
 	} else {
-		r_cons_printf (".----.\n");
 		r_cons_printf ("| /\\ |\n");
-		r_cons_printf ("'----'\n");
 	}
+	r_cons_printf ("'----'\n");
 	r_cons_flush ();
 	r_sys_usleep (90000);
 }
@@ -1351,19 +1344,20 @@ R_API int r_core_visual_prevopsz(RCore *core, ut64 addr) {
 }
 
 static void addComment(RCore *core, ut64 addr) {
-	char buf[1024];
 	r_cons_printf ("Enter comment for reference:\n");
 	r_core_visual_showcursor (core, true);
 	r_cons_flush ();
 	r_cons_set_raw (false);
-	r_line_set_prompt (PROMPTSTR);
+	r_line_set_prompt ("> ");
 	r_cons_enable_mouse (false);
+	char buf[1024];
 	if (r_cons_fgets (buf, sizeof (buf), 0, NULL) < 0) {
 		buf[0] = '\0';
 	}
-	r_core_cmdf (core, "\"\"@0x%08"PFMT64x"\"\"CC %s", addr, buf);
-	r_core_visual_showcursor (core, false);
+	r_core_cmdf (core, "'@0x%08"PFMT64x"'CC %s", addr, buf);
 	r_cons_set_raw (true);
+	r_cons_enable_mouse (r_config_get_b (core->config, "scr.wheel"));
+	r_core_visual_showcursor (core, false);
 }
 
 static void add_ref(RCore *core) {
@@ -1523,7 +1517,7 @@ repeat:
 					}
 				}
 				if (w > 45) {
-					if (strlen (name) > w -45) {
+					if (strlen (name) > w - 45) {
 						name[w - 45] = 0;
 					}
 				} else {
@@ -1664,7 +1658,7 @@ repeat:
 	case 'G':
 		skip = 9999;
 		goto repeat;
-	case ';':
+	case ';': // "Vx;"
 		addComment (core, cur_ref_addr);
 		goto repeat;
 	case '.':
@@ -1949,16 +1943,15 @@ static void visual_textlogs(RCore *core) {
 static void visual_comma(RCore *core) {
 	bool mouse_state = __holdMouseState (core);
 	ut64 addr = core->offset + (core->print->cur_enabled? core->print->cur: 0);
-	char *comment, *cwd, *cmtfile;
 	const char *prev_cmt = r_meta_get_string (core->anal, R_META_TYPE_COMMENT, addr);
-	comment = prev_cmt ? strdup (prev_cmt) : NULL;
-	cmtfile = r_str_between (comment, ",(", ")");
-	cwd = getcommapath (core);
+	char *comment = prev_cmt ? strdup (prev_cmt) : NULL;
+	char *cmtfile = r_str_between (comment, ",(", ")");
+	char *cwd = getcommapath (core);
 	if (!cmtfile) {
 		char *fn = r_cons_input ("<comment-file> ");
 		if (fn && *fn) {
 			cmtfile = strdup (fn);
-			if (!comment || !*comment) {
+			if (R_STR_ISEMPTY (comment)) {
 				comment = r_str_newf (",(%s)", fn);
 				r_meta_set_string (core->anal, R_META_TYPE_COMMENT, addr, comment);
 			} else {
@@ -2644,7 +2637,7 @@ R_API void r_core_visual_browse(RCore *core, const char *input) {
 			break;
 		case 'C': // "vbC"
 			r_core_visual_comments (core);
-			//r_core_cmd0 (core, "s $(CC~...)");
+			// r_core_cmd0 (core, "s $(CC~...)");
 			break;
 		case 't': // "vbt"
 			r_core_visual_types (core);
@@ -2786,6 +2779,59 @@ static int process_get_click(RCore *core, int ch) {
 		}
 	}
 	return ch;
+}
+
+static void visual_add_comment(RCore *core) {
+	char buf[1024];
+	r_cons_enable_mouse (false);
+	r_cons_gotoxy (0, 0);
+	r_cons_printf ("Enter a comment: ('-' to remove, '!' to use cfg.editor)\n");
+	r_core_visual_showcursor (core, true);
+	r_cons_flush ();
+	r_cons_set_raw (false);
+	ut64 addr = core->offset;
+	const ut64 orig = core->offset;
+	if (core->print->cur_enabled) {
+		addr += core->print->cur;
+		r_core_seek (core, addr, false);
+		r_core_cmdf (core, "s 0x%"PFMT64x, addr);
+	}
+	const char *comment = r_meta_get_string (core->anal, R_META_TYPE_COMMENT, addr);
+	bool use_editor = comment != NULL;
+	if (R_STR_ISEMPTY (r_config_get (core->config, "cfg.editor"))) {
+		use_editor = false;
+	}
+	r_line_set_prompt ("comment: ");
+	bool do_sthg = true;
+	if (use_editor) {
+		strcpy (buf, "!");
+	} else {
+		do_sthg = r_cons_fgets (buf, sizeof (buf), 0, NULL) > 0;
+	}
+	if (do_sthg) {
+		const char *command = "CC ";
+		const char *argument = NULL;
+		switch (buf[0]) {
+		case '-':
+			command = "CC-";
+			argument = r_str_trim_head_ro (buf + 1);
+			break;
+		case '!':
+			command = "CC!";
+			argument = r_str_trim_head_ro (buf + 1);
+			break;
+		default:
+			command = "CC ";
+			argument = r_str_trim_head_ro (buf);
+			break;
+		}
+		r_core_cmdf (core, "'%s%s", command, argument);
+	}
+	if (core->print->cur_enabled) {
+		r_core_seek (core, orig, true);
+	}
+	r_cons_set_raw (true);
+	r_core_visual_showcursor (core, false);
 }
 
 static void handle_space_key(RCore *core, int force) {
@@ -3017,7 +3063,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			r_cons_flush ();
 			r_cons_set_raw (false);
 			strcpy (buf, "\"wa ");
-			r_line_set_prompt (PROMPTSTR);
+			r_line_set_prompt ("> ");
 			r_cons_enable_mouse (false);
 			if (r_cons_fgets (buf + 4, sizeof (buf) - 4, 0, NULL) < 0) {
 				buf[0] = '\0';
@@ -3377,19 +3423,19 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			break;
 		case 'r':
 			// TODO: toggle shortcut hotkeys
-			if (r_config_get_i (core->config, "asm.hint.call")) {
+			if (r_config_get_b (core->config, "asm.hint.call")) {
 				r_core_cmd_call (core, "e!asm.hint.call");
 				r_core_cmd_call (core, "e asm.hint.jmp=true");
-			} else if (r_config_get_i (core->config, "asm.hint.jmp")) {
+			} else if (r_config_get_b (core->config, "asm.hint.jmp")) {
 				r_core_cmd_call (core, "e!asm.hint.jmp");
 				r_core_cmd_call (core, "e asm.hint.imm=true");
-			} else if (r_config_get_i (core->config, "asm.hint.imm")) {
+			} else if (r_config_get_b (core->config, "asm.hint.imm")) {
 				r_core_cmd_call (core, "e!asm.hint.imm");
 				r_core_cmd_call (core, "e asm.hint.emu=true");
-			} else if (r_config_get_i (core->config, "asm.hint.emu")) {
+			} else if (r_config_get_b (core->config, "asm.hint.emu")) {
 				r_core_cmd_call (core, "e!asm.hint.emu");
 				r_core_cmd_call (core, "e asm.hint.lea=true");
-			} else if (r_config_get_i (core->config, "asm.hint.lea")) {
+			} else if (r_config_get_b (core->config, "asm.hint.lea")) {
 				r_core_cmd_call (core, "e!asm.hint.lea");
 				r_core_cmd_call (core, "e asm.hint.call=true");
 			} else {
@@ -3483,7 +3529,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 					cursor_nextrow (core, false);
 				}
 			} else {
-				if (r_config_get_i (core->config, "scr.wheel.nkey")) {
+				if (r_config_get_b (core->config, "scr.wheel.nkey")) {
 					int i, distance = numbuf_pull (core);
 					if (distance < 1)  {
 						distance =  1;
@@ -3523,7 +3569,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			break;
 		case 'J':
 			if (r_config_get_b (core->config, "scr.cursor")) {
-				int distance = 4;// numbuf_pull (core);
+				const int distance = 4; // numbuf_pull (core);
 				core->cons->cpos.y += distance;
 				int h;
 				(void)r_cons_get_size (&h);
@@ -3531,7 +3577,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 					core->cons->cpos.y = h;
 				}
 			} else if (core->print->cur_enabled) {
-				int distance = numbuf_pull (core);
+				const int distance = numbuf_pull (core);
 				for (i = 0; i < distance; i++) {
 					cursor_nextrow (core, true);
 				}
@@ -3570,7 +3616,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 					core->cons->cpos.y = 0;
 				}
 			} else if (core->print->cur_enabled) {
-				int distance = numbuf_pull (core);
+				const int distance = numbuf_pull (core);
 				for (i = 0; i < distance; i++) {
 					cursor_prevrow (core, false);
 				}
@@ -3588,7 +3634,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 					if (times < 1) {
 						times = 1;
 					}
-					int distance = numbuf_pull (core);
+					const int distance = numbuf_pull (core);
 					if (distance > 1) {
 						times = distance;
 					}
@@ -3620,18 +3666,12 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			} else {
 				if (core->print->screen_bounds > 1 && core->print->screen_bounds > core->offset) {
 					int delta = (core->print->screen_bounds - core->offset);
-					if (core->offset >= delta) {
-						r_core_seek (core, core->offset - delta, true);
-					} else {
-						r_core_seek (core, 0, true);
-					}
+					const ut64 addr = (core->offset >= delta)? core->offset - delta: 0;
+					r_core_seek (core, addr, true);
 				} else {
 					ut64 at = (core->offset > core->visual.obs)? core->offset - core->visual.obs: 0;
-					if (core->offset > core->visual.obs) {
-						r_core_seek (core, at, true);
-					} else {
-						r_core_seek (core, 0, true);
-					}
+					const ut64 addr = (core->offset > core->visual.obs)? at: 0;
+					r_core_seek (core, addr, true);
 				}
 			}
 			break;
@@ -3685,7 +3725,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			break;
 		case 'S':
 			key_s = r_config_get (core->config, "key.S");
-			if (key_s && *key_s) {
+			if (R_STR_ISNOTEMPTY (key_s)) {
 				r_core_cmd0 (core, key_s);
 			} else {
 				// r_core_cmd0 (core, "dsb");
@@ -3729,7 +3769,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				r_cons_gotoxy (0, 0);
 				r_cons_printf (R_CONS_CLEAR_LINE"Set shortcut key for 0x%"PFMT64x"\n", core->offset);
 				r_cons_flush ();
-				int ch = r_cons_readchar ();
+				const int ch = r_cons_readchar ();
 				r_core_vmark (core, ch);
 			}
 			break;
@@ -3739,7 +3779,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				if (r_core_vmark_dump (core, 'v')) {
 					r_cons_printf (R_CONS_CLEAR_LINE"Remove a shortcut key from the list\n");
 					r_cons_flush ();
-					int ch = r_cons_readchar ();
+					const int ch = r_cons_readchar ();
 					r_core_vmark_del (core, ch);
 				}
 			}
@@ -3749,7 +3789,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				r_cons_gotoxy (0, 2);
 				if (r_core_vmark_dump (core, 'v')) {
 					r_cons_flush ();
-					int ch = r_cons_readchar ();
+					const int ch = r_cons_readchar ();
 					r_core_vmark_seek (core, ch, NULL);
 				}
 			}
@@ -3837,8 +3877,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 						r_core_cmdf (core, "woa 01 @ $$+%i!1", core->print->cur);
 					} else {
 						r_core_cmdf (core, "woa 01 @ $$+%i!%i", core->print->cur < core->print->ocur
-							? core->print->cur
-							: core->print->ocur,
+							? core->print->cur : core->print->ocur,
 							R_ABS (core->print->ocur - core->print->cur) + 1);
 					}
 				}
@@ -4007,47 +4046,8 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 		case '_':
 			r_core_visual_hudstuff (core);
 			break;
-		case ';':
-			r_cons_enable_mouse (false);
-			r_cons_gotoxy (0, 0);
-			r_cons_printf ("Enter a comment: ('-' to remove, '!' to use $EDITOR)\n");
-			r_core_visual_showcursor (core, true);
-			r_cons_flush ();
-			r_cons_set_raw (false);
-			r_line_set_prompt ("comment: ");
-			strcpy (buf, "\"CC ");
-			i = strlen (buf);
-			if (r_cons_fgets (buf + i, sizeof (buf) - i, 0, NULL) > 0) {
-				ut64 addr, orig;
-				addr = orig = core->offset;
-				if (core->print->cur_enabled) {
-					addr += core->print->cur;
-					r_core_seek (core, addr, false);
-					r_core_cmdf (core, "s 0x%"PFMT64x, addr);
-				}
-				const char *command = "CC ";
-				const char *argument = NULL;
-				switch (buf[i]) {
-				case '-':
-					command = "CC-";
-					argument = r_str_trim_head_ro (buf + i + 1);
-					break;
-				case '!':
-					command = "CC!";
-					argument = r_str_trim_head_ro (buf + i + 1);
-					break;
-				default:
-					command = "CC ";
-					argument = r_str_trim_head_ro (buf + i);
-					break;
-				}
-				r_core_cmdf (core, "\"%s%s\"", command, argument);
-				if (core->print->cur_enabled) {
-					r_core_seek (core, orig, true);
-				}
-			}
-			r_cons_set_raw (true);
-			r_core_visual_showcursor (core, false);
+		case ';': // "V;"
+			visual_add_comment (core);
 			break;
 		case 'b':
 			r_core_visual_browse (core, arg + 1);
