@@ -203,7 +203,7 @@ static bool __addRow(RTable *t, RList *items, const char *arg, int col) {
 }
 
 R_API void r_table_add_row_list(RTable *t, RList *items) {
-	r_return_if_fail (t && items);
+	R_RETURN_IF_FAIL (t && items);
 	RTableRow *row = r_table_row_new (items);
 	r_list_append (t->rows, row);
 	// throw warning if not enough columns defined in header
@@ -603,7 +603,7 @@ R_API char *r_table_tor2cmds(RTable *t) {
 }
 
 R_API char *r_table_tosql(RTable *t) {
-	r_return_val_if_fail (t, NULL);
+	R_RETURN_VAL_IF_FAIL (t, NULL);
 	RStrBuf *sb = r_strbuf_new ("");
 	RTableRow *row;
 	RTableColumn *col;
@@ -756,7 +756,7 @@ R_API char *r_table_tojson(RTable *t) {
 }
 
 R_API void r_table_filter(RTable *t, int nth, int op, const char *un) {
-	r_return_if_fail (t && un);
+	R_RETURN_IF_FAIL (t && un);
 	RTableRow *row;
 	RListIter *iter, *iter2;
 	ut64 uv = r_num_math (NULL, un);
@@ -1199,7 +1199,7 @@ static bool __table_special(RTable *t, const char *columnName) {
 }
 
 R_API bool r_table_query(RTable *t, const char *q) {
-	r_return_val_if_fail (t, false);
+	R_RETURN_VAL_IF_FAIL (t, false);
 	q = r_str_trim_head_ro (q);
 	// TODO support parenthesis and (or)||
 	// split by "&&" (or comma) -> run .filter on each

@@ -408,7 +408,7 @@ static bool cb_analarch(void *user, void *data) {
 }
 
 static void update_archdecoder_options(RCore *core, RConfigNode *node) {
-	r_return_if_fail (core && core->anal && core->anal->arch && node);
+	R_RETURN_IF_FAIL (core && core->anal && core->anal->arch && node);
 	r_config_node_purge_options (node);
 	RListIter *it;
 	RArchPlugin *ap;
@@ -422,7 +422,7 @@ static void update_archdecoder_options(RCore *core, RConfigNode *node) {
 static bool cb_archdecoder(void *user, void *data) {
 	RCore *core = (RCore *)user;
 	RConfigNode *node = (RConfigNode *)data;
-	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	R_RETURN_VAL_IF_FAIL (node && core && core->anal && core->anal->arch, false);
 	if (*node->value == '?') {
 		update_archdecoder_options (core, node);
 		print_node_options (node);
@@ -438,7 +438,7 @@ static bool cb_archdecoder(void *user, void *data) {
 }
 
 static bool cb_archdecoder_getter(RCore *core, RConfigNode *node) {
-	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	R_RETURN_VAL_IF_FAIL (node && core && core->anal && core->anal->arch, false);
 	free (node->value);
 	if (core->anal->arch->cfg && core->anal->arch->cfg->decoder) {
 		node->value = strdup (core->anal->arch->cfg->decoder);
@@ -472,7 +472,7 @@ static bool cb_arch_platform(void *user, void *data) {
 }
 
 static bool cb_archbits(void *user, void *data) {
-	r_return_val_if_fail (user && data, false);
+	R_RETURN_VAL_IF_FAIL (user && data, false);
 	RCore *core = (RCore *)user;
 	RConfigNode *node = (RConfigNode *)data;
 	r_arch_set_bits (core->anal->arch, node->i_value);
@@ -480,7 +480,7 @@ static bool cb_archbits(void *user, void *data) {
 }
 
 static bool cb_archbits_getter(RCore *core, RConfigNode *node) {
-	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	R_RETURN_VAL_IF_FAIL (node && core && core->anal && core->anal->arch, false);
 	if (core->anal->arch->cfg) {
 		node->i_value = core->anal->arch->cfg->bits;
 	}
@@ -490,7 +490,7 @@ static bool cb_archbits_getter(RCore *core, RConfigNode *node) {
 static bool cb_archendian(void *user, void *data) {
 	RCore *core = (RCore *)user;
 	RConfigNode *node = (RConfigNode *)data;
-	r_return_val_if_fail (node && core && core->anal && core->anal->arch, false);
+	R_RETURN_VAL_IF_FAIL (node && core && core->anal && core->anal->arch, false);
 	if (!strcmp (node->value, "big") || !strcmp (node->value, "bigswap")) {
 		r_arch_set_endian (core->anal->arch, R_SYS_ENDIAN_BIG);
 		return true;
@@ -617,7 +617,7 @@ static bool cb_asmassembler(void *user, void *data) {
 }
 
 static void update_cmdpdc_options(RCore *core, RConfigNode *node) {
-	r_return_if_fail (core && core->rasm && node);
+	R_RETURN_IF_FAIL (core && core->rasm && node);
 	RListIter *iter;
 	r_config_node_purge_options (node);
 	char *opts = r_core_cmd_str (core, "e cmd.pdc=?");
@@ -632,7 +632,7 @@ static void update_cmdpdc_options(RCore *core, RConfigNode *node) {
 
 static void update_asmcpu_options(RCore *core, RConfigNode *node) {
 	RListIter *iter;
-	r_return_if_fail (core && core->rasm);
+	R_RETURN_IF_FAIL (core && core->rasm);
 	const char *arch = r_config_get (core->config, "asm.arch");
 	if (!arch || !*arch) {
 		return;
@@ -718,7 +718,7 @@ static void update_asmbits_options(RCore *core, RConfigNode *node) {
 static bool cb_asmarch(void *user, void *data) {
 	char asmparser[32];
 	RCore *core = (RCore *) user;
-	r_return_val_if_fail (core && core->anal, false);
+	R_RETURN_VAL_IF_FAIL (core && core->anal, false);
 	RConfigNode *node = (RConfigNode *) data;
 
 	if (R_STR_ISEMPTY (node->value)) {
@@ -832,7 +832,7 @@ static bool cb_dbgbtdepth(void *user, void *data) {
 }
 
 static bool cb_asmbits(void *user, void *data) {
-	r_return_val_if_fail (user && data, false);
+	R_RETURN_VAL_IF_FAIL (user && data, false);
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 
@@ -3023,7 +3023,7 @@ static bool cb_analcc(RCore *core, RConfigNode *node) {
 }
 
 static bool cb_anal_roregs(RCore *core, RConfigNode *node) {
-	r_return_val_if_fail (core && core->anal && core->anal->reg, false);
+	R_RETURN_VAL_IF_FAIL (core && core->anal && core->anal->reg, false);
 	r_reg_ro_reset (core->anal->reg, node->value);
 	return true;
 }
@@ -3842,6 +3842,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("prj.vc", "true", "use your version control system of choice (rvc, git) to manage projects");
 	SETBPREF ("prj.zip", "false", "use ZIP format for project files");
 	SETBPREF ("prj.gpg", "false", "TODO: encrypt project with GnuPGv2");
+	SETBPREF ("prj.history", "false", "per-project command history");
 	SETBPREF ("prj.sandbox", "false", "sandbox r2 while loading project files");
 	SETBPREF ("prj.alwasyprompt", "false", "even when the project is already saved, ask the user to save the project when qutting");
 

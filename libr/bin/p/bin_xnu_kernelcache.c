@@ -2037,14 +2037,14 @@ static ut64 iterate_rebase_list(RBuffer *cache_buf, ut64 multiplier, ut64 start_
 }
 
 static void swizzle_io_read(RKernelCacheObj *obj, RIO *io) {
-	r_return_if_fail (io && io->desc && io->desc->plugin);
+	R_RETURN_IF_FAIL (io && io->desc && io->desc->plugin);
 	RIOPlugin *plugin = io->desc->plugin;
 	obj->original_io_read = plugin->read;
 	plugin->read = &kernelcache_io_read;
 }
 
 static int kernelcache_io_read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
-	r_return_val_if_fail (io, -1);
+	R_RETURN_VAL_IF_FAIL (io, -1);
 	RCore *core = (RCore*) io->coreb.core;
 
 	if (!fd || !core || !core->bin || !core->bin->binfiles) {

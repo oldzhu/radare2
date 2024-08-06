@@ -256,7 +256,7 @@ static void print_debug_maps_ascii_art(RDebug *dbg, RList *maps, ut64 addr, int 
 }
 
 R_API void r_debug_map_list_visual(RDebug *dbg, ut64 addr, const char *input, int colors) {
-	r_return_if_fail (dbg);
+	R_RETURN_IF_FAIL (dbg);
 	int i;
 	for (i = 0; i < 2; i++) { // Iterate over dbg::maps and dbg::maps_user
 		RList *maps = (i == 0) ? dbg->maps : dbg->maps_user;
@@ -335,7 +335,7 @@ R_API int r_debug_map_dealloc(RDebug *dbg, RDebugMap *map) {
 }
 
 R_API RDebugMap *r_debug_map_get(RDebug *dbg, ut64 addr) {
-	r_return_val_if_fail (dbg, NULL);
+	R_RETURN_VAL_IF_FAIL (dbg, NULL);
 	RDebugMap *map, *ret = NULL;
 	RListIter *iter;
 	r_list_foreach (dbg->maps, iter, map) {

@@ -190,7 +190,7 @@ static R_MUSTUSE char *function_name(RCore *core, const char *name, ut64 addr) {
 }
 
 static void printFunctionCommands(RCore *core, fcn_t* fcn, const char *name) {
-	r_return_if_fail (core && fcn);
+	R_RETURN_IF_FAIL (core && fcn);
 	RListIter *fcn_iter;
 	bb_t *cur = NULL;
 	char *_name = function_name (core, name, fcn->addr);
@@ -204,7 +204,7 @@ static void printFunctionCommands(RCore *core, fcn_t* fcn, const char *name) {
 }
 
 static void createFunction(RCore *core, fcn_t* fcn, const char *name) {
-	r_return_if_fail (core && fcn);
+	R_RETURN_IF_FAIL (core && fcn);
 
 	RListIter *fcn_iter;
 	bb_t *cur = NULL;
@@ -240,7 +240,7 @@ static void createFunction(RCore *core, fcn_t* fcn, const char *name) {
 
 #define Fhandled(x) r_strf ("handled.%"PFMT64x, x)
 R_API bool core_anal_bbs(RCore *core, const char* input) {
-	r_return_val_if_fail (core && input, false);
+	R_RETURN_VAL_IF_FAIL (core && input, false);
 	if (!r_io_is_valid_offset (core->io, core->offset, false)) {
 		R_LOG_ERROR ("No valid offset given to analyze");
 		return false;

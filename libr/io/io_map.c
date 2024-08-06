@@ -9,7 +9,7 @@
 R_IPI bool io_bank_has_map(RIO *io, const ut32 bankid, const ut32 mapid);
 
 static RIOMap *io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	r_return_val_if_fail (io && io->maps, NULL);
+	R_RETURN_VAL_IF_FAIL (io && io->maps, NULL);
 	const ut64 fd_size = r_io_fd_size (io, fd);
 	if ((!size) || (fd_size <= delta)) {
 		return NULL;
@@ -30,7 +30,7 @@ static RIOMap *io_map_new(RIO* io, int fd, int perm, ut64 delta, ut64 addr, ut64
 }
 
 R_API bool r_io_map_remap(RIO *io, ut32 id, ut64 addr) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	RIOMap *map = r_io_map_get (io, id);
 	if (!map) {
 		return false;
@@ -103,7 +103,7 @@ static bool _map_free_cb(void *user, void *data, ut32 id) {
 }
 
 R_API void r_io_map_init(RIO* io) {
-	r_return_if_fail (io);
+	R_RETURN_IF_FAIL (io);
 	if (io->maps) {
 		r_id_storage_foreach (io->maps, _map_free_cb, NULL);
 		r_id_storage_free (io->maps);
@@ -113,7 +113,7 @@ R_API void r_io_map_init(RIO* io) {
 
 // check if a map with exact the same properties exists
 R_API bool r_io_map_exists(RIO *io, RIOMap *map) {
-	r_return_val_if_fail (io && map, false);
+	R_RETURN_VAL_IF_FAIL (io && map, false);
 	RIOMap *_map = r_io_map_get (io, map->id);
 	if (!_map) {
 		return false;
@@ -123,17 +123,17 @@ R_API bool r_io_map_exists(RIO *io, RIOMap *map) {
 
 // check if a map with specified id exists
 R_API bool r_io_map_exists_for_id(RIO *io, ut32 id) {
-	r_return_val_if_fail (io && io->maps, false);
+	R_RETURN_VAL_IF_FAIL (io && io->maps, false);
 	return r_io_map_get (io, id);
 }
 
 R_API RIOMap* r_io_map_get(RIO *io, ut32 id) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	return r_id_storage_get (io->maps, id);
 }
 
 R_API RIOMap *r_io_map_add(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	r_return_val_if_fail (io, NULL);
+	R_RETURN_VAL_IF_FAIL (io, NULL);
 	if (!size) {
 		return NULL;
 	}
@@ -180,7 +180,7 @@ R_API RIOMap *r_io_map_add(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut6
 }
 
 R_API RIOMap *r_io_map_add_bottom(RIO *io, int fd, int perm, ut64 delta, ut64 addr, ut64 size) {
-	r_return_val_if_fail (io, NULL);
+	R_RETURN_VAL_IF_FAIL (io, NULL);
 	if (!size) {
 		return NULL;
 	}
@@ -227,7 +227,7 @@ R_API RIOMap *r_io_map_add_bottom(RIO *io, int fd, int perm, ut64 delta, ut64 ad
 }
 
 R_API RIOMap *r_io_map_get_paddr(RIO* io, ut64 paddr) {
-	r_return_val_if_fail (io, NULL);
+	R_RETURN_VAL_IF_FAIL (io, NULL);
 	RIOBank *bank = r_io_bank_get (io, io->bank);
 	if (bank) {
 		RListIter *iter;
@@ -244,12 +244,12 @@ R_API RIOMap *r_io_map_get_paddr(RIO* io, ut64 paddr) {
 
 // gets first map where addr fits in
 R_API RIOMap *r_io_map_get_at(RIO* io, ut64 addr) {
-	r_return_val_if_fail (io, NULL);
+	R_RETURN_VAL_IF_FAIL (io, NULL);
 	return r_io_bank_get_map_at (io, io->bank, addr);
 }
 
 R_API bool r_io_map_is_mapped(RIO* io, ut64 addr) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	return (bool)r_io_map_get_at (io, addr);
 }
 
@@ -259,7 +259,7 @@ R_API void r_io_map_reset(RIO* io) {
 }
 
 R_API void r_io_map_del(RIO *io, ut32 id) {
-	r_return_if_fail (io && io->maps);
+	R_RETURN_IF_FAIL (io && io->maps);
 	RIOMap *map = (RIOMap *)r_id_storage_get (io->maps, id);
 	if (!map) {
 		return;
@@ -279,7 +279,7 @@ R_API void r_io_map_del(RIO *io, ut32 id) {
 
 //delete all maps with specified fd
 R_API bool r_io_map_del_for_fd(RIO* io, int fd) {
-	r_return_val_if_fail (io && io->maps, false);
+	R_RETURN_VAL_IF_FAIL (io && io->maps, false);
 	ut32 map_id;
 	if (!r_id_storage_get_lowest (io->maps, &map_id)) {
 		return false;
@@ -303,17 +303,17 @@ R_API bool r_io_map_del_for_fd(RIO* io, int fd) {
 //brings map with specified id to the tail of of the list
 //return a boolean denoting whether is was possible to priorized
 R_API bool r_io_map_priorize(RIO* io, ut32 id) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	return r_io_bank_map_priorize (io, io->bank, id);
 }
 
 R_API bool r_io_map_depriorize(RIO* io, ut32 id) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	return r_io_bank_map_depriorize (io, io->bank, id);
 }
 
 R_API bool r_io_map_priorize_for_fd(RIO *io, int fd) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	RList *map_list = r_io_map_get_by_fd (io, fd);
 	if (!map_list) {
 		return false;
@@ -329,7 +329,7 @@ R_API bool r_io_map_priorize_for_fd(RIO *io, int fd) {
 
 //may fix some inconsistencies in io->maps
 R_API void r_io_map_cleanup(RIO* io) {
-	r_return_if_fail (io);
+	R_RETURN_IF_FAIL (io);
 	//remove all maps if no descs exist
 	if (!io->files) {
 		r_io_map_fini (io);
@@ -345,7 +345,7 @@ static bool _clear_banks_cb(void *user, void *data, ut32 id) {
 }
 
 R_API void r_io_map_fini(RIO* io) {
-	r_return_if_fail (io);
+	R_RETURN_IF_FAIL (io);
 	if (io->banks) {
 		r_id_storage_foreach (io->banks, _clear_banks_cb, NULL);
 	}
@@ -357,18 +357,18 @@ R_API void r_io_map_fini(RIO* io) {
 }
 
 R_API void r_io_map_set_name(RIOMap* map, const char* name) {
-	r_return_if_fail (map && name);
+	R_RETURN_IF_FAIL (map && name);
 	free (map->name);
 	map->name = strdup (name);
 }
 
 R_API void r_io_map_del_name(RIOMap* map) {
-	r_return_if_fail (map);
+	R_RETURN_IF_FAIL (map);
 	R_FREE (map->name);
 }
 
 R_API bool r_io_map_locate(RIO *io, ut64 *addr, const ut64 size, ut64 load_align) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	if (load_align == 0) {
 		load_align = 1;
 	}
@@ -376,7 +376,7 @@ R_API bool r_io_map_locate(RIO *io, ut64 *addr, const ut64 size, ut64 load_align
 }
 
 R_API RList* r_io_map_get_by_fd(RIO* io, int fd) {
-	r_return_val_if_fail (io, NULL);
+	R_RETURN_VAL_IF_FAIL (io, NULL);
 	RList* map_list = r_list_newf (NULL);
 	if (!map_list) {
 		return NULL;
@@ -398,7 +398,7 @@ R_API RList* r_io_map_get_by_fd(RIO* io, int fd) {
 }
 
 R_IPI bool io_map_resize(RIO *io, ut32 id, ut64 newsize) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	RIOMap *map;
 	if (!newsize || !(map = r_io_map_get (io, id))) {
 		return false;
@@ -445,7 +445,7 @@ R_IPI bool io_map_resize(RIO *io, ut32 id, ut64 newsize) {
 }
 
 R_API bool r_io_map_resize(RIO *io, ut32 id, ut64 newsize) {
-	r_return_val_if_fail (io, false);
+	R_RETURN_VAL_IF_FAIL (io, false);
 	RIOMap *map;
 	if (!newsize || !(map = r_io_map_get (io, id))) {
 		return false;
@@ -467,7 +467,7 @@ R_API bool r_io_map_resize(RIO *io, ut32 id, ut64 newsize) {
 }
 
 R_API RIOMap *r_io_map_get_by_ref(RIO *io, RIOMapRef *ref) {
-	r_return_val_if_fail (io && ref, NULL);
+	R_RETURN_VAL_IF_FAIL (io && ref, NULL);
 	RIOMap *map = r_io_map_get (io, ref->id);
 	// trigger cleanup if ts don't match?
 	return (map && map->ts == ref->ts) ? map : NULL;
@@ -493,7 +493,7 @@ static int _overlay_chunk_find(void *incoming, void *in, void *user) {
 }
 
 R_API void r_io_map_read_from_overlay(RIOMap *map, ut64 addr, ut8 *buf, int len) {
-	r_return_if_fail (map && buf);
+	R_RETURN_IF_FAIL (map && buf);
 	if (!map->overlay || len < 1 || addr > r_io_map_to (map)) {
 		return;
 	}
@@ -548,7 +548,7 @@ static int _overlay_chunk_insert (void *incoming, void *in, void *user) {
 }
 
 R_API bool r_io_map_write_to_overlay(RIOMap *map, ut64 addr, const ut8 *buf, int len) {
-	r_return_val_if_fail (map && buf, false);
+	R_RETURN_VAL_IF_FAIL (map && buf, false);
 	RInterval x = {addr, len};
 	RInterval search_itv = r_itv_intersect (map->itv, x);
 	if (!r_itv_size (search_itv)) {
@@ -641,7 +641,7 @@ R_API bool r_io_map_write_to_overlay(RIOMap *map, ut64 addr, const ut8 *buf, int
 }
 
 R_IPI bool io_map_get_overlay_intersects(RIOMap *map, RQueue *q, ut64 addr, int len) {
-	r_return_val_if_fail (map && q, false);
+	R_RETURN_VAL_IF_FAIL (map && q, false);
 	if (!map->overlay) {
 		return true;
 	}
@@ -676,7 +676,7 @@ R_IPI bool io_map_get_overlay_intersects(RIOMap *map, RQueue *q, ut64 addr, int 
 }
 
 R_API void r_io_map_drain_overlay(RIOMap *map) {
-	r_return_if_fail (map);
+	R_RETURN_IF_FAIL (map);
 	if (!map->overlay || map->overlay->size < 2) {
 		return;
 	}

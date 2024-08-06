@@ -28,7 +28,7 @@ static bool is_valid_project_name(const char *name) {
 }
 
 static char *get_project_script_path(RCore *core, const char *file) {
-	r_return_val_if_fail (core && file, NULL);
+	R_RETURN_VAL_IF_FAIL (core && file, NULL);
 	if (!*file) {
 		return NULL;
 	}
@@ -171,7 +171,7 @@ R_API int r_core_project_delete(RCore *core, const char *prjfile) {
 }
 
 static bool load_project_rop(RCore *core, const char *prjfile) {
-	r_return_val_if_fail (core && R_STR_ISNOTEMPTY (prjfile), false);
+	R_RETURN_VAL_IF_FAIL (core && R_STR_ISNOTEMPTY (prjfile), false);
 	char *path, *db = NULL, *path_ns;
 	bool found = 0;
 	SdbListIter *it;
@@ -265,7 +265,7 @@ R_API void r_core_project_execute_cmds(RCore *core, const char *prjfile) {
 	char *str = r_core_project_notes_file (core, prjfile);
 	char *data = r_file_slurp (str, NULL);
 	free (str);
-	r_return_if_fail (data);
+	R_RETURN_IF_FAIL (data);
 	Output out;
 	out.fout = NULL;
 	out.cout = r_strbuf_new (NULL);
@@ -293,7 +293,7 @@ typedef struct {
 } ProjectState;
 
 static bool r_core_project_load(RCore *core, const char *prj_name, const char *rcpath) {
-	r_return_val_if_fail (core, false);
+	R_RETURN_VAL_IF_FAIL (core, false);
 	if (R_STR_ISEMPTY (prj_name)) {
 		prj_name = r_core_project_name (core, rcpath);
 	}
@@ -322,7 +322,7 @@ static bool r_core_project_load(RCore *core, const char *prj_name, const char *r
 	} else {
 		ret = r_core_cmd_file (core, rcpath);
 	}
-	char *prj_path = r_file_dirname(rcpath);
+	char *prj_path = r_file_dirname (rcpath);
 	if (prj_path) {
 		//check if the project uses git
 		Rvc *vc = rvc_open (prj_path, RVC_TYPE_GIT);
@@ -330,6 +330,12 @@ static bool r_core_project_load(RCore *core, const char *prj_name, const char *r
 		free (prj_path);
 	} else {
 		R_LOG_ERROR ("Failed to load rvc");
+	}
+	if (r_config_get_b (core->config, "prj.history")) {
+		char *file = r_file_new (prj_path, "history");
+		r_line_hist_free (); // R2_600 - hist_reset ?
+		r_line_hist_load (file);
+		free (file);
 	}
 	r_config_set_b (core->config, "cfg.fortunes", cfg_fortunes);
 	r_config_set_b (core->config, "scr.interactive", scr_interactive);
@@ -365,7 +371,7 @@ R_API RThread *r_core_project_load_bg(RCore *core, const char *prj_name, const c
 }
 
 R_API bool r_core_project_open(RCore *core, const char *prj_path) {
-	r_return_val_if_fail (core && !R_STR_ISEMPTY (prj_path), false);
+	R_RETURN_VAL_IF_FAIL (core && !R_STR_ISEMPTY (prj_path), false);
 	bool interactive = r_config_get_b (core->config, "scr.interactive");
 	bool close_current_session = true;
 	bool ask_for_closing = true;
@@ -642,7 +648,7 @@ static void r_core_project_zip(RCore *core, const char *prj_dir) {
 }
 
 R_API bool r_core_project_save(RCore *core, const char *prj_name) {
-	r_return_val_if_fail (R_STR_ISNOTEMPTY (prj_name), false);
+	R_RETURN_VAL_IF_FAIL (R_STR_ISNOTEMPTY (prj_name), false);
 	bool scr_null = false;
 	bool ret = true;
 	SdbListIter *it;
@@ -748,6 +754,12 @@ R_API bool r_core_project_save(RCore *core, const char *prj_name) {
 			free (script_path);
 			return false;
 		}
+	}
+	if (r_config_get_b (core->config, "prj.history")) {
+		char *history = r_core_cmd_str (core, "!!");
+		char *file = r_file_new (prj_dir, "history");
+		r_file_dump (file, (const ut8*)history, -1, false);
+		free (history);
 	}
 	if (r_config_get_b (core->config, "prj.zip")) {
 		r_core_project_zip (core, prj_dir);

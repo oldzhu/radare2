@@ -468,7 +468,7 @@ static bool flag_to_flag_foreach(RFlagItem *fi, void *user) {
 }
 
 static int flag_to_flag(RCore *core, const char *glob) {
-	r_return_val_if_fail (glob, 0);
+	R_RETURN_VAL_IF_FAIL (glob, 0);
 	glob = r_str_trim_head_ro (glob);
 	struct flag_to_flag_t u = { .next = UT64_MAX, .offset = core->offset };
 	r_flag_foreach_glob (core->flags, glob, flag_to_flag_foreach, &u);
@@ -813,7 +813,7 @@ static void cmd_fd_dot(RCore *core, const char *input) {
 }
 
 static void print_function_labels_for(RAnalFunction *fcn, int rad, PJ *pj) {
-	r_return_if_fail (fcn && (rad != 'j' || pj));
+	R_RETURN_IF_FAIL (fcn && (rad != 'j' || pj));
 	bool json = rad == 'j';
 	if (json) {
 		pj_o (pj);
@@ -826,7 +826,7 @@ static void print_function_labels_for(RAnalFunction *fcn, int rad, PJ *pj) {
 }
 
 static void print_function_labels(RCore *core, RAnalFunction *fcn, int rad) {
-	r_return_if_fail (core || fcn);
+	R_RETURN_IF_FAIL (core || fcn);
 	RAnal *anal = core->anal;
 	PJ *pj = NULL;
 	bool json = rad == 'j';

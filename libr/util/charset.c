@@ -84,12 +84,12 @@ R_API void r_charset_free(RCharset *c) {
 }
 
 R_API void r_charset_close(RCharset *c) {
-	r_return_if_fail (c);
+	R_RETURN_IF_FAIL (c);
 	c->loaded = false;
 }
 
 R_API bool r_charset_use(RCharset *c, const char *cf) {
-	r_return_val_if_fail (c && cf, false);
+	R_RETURN_VAL_IF_FAIL (c && cf, false);
 	bool rc = false;
 	SdbGperf *gp = r_charset_get_gperf (cf);
 	if (gp) {
@@ -118,7 +118,7 @@ R_API bool r_charset_use(RCharset *c, const char *cf) {
 }
 
 R_API bool r_charset_open(RCharset *c, const char *cs) {
-	r_return_val_if_fail (c, false);
+	R_RETURN_VAL_IF_FAIL (c, false);
 	if (cs) {
 		sdb_reset (c->db);
 		sdb_open (c->db, cs);
@@ -153,7 +153,7 @@ R_API bool r_charset_open(RCharset *c, const char *cs) {
 
 // rune
 R_API RCharsetRune *r_charset_rune_new(const ut8 *ch, const ut8 *hx) {
-	r_return_val_if_fail (ch && hx, NULL);
+	R_RETURN_VAL_IF_FAIL (ch && hx, NULL);
 	RCharsetRune* c = R_NEW0 (RCharsetRune);
 	if (!c) {
 		return NULL;

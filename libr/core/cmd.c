@@ -470,6 +470,20 @@ struct duplicate_flag_t {
 	const char *word;
 };
 
+#if !R2_USE_NEW_ABI
+extern int Gload_index;
+static void __line_hist_list(bool full) {
+	RLineHistory *hist = &r_cons_singleton()->line->history;
+	if (hist && hist->data) {
+		int i = full? 0: Gload_index;
+		for (; i < hist->size && hist->data[i]; i++) {
+			const char *pad = r_str_pad (' ', 32 - strlen (hist->data[i]));
+			r_cons_printf ("%s %s # !%d\n", hist->data[i], pad, i);
+		}
+	}
+}
+#endif
+
 static bool duplicate_flag(RFlagItem *flag, void *u) {
 	struct duplicate_flag_t *user = (struct duplicate_flag_t *)u;
 	/* filter per flag spaces */
@@ -1338,6 +1352,7 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 
 	if (!strcmp (file, "-")) {
 		char *out = r_core_editor (core, NULL, NULL);
+		eprintf ("power %s \n", out);
 		if (out) {
 			ret = r_core_cmd_lines (core, out);
 			free (out);
@@ -2077,7 +2092,7 @@ static void load_table_asciiart(RCore *core, RTable *t, RList *lines) {
 }
 
 static void load_table(RCore *core, RTable *t, char *data) {
-	r_return_if_fail (core && t && data);
+	R_RETURN_IF_FAIL (core && t && data);
 	if (*data == '[') {
 		load_table_json (core, t, data);
 	} else {
@@ -3445,7 +3460,15 @@ static int cmd_system(void *data, const char *input) {
 			}
 		}
 		break;
-	case '!': //!!
+	case '.': // "!."
+		{
+			char *history_file = r_xdg_cachedir ("history");
+			R_LOG_INFO ("History saved to %s", history_file);
+			r_line_hist_save (history_file);
+			free (history_file);
+		}
+		break;
+	case '!': // "!!"
 		if (input[1] == '!') { // !!! & !!!-
 			cmd_autocomplete (core, input + 2);
 		} else if (input[1] == '?') {
@@ -3455,11 +3478,11 @@ static int cmd_system(void *data, const char *input) {
 			(void)r_core_cmdf (core, "\"#!pipe %s\"", cmd);
 			free (cmd);
 		} else {
-			if (r_sandbox_enable (0)) {
-				R_LOG_ERROR ("The !! command is disabled in sandbox mode");
-				return 0;
-			}
 			if (input[1]) {
+				if (r_sandbox_enable (0)) {
+					R_LOG_ERROR ("The !! command is disabled in sandbox mode");
+					return 0;
+				}
 				int olen;
 				char *out = NULL;
 				char *cmd = r_core_sysenv_begin (core, input);
@@ -3473,28 +3496,33 @@ static int cmd_system(void *data, const char *input) {
 					free (cmd);
 				}
 			} else {
-				char *history_file = r_xdg_cachedir ("history");
-				R_LOG_INFO ("History saved to %s", history_file);
-				r_line_hist_save (history_file);
-				free (history_file);
+#if R2_USE_NEW_ABI
+				r_line_hist_list (false);
+#else
+				__line_hist_list (false);
+#endif
 			}
 		}
 		break;
 	case '\0':
+#if R2_USE_NEW_ABI
+		r_line_hist_list (true);
+#else
 		r_line_hist_list ();
+#endif
 		break;
-	case '?': //!?
+	case '?': // "!?"
 		cmd_help_exclamation (core);
 		break;
-	case '*':
+	case '*': // "!*"
 		// TODO: use the api
 		{
-		char *cmd = r_str_trim_dup (input + 1);
-		cmd = r_str_replace (cmd, " ", "\\ ", true);
-		cmd = r_str_replace (cmd, "\\ ", " ", false);
-		cmd = r_str_replace (cmd, "\"", "'", false);
-		ret = r_core_cmdf (core, "\"#!pipe %s\"", cmd);
-		free (cmd);
+			char *cmd = r_str_trim_dup (input + 1);
+			cmd = r_str_replace (cmd, " ", "\\ ", true);
+			cmd = r_str_replace (cmd, "\\ ", " ", false);
+			cmd = r_str_replace (cmd, "\"", "'", false);
+			ret = r_core_cmdf (core, "\"#!pipe %s\"", cmd);
+			free (cmd);
 		}
 		break;
 	default:
@@ -5693,10 +5721,8 @@ static void foreachWord(RCore *core, const char *_cmd, const char *each) {
 	/* foreach list of items */
 	while (each) {
 		// skip spaces
-		while (*each == ' ') {
-			each++;
-		}
-		// stahp if empty string
+		each = r_str_trim_head_ro (each);
+		// stahp on empty string
 		if (!*each) {
 			break;
 		}
@@ -5767,7 +5793,7 @@ static void foreachOffset(RCore *core, const char *_cmd, const char *each) {
 			*nl = 0;
 		}
 		// space separated numbers
-		while (each && *each) {
+		while (R_STR_ISNOTEMPTY (each)) {
 			// find spaces
 			while (*each == ' ') {
 				each++;
@@ -6155,7 +6181,6 @@ R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each) {
 					if (r_cons_is_breaked ()) {
 						break;
 					}
-
 					char *buf = NULL;
 					const char *tmp = NULL;
 					r_core_seek (core, flag->offset, true);
@@ -6237,6 +6262,9 @@ R_API int r_core_cmd(RCore *core, const char *cstr, bool log) {
 	}
 	r_core_return_code (core, 0);
 	ret = handle_command_call (core, cstr);
+	if (!strcmp (cstr, "!") || !strcmp (cstr, "!!")) {
+		log = false;
+	}
 	if (ret != -1) {
 		if (log) {
 			r_line_hist_add (cstr);
@@ -6264,7 +6292,7 @@ R_API int r_core_cmd(RCore *core, const char *cstr, bool log) {
 		if (*cstr == 'q') {
 			R_FREE (core->cmdremote);
 			goto beach; // false
-		} else if (*cstr != '=' && strncmp (cstr, "!=", 2)) {
+		} else if (*cstr != '=' && !r_str_startswith (cstr, "!=")) {
 			if (core->cmdremote[0]) {
 				char *s = r_str_newf ("%s %s", core->cmdremote, cstr);
 				r_core_rtr_cmd (core, s);
@@ -6377,7 +6405,9 @@ R_API int r_core_cmd_lines(RCore *core, const char *lines) {
 	return ret;
 }
 
+// R2_600 - return bool
 R_API int r_core_cmd_file(RCore *core, const char *file) {
+	R_RETURN_VAL_IF_FAIL (core && file, false);
 	char *data = r_file_abspath (file);
 	if (!data) {
 		return false;
@@ -6645,7 +6675,6 @@ R_API RBuffer *r_core_cmd_tobuf(RCore *core, const char *cmd) {
 
 	r_cons_filter ();
 	RBuffer *out = r_buf_new_with_bytes ((const ut8*)r_cons_get_buffer (), r_cons_get_buffer_len ());
-
 	r_cons_pop ();
 	r_cons_echo (NULL);
 	return out;
@@ -6655,15 +6684,15 @@ R_API RBuffer *r_core_cmd_tobuf(RCore *core, const char *cmd) {
 R_API int r_core_cmd_task_sync(RCore *core, const char *cmd, bool log) {
 	RCoreTask *task = core->tasks.main_task;
 	char *s = strdup (cmd);
-	if (!s) {
-		return 0;
+	if (R_LIKELY (s)) {
+		task->cmd = s;
+		task->cmd_log = log;
+		task->state = R_CORE_TASK_STATE_BEFORE_START;
+		int res = r_core_task_run_sync (&core->tasks, task);
+		free (s);
+		return res;
 	}
-	task->cmd = s;
-	task->cmd_log = log;
-	task->state = R_CORE_TASK_STATE_BEFORE_START;
-	int res = r_core_task_run_sync (&core->tasks, task);
-	free (s);
-	return res;
+	return 0;
 }
 
 static int cmd_ox(void *data, const char *input) { // "0x"

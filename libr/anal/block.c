@@ -7,7 +7,7 @@
 
 // rename to instr_at
 R_API ut64 r_anal_block_ninstr(RAnalBlock *block, int pos) {
-	r_return_val_if_fail (block, UT64_MAX);
+	R_RETURN_VAL_IF_FAIL (block, UT64_MAX);
 	if (pos < 1) {
 		return block->addr;
 	}
@@ -53,7 +53,7 @@ R_API void r_anal_block_ref(RAnalBlock *bb) {
 	// XXX we have R_REF for this
 	if (bb) {
 		// 0-refd must already be freed.
-		r_return_if_fail (bb->ref > 0);
+		R_RETURN_IF_FAIL (bb->ref > 0);
 		bb->ref++;
 	}
 }
@@ -117,7 +117,7 @@ R_API void r_anal_block_reset(RAnal *a) {
 }
 
 R_API RAnalBlock *r_anal_get_block_at(RAnal *anal, ut64 addr) {
-	r_return_val_if_fail (anal, NULL);
+	R_RETURN_VAL_IF_FAIL (anal, NULL);
 	if (addr == UT64_MAX || !anal->bb_tree) {
 		return NULL;
 	}
@@ -299,7 +299,7 @@ R_API bool r_anal_block_relocate(RAnalBlock *block, ut64 addr, ut64 size) {
 
 R_API RAnalBlock *r_anal_block_split(RAnalBlock *bbi, ut64 addr) {
 	RAnal *anal = bbi->anal;
-	r_return_val_if_fail (bbi && addr >= bbi->addr && addr < bbi->addr + bbi->size && addr != UT64_MAX, 0);
+	R_RETURN_VAL_IF_FAIL (bbi && addr >= bbi->addr && addr < bbi->addr + bbi->size && addr != UT64_MAX, 0);
 	if (addr == bbi->addr) {
 		r_anal_block_ref (bbi); // ref to be consistent with splitted return ref-count
 		return bbi;
@@ -426,14 +426,14 @@ R_API void r_anal_block_unref(RAnalBlock *bb) {
 	if (bb->ref < 1) {
 		return;
 	}
-	r_return_if_fail (bb->ref > 0);
+	R_RETURN_IF_FAIL (bb->ref > 0);
 	bb->ref--;
-	// r_return_if_fail (bb->ref >= r_list_length (bb->fcns)); // all of the block's functions must hold a reference to it
+	// R_RETURN_IF_FAIL (bb->ref >= r_list_length (bb->fcns)); // all of the block's functions must hold a reference to it
 	if (bb->ref < 1) {
 		RAnal *anal = bb->anal;
 		r_rbtree_aug_delete (&anal->bb_tree, &bb->addr, __bb_addr_cmp, NULL, __block_free_rb, NULL, __max_end);
 		block_free (bb);
-		// r_return_if_fail (r_list_empty (bb->fcns));
+		// R_RETURN_IF_FAIL (r_list_empty (bb->fcns));
 	}
 }
 
@@ -754,7 +754,7 @@ beach:
 }
 
 R_API bool r_anal_block_was_modified(RAnalBlock *block) {
-	r_return_val_if_fail (block, false);
+	R_RETURN_VAL_IF_FAIL (block, false);
 	if (!block->bbhash) {
 		return false;
 	}
@@ -775,7 +775,7 @@ R_API bool r_anal_block_was_modified(RAnalBlock *block) {
 }
 
 R_API void r_anal_block_update_hash(RAnalBlock *block) {
-	r_return_if_fail (block);
+	R_RETURN_IF_FAIL (block);
 	if (!block->anal->iob.read_at) {
 		return;
 	}
@@ -848,7 +848,7 @@ static bool noreturn_get_blocks_cb(void *user, const ut64 k, const void *v) {
 }
 
 R_API RAnalBlock *r_anal_block_chop_noreturn(RAnalBlock *block, ut64 addr) {
-	r_return_val_if_fail (block, NULL);
+	R_RETURN_VAL_IF_FAIL (block, NULL);
 	if (!r_anal_block_contains (block, addr) || addr == block->addr) {
 		return block;
 	}
@@ -983,7 +983,7 @@ static bool automerge_get_predecessors_cb(void *user, ut64 k) {
 // Try to find the contiguous predecessors of all given blocks and merge them if possible,
 // i.e. if there are no other blocks that have this block as one of their successors
 R_API void r_anal_block_automerge(RList *blocks) {
-	r_return_if_fail (blocks);
+	R_RETURN_IF_FAIL (blocks);
 	AutomergeCtx ctx = {
 		.predecessors = ht_up_new0 (),
 		.visited_blocks = ht_up_new0 (),

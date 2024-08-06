@@ -462,7 +462,7 @@ static char *preprocess_filter_expr(char *cmd, const char *quotes) {
 }
 
 R_API void r_cons_grep_parsecmd(char *cmd, const char *quotestr) {
-	r_return_if_fail (cmd && quotestr);
+	R_RETURN_IF_FAIL (cmd && quotestr);
 	char *ptr = preprocess_filter_expr (cmd, quotestr);
 	if (ptr) {
 		r_str_trim (cmd);
@@ -516,7 +516,7 @@ static int cmp(const void *a, const void *b) {
 }
 
 static bool gron(RStrBuf *sb, RJson *node, const char *root) {
-	r_return_val_if_fail (sb && node && root, false);
+	R_RETURN_VAL_IF_FAIL (sb && node && root, false);
 	switch (node->type) {
 	case R_JSON_ARRAY:
 		{
@@ -1079,7 +1079,7 @@ continuation:
 }
 
 R_API int r_cons_grep_line(char *buf, int len) {
-	r_return_val_if_fail (buf && len >= 0, 0);
+	R_RETURN_VAL_IF_FAIL (buf && len >= 0, 0);
 	RCons *cons = r_cons_singleton ();
 	RConsGrep *grep = &cons->context->grep;
 	const char *delims = " |,;=\t";
@@ -1221,7 +1221,7 @@ R_API int r_cons_grep_line(char *buf, int len) {
 }
 
 R_API void r_cons_grep(const char *grep) {
-	r_return_if_fail (grep);
+	R_RETURN_IF_FAIL (grep);
 	r_cons_grep_expression (grep);
 	r_cons_grepbuf ();
 }

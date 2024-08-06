@@ -461,7 +461,7 @@ struct ctxSearchCB {
 };
 
 static void apply_name(RCore *core, RAnalFunction *fcn, RSignItem *it, bool rad) {
-	r_return_if_fail (core && fcn && it && it->name);
+	R_RETURN_IF_FAIL (core && fcn && it && it->name);
 	const char *name = it->realname? it->realname: it->name;
 	if (rad) {
 		char *tmp = r_name_filter_dup (name);
@@ -526,7 +526,7 @@ static int searchBytesHitCB(RSignItem *it, RSearchKeyword *kw, ut64 addr, void *
 }
 
 static int fcnMatchCB(RSignItem *it, RAnalFunction *fcn, RSignType *types, void *user, RList *col) {
-	r_return_val_if_fail (types && *types != R_SIGN_END, 1);
+	R_RETURN_VAL_IF_FAIL (types && *types != R_SIGN_END, 1);
 	struct ctxSearchCB *ctx = (struct ctxSearchCB *)user;
 	ut64 sz = r_anal_function_realsize (fcn);
 	RSignType t;
@@ -639,7 +639,7 @@ static bool searchRange(RCore *core, ut64 from, ut64 to, bool rad, struct ctxSea
 
 static void search_add_to_types(RCore *c, RSignSearchMetrics *sm, RSignType t, const char *str, unsigned int *i) {
 	unsigned int count = *i;
-	r_return_if_fail (count < sizeof (sm->stypes) / sizeof (RSignType) - 1);
+	R_RETURN_IF_FAIL (count < sizeof (sm->stypes) / sizeof (RSignType) - 1);
 	if (r_config_get_i (c->config, str)) {
 		sm->stypes[count++] = t;
 		sm->stypes[count] = 0;
@@ -840,7 +840,7 @@ static double get_zb_threshold(RCore *core) {
 }
 
 static bool bestmatch_fcn(RCore *core, const char *input, bool json) {
-	r_return_val_if_fail (input && core, false);
+	R_RETURN_VAL_IF_FAIL (input && core, false);
 
 	char *argv = strdup (input);
 	if (!argv) {
@@ -898,7 +898,7 @@ static bool bestmatch_fcn(RCore *core, const char *input, bool json) {
 }
 
 static bool bestmatch_sig(RCore *core, const char *input, bool json) {
-	r_return_val_if_fail (input && core, false);
+	R_RETURN_VAL_IF_FAIL (input && core, false);
 	int count = 5;
 	if (!R_STR_ISEMPTY (input)) {
 		count = atoi (input);
@@ -951,7 +951,7 @@ static bool bestmatch_sig(RCore *core, const char *input, bool json) {
 }
 
 static bool bestmatch(void *data, const char *input) {
-	r_return_val_if_fail (data && input, false);
+	R_RETURN_VAL_IF_FAIL (data && input, false);
 	bool json = false;
 	RCore *core = (RCore *)data;
 	switch (input[0]) {
@@ -1090,7 +1090,7 @@ static void print_zig_diff(RCore *c, RSignBytes *ab, RSignBytes *bb, RLevOp *ops
 #undef freelines
 
 static bool diff_zig(void *data, const char *input) {
-	r_return_val_if_fail (data && input, false);
+	R_RETURN_VAL_IF_FAIL (data && input, false);
 	RCore *core = (RCore *)data;
 
 	RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);

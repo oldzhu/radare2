@@ -1796,7 +1796,7 @@ static void fix_back_edge_dummy_nodes(RAGraph *g, RANode *from, RANode *to) {
 	RGraphNode *gv = NULL;
 	RListIter *it;
 	int i;
-	r_return_if_fail (g && from && to);
+	R_RETURN_IF_FAIL (g && from && to);
 	const RList *neighbours = r_graph_get_neighbours (g->graph, to->gnode);
 	graph_foreach_anode (neighbours, it, gv, v) {
 		tmp = v;
@@ -4011,7 +4011,7 @@ R_API RANode *r_agraph_get_node(const RAGraph *g, const char *title) {
 }
 
 R_API void r_agraph_add_edge(const RAGraph *g, RANode *a, RANode *b, bool highlight) {
-	r_return_if_fail (g && a && b);
+	R_RETURN_IF_FAIL (g && a && b);
 	r_graph_add_edge (g->graph, a->gnode, b->gnode);
 	if (highlight) {
 		ut64 aa = r_num_get (NULL, a->title);
@@ -4027,7 +4027,7 @@ R_API void r_agraph_add_edge(const RAGraph *g, RANode *a, RANode *b, bool highli
 }
 
 R_API void r_agraph_add_edge_at(const RAGraph *g, RANode *a, RANode *b, int nth) {
-	r_return_if_fail (g && a && b);
+	R_RETURN_IF_FAIL (g && a && b);
 	if (a->title && b->title) {
 		char *k = r_str_newf ("agraph.nodes.%s.neighbours", a->title);
 		sdb_array_insert (g->db, k, nth, b->title, 0);
@@ -4037,7 +4037,7 @@ R_API void r_agraph_add_edge_at(const RAGraph *g, RANode *a, RANode *b, int nth)
 }
 
 R_API void r_agraph_del_edge(const RAGraph *g, RANode *a, RANode *b) {
-	r_return_if_fail (g && a && b);
+	R_RETURN_IF_FAIL (g && a && b);
 	if (a->title && b->title) {
 		char *k = r_str_newf ("agraph.nodes.%s.neighbours", a->title);
 		sdb_array_remove (g->db, k, b->title, 0);
@@ -4047,7 +4047,7 @@ R_API void r_agraph_del_edge(const RAGraph *g, RANode *a, RANode *b) {
 }
 
 R_API void r_agraph_reset(RAGraph *g) {
-	r_return_if_fail (g);
+	R_RETURN_IF_FAIL (g);
 	agraph_free_nodes (g);
 	r_graph_reset (g->graph);
 	r_agraph_set_title (g, NULL);
@@ -4381,7 +4381,7 @@ static char *get_graph_string(RCore *core, RAGraph *g) {
 }
 
 static void nextword(RCore *core, RAGraph *g, const char *word) {
-	r_return_if_fail (core && core->graph && g && g->can && word);
+	R_RETURN_IF_FAIL (core && core->graph && g && g->can && word);
 	if (R_STR_ISEMPTY (word)) {
 		return;
 	}
@@ -4443,7 +4443,7 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 	int okey, key;
 	RAnalFunction *fcn = NULL;
 	const char *key_s;
-	RConsCanvas *can, *o_can = NULL;
+	RConsCanvas *o_can = NULL;
 	bool graph_allocated = false;
 	int movspeed;
 	int ret, invscroll;
@@ -4454,7 +4454,7 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 	r_config_hold (hc, "asm.pseudo", "asm.esil", "asm.cmt.right", NULL);
 
 	int h, w = r_cons_get_size (&h);
-	can = r_cons_canvas_new (w, h);
+	RConsCanvas *can = r_cons_canvas_new (w, h);
 	if (!can) {
 		w = 80;
 		h = 25;
@@ -5324,7 +5324,7 @@ R_API int r_core_visual_graph(RCore *core, RAGraph *g, RAnalFunction *_fcn, int 
 }
 
 R_API RAGraph *r_agraph_new_from_graph(const RGraph *graph, RAGraphTransitionCBs *cbs, void *user) {
-	r_return_val_if_fail (graph && cbs && cbs->get_title && cbs->get_body, NULL);
+	R_RETURN_VAL_IF_FAIL (graph && cbs && cbs->get_title && cbs->get_body, NULL);
 
 	RAGraph *result_agraph = r_agraph_new (r_cons_canvas_new (1, 1));
 	if (!result_agraph) {

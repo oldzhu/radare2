@@ -780,7 +780,7 @@ static ut8 *get_classes(RCore *c, int *len) {
 }
 
 static ut8 *get_fields(RCore *c, int *len) {
-	r_return_val_if_fail (c, NULL);
+	R_RETURN_VAL_IF_FAIL (c, NULL);
 	const int pref = r_config_get_b (c->config, "asm.demangle")? 'd': 0;
 
 	if (!len) {
@@ -938,7 +938,7 @@ static char *get_graph_commands(RCore *c, ut64 off) {
 }
 
 static void __generate_graph(RCore *c, ut64 off) {
-	r_return_if_fail (c);
+	R_RETURN_IF_FAIL (c);
 	char *ptr = get_graph_commands (c, off);
 	char *str = ptr;
 	r_cons_break_push (NULL, NULL);

@@ -1646,7 +1646,7 @@ static void ds_show_xrefs(RDisasmState *ds) {
 }
 
 static void ds_atabs_option(RDisasmState *ds) {
-	r_return_if_fail (ds);
+	R_RETURN_IF_FAIL (ds);
 	int n, i = 0, word = 0;
 	bool comma = false;
 	int brackets = 0;
@@ -1747,7 +1747,7 @@ static int handleMidFlags(RCore *core, RDisasmState *ds, bool print) {
 static int handleMidBB(RCore *core, RDisasmState *ds) {
 	int i;
 	ds->hasMidbb = false;
-	r_return_val_if_fail (core->anal, 0);
+	R_RETURN_VAL_IF_FAIL (core->anal, 0);
 	// Unfortunately, can't just check the addr of the last insn byte since
 	// a bb (and fcn) can be as small as 1 byte, and advancing i based on
 	// bb->size is unsound if basic blocks can nest or overlap
@@ -1765,7 +1765,7 @@ static int handleMidBB(RCore *core, RDisasmState *ds) {
 }
 
 R_API int r_core_flag_in_middle(RCore *core, ut64 at, int oplen, int *midflags) {
-	r_return_val_if_fail (midflags, 0);
+	R_RETURN_VAL_IF_FAIL (midflags, 0);
 	RDisasmState ds = {
 		.at = at,
 		.oplen = oplen,
@@ -4635,7 +4635,7 @@ static inline bool is_filtered_flag(RDisasmState *ds, const char *name) {
 
 /* convert numeric value in opcode to ascii char or number */
 static void ds_print_ptr(RDisasmState *ds, int len, int idx) {
-	r_return_if_fail (ds);
+	R_RETURN_IF_FAIL (ds);
 	RCore *core = ds->core;
 	const bool be = R_ARCH_CONFIG_IS_BIG_ENDIAN (core->rasm->config);
 	ut64 p = ds->analop.ptr;

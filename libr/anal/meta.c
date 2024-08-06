@@ -181,7 +181,7 @@ R_API bool r_meta_set(RAnal *a, RAnalMetaType type, ut64 addr, ut64 size, const 
 }
 
 R_API bool r_meta_set_with_subtype(RAnal *m, RAnalMetaType type, int subtype, ut64 addr, ut64 size, const char *str) {
-	r_return_val_if_fail (m && size, false);
+	R_RETURN_VAL_IF_FAIL (m && size, false);
 	ut64 end = addr + size - 1;
 	if (end < addr) {
 		end = UT64_MAX;
@@ -210,7 +210,7 @@ R_API RPVector *r_meta_get_all_in(RAnal *a, ut64 at, RAnalMetaType type) {
 }
 
 R_API RPVector *r_meta_get_all_intersect(RAnal *a, ut64 start, ut64 size, RAnalMetaType type) {
-	r_return_val_if_fail (size, NULL);
+	R_RETURN_VAL_IF_FAIL (size, NULL);
 	ut64 end = start + size - 1;
 	if (end < start) {
 		end = UT64_MAX;
@@ -237,7 +237,7 @@ R_API const char *r_meta_type_tostring(int type) {
 }
 
 R_API void r_meta_print(RAnal *a, RAnalMetaItem *d, ut64 start, ut64 size, int rad, PJ *pj, bool show_full) {
-	r_return_if_fail (!(rad == 'j' && !pj)); // rad == 'j' => pj
+	R_RETURN_IF_FAIL (!(rad == 'j' && !pj)); // rad == 'j' => pj
 	char *pstr, *base64_str;
 	RCore *core = a->coreb.core;
 	bool esc_bslash = core ? core->print->esc_bslash : false;
@@ -602,7 +602,7 @@ R_API void r_meta_space_unset_for(RAnal *a, const RSpace *space) {
 }
 
 R_API ut64 r_meta_get_size(RAnal *a, RAnalMetaType type) {
-	r_return_val_if_fail (a, 0);
+	R_RETURN_VAL_IF_FAIL (a, 0);
 	if (!a->meta.root) {
 		return 0;
 	}
@@ -635,6 +635,6 @@ R_API int r_meta_space_count_for(RAnal *a, const RSpace *space) {
 }
 
 R_API void r_meta_set_data_at(RAnal *a, ut64 addr, ut64 wordsz) {
-	r_return_if_fail (wordsz);
+	R_RETURN_IF_FAIL (wordsz);
 	r_meta_set (a, R_META_TYPE_DATA, addr, wordsz, NULL);
 }

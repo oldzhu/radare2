@@ -15,7 +15,7 @@ static const char debruijn_charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn
 // lnp = lyndon prefix
 static void de_bruijn_seq(int pnl_len_t, int lnp_len_p, int order,
 		int maxlen, int size, int* pnl_a, char* sequence, const char* charset) {
-	r_return_if_fail (charset && sequence);
+	R_RETURN_IF_FAIL (charset && sequence);
 	if (strlen (sequence) == maxlen) {
 		return;
 	}
@@ -43,7 +43,7 @@ static void de_bruijn_seq(int pnl_len_t, int lnp_len_p, int order,
 // Generate a De Bruijn sequence.
 // Returns a string in the heap, caller must free the memory.
 static char* de_bruijn(const char* charset, int order, int maxlen) {
-	r_return_val_if_fail (charset, NULL);
+	R_RETURN_VAL_IF_FAIL (charset, NULL);
 	size_t size = strlen (charset);
 	char *sequence = NULL;
 	int* pnl_a = calloc (size * (size_t)order, sizeof (int));

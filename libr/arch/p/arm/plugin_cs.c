@@ -21,19 +21,19 @@ typedef struct plugin_data_t {
 } PluginData;
 
 static inline csh *cs_handle_for_session(RArchSession *as) {
-	r_return_val_if_fail (as && as->data, NULL);
+	R_RETURN_VAL_IF_FAIL (as && as->data, NULL);
 	PluginData *pd = (PluginData*) as->data;
 	return &(pd->cs_handle);
 }
 
 static inline HtUU *ht_itblock_for_session (RArchSession *as) {
-	r_return_val_if_fail (as && as->data, NULL);
+	R_RETURN_VAL_IF_FAIL (as && as->data, NULL);
 	PluginData *pd = (PluginData*) as->data;
 	return pd->ht_itblock;
 }
 
 static inline HtUU *ht_it_for_session (RArchSession *as) {
-	r_return_val_if_fail (as && as->data, NULL);
+	R_RETURN_VAL_IF_FAIL (as && as->data, NULL);
 	PluginData *pd = (PluginData*) as->data;
 	return pd->ht_it;
 }
@@ -864,7 +864,7 @@ static const char *decode_shift_64(arm64_shifter shift) {
 #define DECODE_SHIFT64(x) decode_shift_64(insn->detail->arm64.operands[x].shift.type)
 
 static unsigned int regsize32(cs_insn *insn, int n) {
-	r_return_val_if_fail(n >= 0 && n < insn->detail->arm.op_count, 0);
+	R_RETURN_VAL_IF_FAIL (n >= 0 && n < insn->detail->arm.op_count, 0);
 	unsigned int reg = insn->detail->arm.operands[n].reg;
 	if (reg >= ARM_REG_D0 && reg <= ARM_REG_D31) {
 		return 8;
@@ -2014,9 +2014,9 @@ static int analop64_esil(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *bu
 		op->type = R_ANAL_OP_TYPE_STORE;
 		int size = REGSIZE64 (0);
 		if (insn->id == ARM64_INS_STRB || insn->id == ARM64_INS_STURB) {
-		    size = 1;
+			size = 1;
 		} else if (insn->id == ARM64_INS_STRH || insn->id == ARM64_INS_STURH) {
-		    size = 2;
+			size = 2;
 		}
 		if (ISMEM64 (1)) {
 			if (HASMEMINDEX64 (1)) {
@@ -2059,6 +2059,7 @@ static int analop64_esil(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *bu
 				}
 			}
 			op->refptr = 4;
+			op->disp = MEMDISP64 (1);
 		} else {
 			if (ISREG64 (1)) {
 				if (OPCOUNT64 () == 2) {
@@ -2128,6 +2129,7 @@ static int analop64_esil(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *bu
 	case ARM64_INS_STP: // stp x6, x7, [x6,0xf90]
 	{
 		int disp = (int)MEMDISP64 (2);
+		op->disp = disp;
 		char sign = (disp >= 0)?'+':'-';
 		st64 abs = (disp >= 0)? MEMDISP64 (2): -(st64)MEMDISP64 (2);
 		int size = REGSIZE64 (0);
@@ -4858,7 +4860,7 @@ static inline bool cs_init(RArchSession *as, csh *cs_handle) {
 }
 
 static bool init(RArchSession* as) {
-	r_return_val_if_fail (as, false);
+	R_RETURN_VAL_IF_FAIL (as, false);
 	if (as->data) {
 		R_LOG_WARN ("Already initialized");
 		return false;
@@ -4895,7 +4897,7 @@ static bool init(RArchSession* as) {
 }
 
 static bool fini(RArchSession *as) {
-	r_return_val_if_fail (as, false);
+	R_RETURN_VAL_IF_FAIL (as, false);
 
 	PluginData *pd = (PluginData*) as->data;
 	ht_uu_free (pd->ht_itblock);
