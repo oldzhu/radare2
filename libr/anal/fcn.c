@@ -686,7 +686,7 @@ static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 len, int
 
 	if (!anal->leaddrs) {
 		anal->leaddrs = r_list_newf (free_leaddr_pair);
-		if (!anal->leaddrs) {
+		if (R_UNLIKELY (!anal->leaddrs)) {
 			R_LOG_ERROR ("Cannot create leaddr list");
 			gotoBeach (R_ANAL_RET_ERROR);
 		}
@@ -1020,7 +1020,7 @@ noskip:
 				ut8 buf[4];
 				anal->iob.read_at (anal->iob.io, op->ptr, buf, sizeof (buf));
 				if ((buf[2] == 0xff || buf[2] == 0xfe) && buf[3] == 0xff) {
-					leaddr_pair *pair = R_NEW (leaddr_pair);
+					leaddr_pair *pair = R_NEW0 (leaddr_pair);
 					if (!pair) {
 						R_LOG_ERROR ("Cannot create leaddr_pair");
 						gotoBeach (R_ANAL_RET_ERROR);
@@ -1042,7 +1042,7 @@ noskip:
 			}
 #else
 			if (op->ptr != UT64_MAX) {
-				leaddr_pair *pair = R_NEW (leaddr_pair);
+				leaddr_pair *pair = R_NEW0 (leaddr_pair);
 				if (!pair) {
 					R_LOG_ERROR ("Cannot create leaddr_pair");
 					gotoBeach (R_ANAL_RET_ERROR);
@@ -1144,7 +1144,6 @@ noskip:
 				}
 			}
 			break;
-			break;
 			// Case of valid but unused "add [rax], al"
 		case R_ANAL_OP_TYPE_ADD:
 			if (is_mips) {
@@ -1157,10 +1156,24 @@ noskip:
 					}
 					R_LOG_DEBUG ("[0x%"PFMT64x"]============= 0x%"PFMT64x, op->addr, v1);
 				}
-			} else if (is_arm && anal->config->bits == 32) {
-				if (len >= 4 && !memcmp (buf, "\x00\xe0\x8f\xe2", 4)) {
-					// add lr, pc, 0 //
-					last_is_add_lr_pc = true; // TODO: support different values, not just 0
+			} else if (is_arm) {
+				const int bits = anal->config->bits;
+				if (bits == 64) {
+					if (last_is_reg_mov_lea) {
+						// incremement the leaddr
+						leaddr_pair *la;
+						last_is_reg_mov_lea = false;
+						RListIter *iter;
+						r_list_foreach_prev (anal->leaddrs, iter, la) {
+							la->leaddr += op->val;
+							break;
+						}
+					}
+				} else if (bits == 32) {
+					if (len >= 4 && !memcmp (buf, "\x00\xe0\x8f\xe2", 4)) {
+						// add lr, pc, 0 //
+						last_is_add_lr_pc = true; // TODO: support different values, not just 0
+					}
 				}
 			}
 			if (anal->opt.ijmp) {
@@ -1360,12 +1373,15 @@ noskip:
 			break;
 		case R_ANAL_OP_TYPE_UJMP:
 		case R_ANAL_OP_TYPE_RJMP:
-			if (is_arm && anal->config->bits == 32 && last_is_mov_lr_pc) {
-				break;
-			} else if (is_arm && anal->config->bits == 32 && last_is_add_lr_pc) {
-				op->type = R_ANAL_OP_TYPE_CALL;
-				op->fail = op->addr + 4;
-				break;
+			if (is_arm && anal->config->bits == 32) {
+				if (last_is_mov_lr_pc) {
+					break;
+				}
+				if (last_is_add_lr_pc) {
+					op->type = R_ANAL_OP_TYPE_CALL;
+					op->fail = op->addr + 4;
+					break;
+				}
 			} else if (is_mips && anal->opt.jmptbl) {
 				// lw v1, -0x7fc4(gp) ; gp = 0x684c00 - 0x7fc4 // read 4 bytes at gp-0x7fc4
 				// sll v0, s0, 2   // select the case from the pointer table * 4
@@ -1482,7 +1498,53 @@ noskip:
 					movdisp = UT64_MAX;
 #endif
 				} else if (is_arm) {
-					if (op->ptrsize == 1) { // TBB
+					if (op->ptrsize == 0 && anal->config->bits == 64) {
+						if (op->reg && op->ireg) {
+							// braa x16, x17 (when bra takes 2 args we skip jump tables dont do that
+							goto analopfinish;
+						}
+						int nreg = (op->reg && *op->reg == 'x')? atoi (op->reg + 1): 0xff;
+						if (nreg > 16) {
+							// x17 is used for the imports, ignoring that cases
+							goto analopfinish;
+						}
+						if (lea_cnt < 2) {
+							while (lea_cnt > 0) {
+								r_list_delete (anal->leaddrs, r_list_tail (anal->leaddrs));
+								lea_cnt--;
+							}
+							goto analopfinish;
+						}
+#if 0
+					CODE
+						// swift compiler can use ANY register for BR or ADR
+						adrp x9, sym.func.100004000
+						add x9, x9, 0x114
+						adr x10, 0x100004048  // this is why we use op->addr-12
+						ldrsw x11, [x9, x8, lsl 2]
+						add x10, x10, x11
+						br x10 // x10+x11 taking the delta from x9
+					ALGO
+						x10 = [..4000+0x114]
+#endif
+						leaddr_pair *la;
+						RListIter *iter;
+						ut64 table_addr = UT64_MAX;
+						r_list_foreach (anal->leaddrs, iter, la) {
+							table_addr = la->leaddr;
+							break;
+						}
+						// table_addr = 0x100004114;
+						ret = try_walkthrough_jmptbl (anal,
+								fcn, bb, depth - 1,
+								op->addr - 12, 0,
+								table_addr,
+								op->addr + 4, 4,
+								0, // table size is autodetected
+								UT64_MAX, ret);
+						// skip inlined jumptable
+						// idx += table_size;
+					} else if (op->ptrsize == 1) { // TBB
 						ut64 pred_cmpval = try_get_cmpval_from_parents (anal, fcn, bb, op->ireg);
 						ut64 table_size = 0;
 						if (pred_cmpval != UT64_MAX) {
@@ -1494,8 +1556,7 @@ noskip:
 								op->addr + 4, 1, table_size, UT64_MAX, ret);
 						// skip inlined jumptable
 						idx += table_size;
-					}
-					if (op->ptrsize == 2) { // LDRH on thumb/arm
+					} else if (op->ptrsize == 2) { // LDRH on thumb/arm
 						ut64 pred_cmpval = try_get_cmpval_from_parents(anal, fcn, bb, op->ireg);
 						int tablesize = 1;
 						if (pred_cmpval != UT64_MAX) {

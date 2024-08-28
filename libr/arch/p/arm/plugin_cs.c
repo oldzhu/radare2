@@ -1659,6 +1659,8 @@ static int analop64_esil(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *bu
 	case ARM64_INS_BRAAZ:
 	case ARM64_INS_BRAB:
 	case ARM64_INS_BRABZ:
+		r_strbuf_setf (&op->esil, "%s,pc,+,%s,+,pc,:=", REG64 (0), REG64(1));
+		break;
 #endif
 	case ARM64_INS_BR:
 		r_strbuf_setf (&op->esil, "%s,pc,:=", REG64 (0));
@@ -3458,6 +3460,8 @@ static void anop64(csh handle, RAnalOp *op, cs_insn *insn) {
 		} else if (REGID64 (0) == ARM64_REG_SP) {
 			op->stackop = R_ANAL_STACK_RESET;
 			op->stackptr = 0;
+		} else {
+			op->val = IMM64 (2);
 		}
 		op->cycles = 1;
 		op->type = R_ANAL_OP_TYPE_ADD;
@@ -3710,6 +3714,8 @@ static void anop64(csh handle, RAnalOp *op, cs_insn *insn) {
 	case ARM64_INS_BRABZ:
 		op->family = R_ANAL_OP_FAMILY_SECURITY;
 		op->type = R_ANAL_OP_TYPE_RJMP;
+		op->reg = cs_reg_name (handle, insn->detail->arm64.operands[0].reg);
+		op->ireg = cs_reg_name (handle, insn->detail->arm64.operands[1].reg);
 		break;
 	case ARM64_INS_LDRAA:
 	case ARM64_INS_LDRAB:
@@ -3745,18 +3751,19 @@ static void anop64(csh handle, RAnalOp *op, cs_insn *insn) {
 	case ARM64_INS_CBNZ:
 		op->type = R_ANAL_OP_TYPE_CJMP;
 		op->jump = IMM64(1);
-		op->fail = addr+op->size;
+		op->fail = addr + op->size;
 		break;
 	case ARM64_INS_TBZ:
 	case ARM64_INS_TBNZ:
 		op->type = R_ANAL_OP_TYPE_CJMP;
 		op->jump = IMM64(2);
-		op->fail = addr+op->size;
+		op->fail = addr + op->size;
 		break;
 	case ARM64_INS_BR:
 		// op->type = R_ANAL_OP_TYPE_UJMP; // RJMP ?
 		op->type = R_ANAL_OP_TYPE_RJMP;
 		op->eob = true;
+		op->reg = cs_reg_name (handle, insn->detail->arm64.operands[0].reg);
 		break;
 	case ARM64_INS_B:
 		// BX LR == RET
@@ -3928,6 +3935,8 @@ jmp $$ + 4 + ( [delta] * 2 )
 				op->stackptr = IMM (2);
 			}
 			op->val = op->stackptr;
+		} else {
+			op->val = IMM64 (2);
 		}
 		op->cycles = 1;
 		op->type = R_ANAL_OP_TYPE_SUB;
