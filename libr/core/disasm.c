@@ -135,6 +135,7 @@ typedef struct r_disasm_state_t {
 	bool pre_emu;
 	bool show_emu_bb;
 	bool show_emu_str;
+	bool show_anos;
 	bool show_emu_stroff;
 	bool show_emu_strinv;
 	bool show_emu_strflag;
@@ -341,6 +342,7 @@ static void ds_build_op_str(RDisasmState *ds, bool print_color);
 static void ds_print_bytes(RDisasmState *ds);
 static void ds_pre_xrefs(RDisasmState *ds, bool no_fcnlines);
 static void ds_show_xrefs(RDisasmState *ds);
+static void ds_show_anos(RDisasmState *ds);
 static void ds_atabs_option(RDisasmState *ds);
 static void ds_show_functions(RDisasmState *ds);
 static void ds_control_flow_comments(RDisasmState *ds);
@@ -833,6 +835,7 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->show_cycles = r_config_get_i (core->config, "asm.cycles");
 	ds->show_stackptr = r_config_get_i (core->config, "asm.stackptr");
 	ds->show_xrefs = r_config_get_b (core->config, "asm.xrefs");
+	ds->show_anos = r_config_get_b (core->config, "asm.anos");
 	ds->show_cmtrefs = r_config_get_i (core->config, "asm.cmt.refs");
 	ds->cmtfold = r_config_get_i (core->config, "asm.cmt.fold");
 	ds->show_cmtoff = r_config_get (core->config, "asm.cmt.off");
@@ -1460,6 +1463,12 @@ static void ds_show_refs(RDisasmState *ds) {
 	RVecAnalRef_free (refs);
 }
 
+static void ds_show_anos(RDisasmState *ds) {
+	if (ds->show_anos) {
+		r_core_cmd_call_at (ds->core, ds->at, "anol");
+	}
+}
+
 static void ds_show_xrefs(RDisasmState *ds) {
 	char xrefs_char[32] = {0}; // no more than 32 xrefs meh
 	int xci = 0;
@@ -1474,7 +1483,6 @@ static void ds_show_xrefs(RDisasmState *ds) {
 	if (!xrefs) {
 		return;
 	}
-
 	// only show fcnline in xrefs when addr is not the beginning of a function
 	bool fcnlines = (ds->fcn && ds->fcn->addr == ds->at);
 	if (RVecAnalRef_length (xrefs) > ds->maxrefs) {
@@ -5396,7 +5404,7 @@ static void print_fcn_arg(RCore *core, int nth, const char *type, const char *na
 	if (on_stack == 1 && asm_types > 1) {
 		r_cons_printf ("%s", type);
 	}
-	if (addr != UT32_MAX && addr != UT64_MAX  && addr != 0) {
+	if (fmt && addr != UT32_MAX && addr != UT64_MAX  && addr != 0) {
 		char *res = r_core_cmd_strf (core, "pf%s %s%s %s @ 0x%08" PFMT64x,
 				(asm_types==2)? "": "q", (on_stack == 1) ? "*" : "", fmt, name, addr);
 		r_str_trim (res);
@@ -6434,6 +6442,7 @@ toro:
 		if (ds->midbb) {
 			skip_bytes_bb = handleMidBB (core, ds);
 		}
+		ds_show_anos (ds);
 		if (!ds->show_flag_in_offset) {
 			ds_show_flags (ds, false);
 		}
@@ -7023,7 +7032,7 @@ R_API int r_core_print_disasm_instructions(RCore *core, int nb_bytes, int nb_opc
 R_IPI int r_core_print_disasm_json_ipi(RCore *core, ut64 addr, ut8 *buf, int nb_bytes, int nb_opcodes, PJ *pj, const void *pdu_condition) {
 	RDisasmState *ds;
 	RAnalFunction *f;
-	int i, j, k, ret, line;
+	int i, j, k, line;
 	ut64 old_offset = core->offset;
 	ut64 at;
 	int dis_opcodes = 0;
@@ -7063,7 +7072,6 @@ R_IPI int r_core_print_disasm_json_ipi(RCore *core, ut64 addr, ut8 *buf, int nb_
 #if BWRETRY
 				}
 #endif
-				nb_opcodes --;
 			}
 			count = R_MIN (nb_bytes, nbytes);
 			if (count > 0) {
@@ -7132,7 +7140,7 @@ R_IPI int r_core_print_disasm_json_ipi(RCore *core, ut64 addr, ut8 *buf, int nb_
 		} else if (i >= nb_bytes) {
 			break;
 		}
-		ret = r_asm_disassemble (core->rasm, &asmop, buf + i, nb_bytes - i);
+		int ret = r_asm_disassemble (core->rasm, &asmop, buf + i, nb_bytes - i);
 		if (ret < 1) {
 			pj_o (pj);
 			pj_kn (pj, "offset", at);
@@ -7182,10 +7190,10 @@ R_IPI int r_core_print_disasm_json_ipi(RCore *core, ut64 addr, ut8 *buf, int nb_
 			skip_bytes_bb = handleMidBB (core, ds);
 		}
 		if (skip_bytes_flag && ds->midflags > R_MIDFLAGS_SHOW) {
-			ds->oplen = ret = skip_bytes_flag;
+			ds->oplen = skip_bytes_flag;
 		}
 		if (skip_bytes_bb && skip_bytes_bb < ret) {
-			ds->oplen = ret = skip_bytes_bb;
+			ds->oplen = skip_bytes_bb;
 		}
 		{
 			ut64 killme = UT64_MAX;
