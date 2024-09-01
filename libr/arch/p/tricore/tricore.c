@@ -85,6 +85,10 @@ static bool analop(RArchSession *as, RAnalOp *op, RArchDecodeMask mask) {
 	} else if (r_str_startswith (text, "st")) {
 		op->type = R_ANAL_OP_TYPE_STORE;
 		op->ptr = addrfrom (text);
+	} else if (r_str_startswith (text, "loop")) {
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = addrfrom (text);
+		op->fail = op->addr + op->size;
 	} else if (r_str_startswith (text, "j ")) {
 		op->type = R_ANAL_OP_TYPE_JMP;
 		op->jump = addrfrom (text);
@@ -100,9 +104,12 @@ static bool analop(RArchSession *as, RAnalOp *op, RArchDecodeMask mask) {
 		op->type = R_ANAL_OP_TYPE_LEA;
 	} else if (r_str_startswith (text, "add")) {
 		op->type = R_ANAL_OP_TYPE_ADD;
+	} else if (r_str_startswith (text, "calli")) {
+		op->type = R_ANAL_OP_TYPE_RCALL;
 	} else if (r_str_startswith (text, "call")) {
 		op->type = R_ANAL_OP_TYPE_CALL;
 		op->jump = addrfrom (text);
+		op->fail = op->addr + op->size;
 	} else if (r_str_startswith (text, "rfe")) {
 		op->type = R_ANAL_OP_TYPE_RET;
 	} else if (r_str_startswith (text, "ret")) {
@@ -151,7 +158,12 @@ static char *get_reg_profile(RArchSession *as) {
 	const char *p =
 		"=PC	pc\n"
 		"=SP	a10\n"
-		"=A0	a0\n"
+		"=BP	a11\n"
+		"=A0	a4\n"
+		"=A1	a5\n"
+		"=A2	a6\n"
+		"=A3	a7\n"
+		"=SN	a0\n"
 		"gpr	p0	.64	0	0\n"
 		"gpr	a0	.32	0	0\n"
 		"gpr	a1	.32	4	0\n"
@@ -168,7 +180,8 @@ static char *get_reg_profile(RArchSession *as) {
 		"gpr	a8	.32	32	0\n"
 		"gpr	a9	.32	36	0\n"
 		"gpr	p10	.64	40	0\n"
-		"gpr	a10	.32	40	0\n"
+		"gpr	sp	.64	40	0\n"
+		"gpr	a10	.64	40	0\n"
 		"gpr	a11	.32	44	0\n"
 		"gpr	p12	.64	48	0\n"
 		"gpr	a12	.32	48	0\n"
