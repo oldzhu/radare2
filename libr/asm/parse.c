@@ -36,8 +36,6 @@ R_API RParseSession *r_parse_new_session(RParse *p, const char *name) {
 	}
 	return NULL;
 }
-
-R_API char *r_parse_
 #endif
 
 R_API RParse *r_parse_new(void) {
@@ -148,8 +146,9 @@ R_API bool r_parse_use(RParse *p, const char *name) {
 				return false;
 			}
 		}
+		return false;
 	}
-	return false;
+	return true;
 }
 
 // data is input disasm, str is output pseudo
