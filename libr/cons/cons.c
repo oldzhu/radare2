@@ -58,10 +58,23 @@ typedef struct {
 	void *event_interrupt_data;
 } RConsBreakStack;
 
+#if R2_USE_NEW_ABI
+static void r_cons_grep_word_free(RConsGrepWord *gw) {
+	if (gw) {
+		free (gw->str);
+		free (gw);
+	}
+}
+#endif
+
 static void cons_grep_reset(RConsGrep *grep) {
 	if (grep) {
 		R_FREE (grep->str);
 		ZERO_FILL (*grep);
+#if R2_USE_NEW_ABI
+		r_list_free (grep->strings);
+		grep->strings = r_list_newf ((RListFree)r_cons_grep_word_free);
+#endif
 		grep->line = -1;
 		grep->sort = -1;
 		grep->sort_invert = false;
@@ -100,7 +113,7 @@ static RConsStack *cons_stack_dump(bool recreate) {
 		}
 		if (recreate && C->buffer_sz > 0) {
 			C->buffer = malloc (C->buffer_sz);
-			if (!C->buffer) {
+			if (R_UNLIKELY (!C->buffer)) {
 				C->buffer = data->buf;
 				free (data);
 				return NULL;
@@ -910,10 +923,17 @@ R_API int r_cons_get_buffer_len(void) {
 
 R_API void r_cons_filter(void) {
 	/* grep */
+#if R2_USE_NEW_ABI
+	if (C->filter || r_list_length (C->grep.strings) > 0 || C->grep.tokens_used || C->grep.less || C->grep.json) {
+		(void)r_cons_grepbuf ();
+		C->filter = false;
+	}
+#else
 	if (C->filter || C->grep.nstrings > 0 || C->grep.tokens_used || C->grep.less || C->grep.json) {
 		(void)r_cons_grepbuf ();
 		C->filter = false;
 	}
+#endif
 	/* html */
 	if (C->is_html) {
 		int newlen = 0;
@@ -1018,10 +1038,14 @@ R_API void r_cons_last(void) {
 }
 
 static bool lastMatters(void) {
-	return (C->buffer_len > 0) \
-		&& (C->lastEnabled && !C->filter && C->grep.nstrings < 1 && \
-		!C->grep.tokens_used && !C->grep.less && \
-		!C->grep.json && !C->is_html);
+	return (C->buffer_len > 0 &&
+#if R2_USE_NEW_ABI
+		(C->lastEnabled && !C->filter && r_list_empty (C->grep.strings))
+#else
+		(C->lastEnabled && !C->filter && C->grep.nstrings < 1)
+#endif
+		&& !C->grep.tokens_used && !C->grep.less \
+		&& !C->grep.json && !C->is_html);
 }
 
 R_API void r_cons_echo(const char *msg) {
@@ -1566,10 +1590,11 @@ R_API bool r_cons_is_tty(void) {
 	if (!win.ws_col || !win.ws_row) {
 		return false;
 	}
-	const char *tty = ttyname (1);
-	if (!tty) {
+	char ttybuf[64];
+	if (ttyname_r (1, ttybuf, sizeof (ttybuf))) {
 		return false;
 	}
+	const char *tty = ttybuf;
 	if (stat (tty, &sb) || !S_ISCHR (sb.st_mode)) {
 		return false;
 	}
@@ -1614,7 +1639,7 @@ static int __xterm_get_cur_pos(int *xpos) {
 		(void)r_cons_readchar ();
 		for (i = 0; i < R_ARRAY_SIZE (pos) - 1; i++) {
 			ch = r_cons_readchar ();
-			if ((!i && !IS_DIGIT (ch)) || // dumps arrow keys etc.
+			if ((!i && !isdigit (ch)) || // dumps arrow keys etc.
 			    (i == 1 && ch == '~')) {  // dumps PgUp, PgDn etc.
 				is_reply = false;
 				break;
@@ -1688,7 +1713,13 @@ R_API int r_cons_get_size(int *rows) {
 	struct winsize win = {0};
 	if (isatty (0) && !ioctl (0, TIOCGWINSZ, &win)) {
 		if ((!win.ws_col) || (!win.ws_row)) {
-			const char *tty = isatty (1)? ttyname (1): NULL;
+			char ttybuf[64];
+			const char *tty = NULL;
+			if (isatty (1)) {
+				if (!ttyname_r (1, ttybuf, sizeof (ttybuf))) {
+					tty = ttybuf;
+				}
+			}
 			int fd = open (r_str_get_fail (tty, "/dev/tty"), O_RDONLY);
 			if (fd != -1) {
 				int ret = ioctl (fd, TIOCGWINSZ, &win);
