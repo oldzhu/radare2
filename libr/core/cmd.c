@@ -524,6 +524,7 @@ static void recursive_help(RCore *core, int detail, const char *cmd_prefix) {
 		recursive_help (core, detail, "%");
 		recursive_help (core, detail, "(");
 		recursive_help (core, detail, "@");
+		recursive_help (core, detail, "'?'");
 		recursive_help (core, detail, "!");
 		recursive_help (core, detail, "=");
 		recursive_help (core, detail, "??");
@@ -789,13 +790,15 @@ static int cmd_undo(void *data, const char *input) {
 			r_core_cmd_help (data, help_msg_uname);
 		}
 		return 1;
-	default:
 	case '?': // "u?"
 		if (*input && input[1] == 'j') {
 			r_cons_cmd_help_json (help_msg_u);
 		} else {
 			r_core_cmd_help (data, help_msg_u);
 		}
+		return 1;
+	default:
+		r_core_return_invalid_command (core, "u", *input);
 		return 1;
 	}
 	return 0;
@@ -1400,8 +1403,11 @@ static int cmd_yank(void *data, const char *input) {
 	case '\0': // "y"
 		r_core_yank_dump (core, 0, input[0]);
 		break;
-	default:
+	case '?':
 		r_core_cmd_help (core, help_msg_y);
+		break;
+	default:
+		r_core_return_invalid_command (core, "y", *input);
 		break;
 	}
 	return true;
@@ -2736,6 +2742,9 @@ static int cmd_kuery(void *data, const char *input) {
 	case '?':
 		r_core_cmd_help (core, help_msg_k);
 		break;
+	default:
+		r_core_return_invalid_command (core, "f", *input);
+		break;
 	}
 
 	if (input[0] == '\0') {
@@ -3032,8 +3041,10 @@ static int cmd_resize(void *data, const char *input) {
 		}
 		return true;
 	case '?': // "r?"
-	default:
 		r_core_cmd_help (core, help_msg_r);
+		return true;
+	default:
+		r_core_return_invalid_command (core, "r", *input);
 		return true;
 	}
 
@@ -3960,19 +3971,17 @@ static int handle_command_call(RCore *core, const char *cmd) {
 		return -1;
 	}
 	if (R_UNLIKELY (*cmd == '\'')) {
-		if (cmd[1] == '@') {
+		bool isaddr = cmd[1] == '@';
+		if (isaddr) {
 			cmd += 2;
 		} else {
 			cmd++;
 		}
-		if (r_str_startswith (cmd, "0x")) {
+		if (isaddr || r_str_startswith (cmd, "0x")) {
 			int res = 1;
 			char *arg = strdup (cmd);
 			char *end = strstr (arg, "'");
-			if (!end) {
-				R_LOG_ERROR ("Invalid syntax, expected \"'@addr'command\"");
-				free (arg);
-			} else {
+			if (end) {
 				*end = 0;
 				cmd = end + 1;
 				ut64 addr = core->offset;
@@ -3980,6 +3989,9 @@ static int handle_command_call(RCore *core, const char *cmd) {
 				r_core_seek (core, at, true);
 				res = r_core_cmd_call (core, cmd);
 				r_core_seek (core, addr, true);
+				free (arg);
+			} else {
+				R_LOG_ERROR ("Invalid syntax, expected \"'@addr'command\"");
 				free (arg);
 			}
 			return res;
@@ -4127,7 +4139,7 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 	}
 	r_cons_break_push (NULL, NULL);
 	R_CRITICAL_ENTER (core);
-	bool ocur_enabled = core->print && core->print->cur_enabled;
+	const bool ocur_enabled = core->print && core->print->cur_enabled;
 	R_CRITICAL_LEAVE (core);
 	while (rep-- > 0 && *cmd) {
 		if (r_cons_was_breaked ()) {
@@ -4325,7 +4337,7 @@ static int r_core_cmd_subst_i(RCore *core, char *cmd, char *colon, bool *tmpseek
 			if (haveQuote) {
 				cmd++;
 				p = *cmd ? find_eoq (cmd) : NULL;
-				if (!p || !*p) {
+				if (R_STR_ISEMPTY (p)) {
 					if (!strcmp (cmd, "?")) {
 						r_core_cmd_help (core, help_msg_quote);
 					} else {
@@ -4901,10 +4913,8 @@ repeat_arroba:
 		if (arroba) {
 			*arroba = 0;
 		}
+		ptr = (char *)r_str_trim_head_ro (ptr);
 
-		for (; *ptr == ' '; ptr++) {
-			//nothing to see here
-		}
 		if (*ptr && ptr[1] == ':') {
 			/* do nothing here */
 		} else {
@@ -4950,6 +4960,7 @@ repeat_arroba:
 				R_LOG_TODO ("what do you expect for @. import offset from file maybe?");
 			}
 		} else if (ptr[0] && ptr[1] == ':' && ptr[2]) {
+			// TODO move into a separate function
 			switch (ptr[0]) {
 			case 'F': // "@F:" // temporary flag space
 				flgspc_changed = r_flag_space_push (core->flags, ptr + 2);
@@ -5235,7 +5246,25 @@ ignore:
 		r_str_trim_head (ptr + 1);
 		offstr = ptr + 1;
 
-		addr = (*offstr == '{')? core->offset: r_num_math (core->num, offstr);
+		switch (*offstr) {
+		case '{':
+			addr = core->offset;
+			break;
+		case '@':
+		case '?':
+			// nothing
+			break;
+		default:
+			{
+				ut64 n = r_num_math (core->num, offstr);
+				if (core->num->nc.errors) {
+					R_LOG_ERROR ("Invalid tmpseek address '%s'", offstr);
+					goto fail;
+				}
+				addr = n;
+			}
+			break;
+		}
 		addr_is_set = true;
 
 		if (isalpha ((ut8)ptr[1]) && !addr) {
@@ -5269,10 +5298,7 @@ next_arroba:
 		}
 		if (ptr[1] == '@') { // "@@"
 			if (ptr[2] == '@') { // "@@@"
-				char *rule = ptr + 3;
-				while (*rule && *rule == ' ') {
-					rule++;
-				}
+				char *rule = (char *)r_str_trim_head_ro (ptr + 3);
 				ret = r_core_cmd_foreach3 (core, cmd, rule);
 			} else {
 				ret = r_core_cmd_foreach (core, cmd, ptr + 2);
@@ -5295,7 +5321,7 @@ next_arroba:
 					goto fail;
 				}
 				char *arg = p + 1;
-				int arg_len = strlen (arg);
+				const int arg_len = strlen (arg);
 				if (arg_len > 0) {
 					arg[arg_len - 1] = 0;
 				}
@@ -5825,7 +5851,7 @@ R_API int r_core_cmd_foreach3(RCore *core, const char *cmd, char *each) { // "@@
 	return 0;
 }
 
-static void foreachWord(RCore *core, const char *_cmd, const char *each) {
+static void cmd_foreach_word(RCore *core, const char *_cmd, const char *each) {
 	char *cmd = strdup (_cmd);
 	char *nextLine = NULL;
 	/* foreach list of items */
@@ -5878,7 +5904,7 @@ static void foreachWord(RCore *core, const char *_cmd, const char *each) {
 	free (cmd);
 }
 
-static void foreachOffset(RCore *core, const char *_cmd, const char *each) {
+static void cmd_foreach_offset(RCore *core, const char *_cmd, const char *each) {
 	char *cmd = strdup (_cmd);
 	char *nextLine = NULL;
 	ut64 addr;
@@ -5923,7 +5949,10 @@ static void foreachOffset(RCore *core, const char *_cmd, const char *each) {
 			}
 			r_core_seek (core, addr, true);
 			r_core_cmd (core, cmd, 0);
-			foreach_newline (core);
+			if (!foreach_newline (core)) {
+				r_cons_flush ();
+				break;
+			}
 			r_cons_flush ();
 		}
 		each = nextLine;
@@ -6119,16 +6148,16 @@ R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each) {
 		if (each[1] == ':') {
 			char *arg = r_core_cmd_str (core, each + 2);
 			if (arg) {
-				foreachOffset (core, cmd, arg);
+				cmd_foreach_offset (core, cmd, arg);
 				free (arg);
 			}
 		}
 		break;
 	case '=': // "@@="
 		if (each[1] == '=') {
-			foreachWord (core, cmd, r_str_trim_head_ro (str + 2));
+			cmd_foreach_word (core, cmd, r_str_trim_head_ro (str + 2));
 		} else {
-			foreachOffset (core, cmd, r_str_trim_head_ro (str + 1));
+			cmd_foreach_offset (core, cmd, r_str_trim_head_ro (str + 1));
 		}
 		break;
 	case 'd': // "@@d"
