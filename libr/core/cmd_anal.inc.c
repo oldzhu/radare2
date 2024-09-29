@@ -7285,10 +7285,18 @@ static void cmd_esil_mem(RCore *core, const char *input) {
 	size = r_config_get_i (core->config, "esil.stack.size");
 	addr = r_config_get_i (core->config, "esil.stack.addr");
 
-	if (r_io_map_is_mapped (core->io, addr)) {
-		const ut64 incretry = 0x10000000;
-		if (r_io_map_locate (core->io, &addr, size, incretry)) {
-			addr += incretry;
+	{
+		ut64 mapinc = r_config_get_i (core->config, "io.mapinc");
+		const ut64 esaddr = addr;
+		if (!r_io_map_locate (core->io, &addr, size, esaddr) || (addr != esaddr)) {
+			addr = esaddr;
+			if (!r_io_map_locate (core->io, &addr, size, mapinc)) {
+				addr = 0ULL;
+				if (!r_io_map_locate (core->io, &addr, size, mapinc)) {
+					R_LOG_ERROR ("Couldn't locate suitable address for aeim stack");
+					return;
+				}
+			}
 		}
 	}
 	patt = r_config_get (core->config, "esil.stack.pattern");
