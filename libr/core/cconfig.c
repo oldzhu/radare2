@@ -3781,7 +3781,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("asm.var", "true", "show local function variables in disassembly");
 	SETBPREF ("asm.var.access", "false", "show accesses of local variables");
 	SETBPREF ("asm.sub.var", "true", "substitute variables in disassembly");
-	SETICB ("asm.var.summary", 0, &cb_asm_var_summary, "show variables summary instead of full list in disasm (0, 1, 2)");
+	SETICB ("asm.var.summary", 4, &cb_asm_var_summary, "show variables summary instead of full list in disasm (0, 1, 2, 3, 4)");
 	SETBPREF ("asm.sub.varonly", "true", "substitute the entire variable expression with the local variable name (e.g. [local10h] instead of [ebp+local10h])");
 	SETBPREF ("asm.sub.reg", "false", "substitute register names with their associated role name (drp~=)");
 	SETBPREF ("asm.sub.rel", "true", "substitute pc relative expressions in disasm");
@@ -4021,6 +4021,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF ("cmd.usr2", "", "run when SIGUSR2 signal is received");
 #endif
 	SETPREF ("cmd.open", "", "run when file is opened");
+	SETPREF ("cmd.exit", "", "run command before leaving the shell (atexit)");
 	SETPREF ("cmd.load", "", "run when binary is loaded");
 	SETPREF ("cmd.bbgraph", "", "show the output of this command in the graph basic blocks");
 	RConfigNode *cmdpdc = NODECB ("cmd.pdc", "", &cb_cmdpdc);
