@@ -2198,7 +2198,6 @@ R_API bool r_core_anal_fcn(RCore *core, ut64 at, ut64 from, int reftype, int dep
 			if (r_anal_xrefs_has_xrefs_at (core->anal, from)) {
 				return true;
 			}
-
 			// we should analyze and add code ref otherwise aaa != aac
 			if (from != UT64_MAX) {
 				RAnalRefType ref_type = reftype == UT64_MAX ? R_ANAL_REF_TYPE_CODE : reftype;
@@ -3032,7 +3031,7 @@ static int maxbbins(RAnalFunction *fcn) {
 }
 
 // Lists function names and their calls (uniqified)
-static int fcn_print_makestyle(RCore *core, RList *fcns, char mode) {
+static int fcn_print_makestyle(RCore *core, RList *fcns, char mode, bool unique, bool recursive) {
 	RListIter *fcniter;
 	RAnalFunction *fcn;
 	PJ *pj = NULL;
@@ -3067,6 +3066,25 @@ static int fcn_print_makestyle(RCore *core, RList *fcns, char mode) {
 
 		// don't enter for functions with 0 refs
 		if (refs && !RVecAnalRef_empty (refs)) {
+			RAnalRef *refi;
+			if (recursive) {
+				bool found = false;
+				ut64 at = fcn->addr;
+				R_VEC_FOREACH (refs, refi) {
+					if (at == refi->addr) {
+						found = true;
+						break;
+					}
+				}
+				if (found) {
+					if (mode == 'q') {
+						r_cons_printf ("0x%08"PFMT64x"\n", at);
+					} else {
+						r_cons_printf ("%s\n", fcn->name);
+					}
+				}
+				continue;
+			}
 			if (mode == '.') {
 				if (fcn->addr != cur_fcn_addr) {
 					continue;
@@ -3088,10 +3106,16 @@ static int fcn_print_makestyle(RCore *core, RList *fcns, char mode) {
 				r_cons_printf (" -> ");
 			}
 			// Iterate over all refs from a function
-			RAnalRef *refi;
+			Sdb *uniq = unique ? sdb_new0 (): NULL;
 			R_VEC_FOREACH (refs, refi) {
 				RFlagItem *f = r_flag_get_i (core->flags, refi->addr);
-				char *dst = r_str_newf ((f? f->name: "0x%08"PFMT64x), refi->addr);
+				char *dst = f? strdup (f->name): r_str_newf ("0x%08"PFMT64x, refi->addr);
+				if (unique) {
+					if (sdb_const_get (uniq, dst, NULL)) {
+						continue;
+					}
+					sdb_set (uniq, dst, "1", 0);
+				}
 				if (pj) { // Append calee json item
 					pj_o (pj);
 					pj_ks (pj, "name", dst);
@@ -3104,11 +3128,12 @@ static int fcn_print_makestyle(RCore *core, RList *fcns, char mode) {
 				}
 				free (dst);
 			}
+			sdb_free (uniq);
 			if (pj) {
 				pj_end (pj); // close list of calls
 				pj_end (pj); // close function item
 			} else {
-				r_cons_newline();
+				r_cons_newline ();
 			}
 		}
 		RVecAnalRef_free (refs);
@@ -3126,7 +3151,6 @@ static int fcn_print_makestyle(RCore *core, RList *fcns, char mode) {
 
 static char *filename(RCore *core, ut64 addr) {
 	char *fn = r_core_cmd_strf (core, "CLf 0x%08"PFMT64x, addr);
-	// char *fn = r_core_cmd_strf (core, "CLf @@@b@0x%"PFMT64x, addr);
 	// ignore return code
 	r_core_return_code (core, 0);
 	if (fn) {
@@ -3138,6 +3162,20 @@ static char *filename(RCore *core, ut64 addr) {
 		free (fn);
 	}
 	return NULL;
+}
+
+static bool is_recursive(RCore *core, RAnalFunction *fcn) {
+	RVecAnalRef *refs = r_core_anal_fcn_get_calls (core, fcn);
+	if (refs && !RVecAnalRef_empty (refs)) {
+		RAnalRef *refi;
+		ut64 at = fcn->addr;
+		R_VEC_FOREACH (refs, refi) {
+			if (at == refi->addr) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 static int fcn_print_json(RCore *core, RAnalFunction *fcn, bool dorefs, PJ *pj) {
@@ -3155,6 +3193,7 @@ static int fcn_print_json(RCore *core, RAnalFunction *fcn, bool dorefs, PJ *pj) 
 	pj_ks (pj, "is-pure", r_str_bool (r_anal_function_purity (fcn)));
 	pj_kn (pj, "realsz", r_anal_function_realsize (fcn));
 	pj_kb (pj, "noreturn", fcn->is_noreturn);
+	pj_kb (pj, "recursive", is_recursive (core, fcn));
 	pj_ki (pj, "stackframe", fcn->maxstack);
 	if (fcn->cc) {
 		pj_ks (pj, "calltype", fcn->cc); // calling conventions
@@ -3573,6 +3612,7 @@ static int fcn_print_legacy(RCore *core, RAnalFunction *fcn, bool dorefs) {
 	double ratbins = b? ((double)a / b): 0;
 	r_cons_printf ("\nratbbins: %.02f", ratbins);
 	r_cons_printf ("\nnoreturn: %s", r_str_bool (fcn->is_noreturn));
+	r_cons_printf ("\nrecursive: %s", r_str_bool (is_recursive (core, fcn)));
 	r_cons_printf ("\nin-degree: %d", indegree);
 	r_cons_printf ("\nout-degree: %d", outdegree);
 
@@ -3722,10 +3762,13 @@ static int fcn_list_legacy(RCore *core, RList *fcns, bool dorefs) {
 }
 
 static RCoreHelpMessage help_msg_aflm = {
-	"Usage:", "aflm", "[q.j] List functions in verbose mode",
+	"Usage:", "aflm", "[q.j] List functions in makefile style (func -> calls)",
 	"aflm", "", "list functions and what they call in makefile-like format",
 	"aflm.", "", "only print the summary for the current function (see pds)",
+	"aflmq", "", "list functions with its calls in quiet mode",
 	"aflmj", "", "same as above but in json format",
+	"aflmu", "[jq.]", "same as aflm, but listing calls once (uniq filter)",
+	"aflmr", "[jq.]", "list all recursive functions (functions calling themselves)",
 	NULL
 };
 
@@ -3853,17 +3896,27 @@ R_API int r_core_anal_fcn_list(RCore *core, const char *input, const char *rad) 
 		break;
 	case 'm': // "aflm"
 		{
+			bool uniq = false;
+			bool recursive = false;
 			char mode = 'm';
+			if (rad[1] == 'u') { // "aflmu" // for unique
+				uniq = true;
+				rad++;
+			} else if (rad[1] == 'r') {
+				recursive = true;
+				rad++;
+			}
+
 			if (rad[1] != 0) {
 				switch (rad[1]) {
-				case '.':
-				case 'j':
-				case 'q':
+				case '.': // "aflm."
+				case 'j': // "aflmj"
+				case 'q': // "aflmq"
 					mode = rad[1];
 					break;
 				}
 			}
-			fcn_print_makestyle (core, fcns, mode);
+			fcn_print_makestyle (core, fcns, mode, uniq, recursive);
 			break;
 		}
 	case 1:

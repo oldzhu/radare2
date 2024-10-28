@@ -620,7 +620,7 @@ static RCoreHelpMessage help_msg_afb = {
 static RCoreHelpMessage help_msg_afc = {
 	"Usage:", "afc[agl?]", "# see also tcc command to manage all calling conventions",
 	"afc", " ccname", "manually set calling convention for current function",
-	"afc", "", "show calling convention for the Current function (same as tcc)",
+	"afc", "", "show default function calling convention (same as tcc)",
 	"afcr", "[j]", "show register usage for the current function",
 	"afcf", "[j] [name]", "prints return type function(arg1, arg2...), see afij",
 	"afci", "", "information about the current calling convention",
@@ -1111,7 +1111,7 @@ static RCoreHelpMessage help_msg_ax = {
 	NULL
 };
 
-static RCoreHelpMessage help_msg_axl= {
+static RCoreHelpMessage help_msg_axl = {
 	"Usage:", "axl[jcq]", "show global xrefs",
 	"axl", "", "list all xrefs",
 	"axlj", "", "list xrefs in json format",
@@ -1120,14 +1120,14 @@ static RCoreHelpMessage help_msg_axl= {
 	NULL
 };
 
-static RCoreHelpMessage help_msg_axv= {
+static RCoreHelpMessage help_msg_axv = {
 	"Usage:", "axv[?j]", "show xrefs to local variables in current function",
 	"axv", " ([addr])", "optionally you can specify address instead of current seek",
 	"axvj", " ([addr])", "show in json",
 	NULL
 };
 
-static RCoreHelpMessage help_msg_axt= {
+static RCoreHelpMessage help_msg_axt = {
 	"Usage:", "axt[?gq*]", "find data/code references to this address",
 	"axtj", " ([addr])", "find data/code references to this address and print in json format",
 	"axtg", " ([addr])", "display commands to generate graphs according to the xrefs",
@@ -1137,7 +1137,7 @@ static RCoreHelpMessage help_msg_axt= {
 	NULL
 };
 
-static RCoreHelpMessage help_msg_axf= {
+static RCoreHelpMessage help_msg_axf = {
 	"Usage:", "axf[?gq*]", "find data/code references from this address",
 	"axfj", " [addr]", "find data/code references to this address and print in json format",
 	"axfg", " [addr]", "display commands to generate graphs according to the xrefs",
@@ -5707,6 +5707,15 @@ static int cmd_af(RCore *core, const char *input) {
 		if (!input[2] || input[2] == ' ' || input[2] == 'i' || input[2] == 'r' || input[2] == 'a') {
 			fcn = r_anal_get_fcn_in (core->anal, core->offset, 0);
 			if (!fcn) {
+				if (!input[2]) {
+					r_cons_println (r_config_get (core->config, "anal.cc"));
+					break;
+				}
+				if (input[2] == 'i') {
+					r_core_cmdf (core, "afcl %s",
+						r_config_get (core->config, "anal.cc"));
+					break;
+				}
 				R_LOG_ERROR ("afc: Cannot find function here");
 				break;
 			}
