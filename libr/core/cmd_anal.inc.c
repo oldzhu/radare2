@@ -262,7 +262,7 @@ static RCoreHelpMessage help_msg_ab = {
 	"abj", " [addr]", "display basic block information in JSON",
 	"abl", "[?] [.-cqj]", "list all basic blocks",
 	"abo", "", "list opcode offsets of current basic block",
-	"abp", "[?] [addr] [num]", "follow basic blocks paths from current offset to addr",
+	"abp", "[?] [addr]", "follow basic blocks paths from $$ to `addr`",
 	"abt", "[tag] ([color])", "no args = show current trace tag, otherwise set the color",
 	"abx", " [hexpair-bytes]", "analyze N bytes",
 	NULL
@@ -764,7 +764,7 @@ static RCoreHelpMessage help_msg_afv = {
 	"afvr", "[?]", "manipulate register based arguments",
 	"afvR", " [varname]", "list addresses where vars are accessed (READ)",
 	"afvs", "[?]", "manipulate sp based arguments/locals",
-	"afvt", " [name] [new_type]", "change type for given argument/local",
+	"afvt", " [name] ([type])", "display or change type for given local variable/argument",
 	"afvW", " [varname]", "list addresses where vars are accessed (WRITE)",
 	"afvx", "", "show function variable xrefs (same as afvR+afvW)",
 	NULL
@@ -1973,18 +1973,20 @@ static int var_cmd(RCore *core, const char *str) {
 			}
 
 			char *type = strchr (p, ' ');
-			if (!type) {
-				free (ostr);
-				return false;
+			if (type) {
+				*type++ = 0;
 			}
-			*type++ = 0;
 			v1 = r_anal_function_get_var_byname (fcn, p);
 			if (!v1) {
-				R_LOG_ERROR ("Cant find get by name %s", p);
+				R_LOG_ERROR ("Cant find variable named %s", p);
 				free (ostr);
 				return false;
 			}
-			r_anal_var_set_type (v1, type);
+			if (type) {
+				r_anal_var_set_type (v1, type);
+			} else {
+				r_cons_printf ("%s\n", v1->type);
+			}
 			free (ostr);
 			return true;
 		} else {
@@ -7918,7 +7920,7 @@ static void r_anal_aefa(RCore *core, const char *arg) {
 		r_core_cmdf (core, "aepc 0x%08"PFMT64x, at);
 		r_core_cmd_call (core, "aeso");
 		r_core_seek (core, at, true);
-		int delta = r_num_get (core->num, "$l");
+		int delta = r_num_get (core->num, "$is");
 		if (delta < 1) {
 			break;
 		}
@@ -13123,6 +13125,7 @@ static void cmd_anal_abp(RCore *core, const char *input) {
 			r_core_cmd_help (core, help_msg_abp);
 			return;
 		}
+		*p = 0;
 		ut64 addr = r_num_math (core->num, p + 1);
 		RList *paths = r_core_anal_graph_to (core, addr, n);
 		if (paths) {

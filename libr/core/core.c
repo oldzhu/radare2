@@ -4,9 +4,6 @@
 
 #include <r_core.h>
 #include <r_vec.h>
-#if R2__UNIX__
-#include <signal.h>
-#endif
 
 #define DB core->sdb
 
@@ -109,15 +106,16 @@ static int getreloc_tree(void *incoming, void *in, void *user) {
 }
 
 R_API RBinReloc *r_core_getreloc(RCore *core, ut64 addr, int size) {
+	R_RETURN_VAL_IF_FAIL (core, NULL);
 	if (size < 1 || addr == UT64_MAX) {
 		return NULL;
 	}
 	RRBTree *relocs = r_bin_get_relocs (core->bin);
-	if (!relocs) {
-		return NULL;
+	if (R_LIKELY (relocs)) {
+		struct getreloc_t gr = { .vaddr = addr, .size = size };
+		return r_crbtree_find (relocs, &gr, getreloc_tree, NULL);
 	}
-	struct getreloc_t gr = { .vaddr = addr, .size = size };
-	return r_crbtree_find (relocs, &gr, getreloc_tree, NULL);
+	return NULL;
 }
 
 /* returns the address of a jmp/call given a shortcut by the user or UT64_MAX
@@ -126,6 +124,7 @@ R_API RBinReloc *r_core_getreloc(RCore *core, ut64 addr, int size) {
  * lowercase one. If is_asmqjmps_letter is false, the string should be a number
  * between 1 and 9 included. */
 R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str) {
+	R_RETURN_VAL_IF_FAIL (core, UT64_MAX);
 	if (!core->asmqjmps) {
 		return UT64_MAX;
 	}
@@ -161,6 +160,7 @@ R_API ut64 r_core_get_asmqjmps(RCore *core, const char *str) {
  * The returned buffer needs to be freed
  */
 R_API char* r_core_add_asmqjmp(RCore *core, ut64 addr) {
+	R_RETURN_VAL_IF_FAIL (core, NULL);
 	bool found = false;
 	if (!core->asmqjmps) {
 		return NULL;
@@ -280,10 +280,8 @@ static ut64 numget(RCore *core, const char *k) {
 
 static bool __isMapped(RCore *core, ut64 addr, int perm) {
 	if (r_config_get_b (core->config, "cfg.debug")) {
-		// RList *maps = core->dbg->maps;
-		RDebugMap *map = NULL;
-		RListIter *iter = NULL;
-
+		RDebugMap *map;
+		RListIter *iter;
 		r_list_foreach (core->dbg->maps, iter, map) {
 			if (addr >= map->addr && addr < map->addr_end) {
 				if (perm > 0) {
@@ -297,7 +295,6 @@ static bool __isMapped(RCore *core, ut64 addr, int perm) {
 		}
 		return false;
 	}
-
 	return r_io_map_is_mapped (core->io, addr);
 }
 
@@ -333,7 +330,9 @@ R_API char *r_core_cmd_call_str_at(RCore *core, ut64 addr, const char *cmd) {
 	return retstr;
 }
 
+// R2_600 - return void
 R_API int r_core_bind(RCore *core, RCoreBind *bnd) {
+	R_RETURN_VAL_IF_FAIL (core && bnd, false);
 	bnd->core = core;
 	bnd->bphit = (RCoreDebugBpHit)r_core_debug_breakpoint_hit;
 	bnd->syshit = (RCoreDebugSyscallHit)r_core_debug_syscall_hit;
@@ -464,15 +463,18 @@ static const char *str_callback(RNum *user, ut64 off, int *ok) {
 	return NULL;
 }
 
-static ut64 numvar_instruction_backward(RCore *core, const char *input) {
+static ut64 invalid_numvar(RCore *core, const char *str) {
+	core->num->nc.errors ++;
+	core->num->nc.calc_err = str;
+	return 0;
+}
+
+static ut64 numvar_instruction_prev(RCore *core, int n, int *ok) {
+	if (ok) {
+		*ok = true;
+	}
 	// N forward instructions
 	int i, ret;
-	int n = 1;
-	if (isdigit ((unsigned char)input[0])) {
-		n = atoi (input);
-	} else if (input[0] == '{') {
-		n = atoi (input + 1);
-	}
 	if (n < 1) {
 		R_LOG_ERROR ("Invalid negative value");
 		n = 1;
@@ -512,23 +514,15 @@ static ut64 numvar_instruction_backward(RCore *core, const char *input) {
 	return val;
 }
 
-static ut64 numvar_instruction(RCore *core, const char *input) {
-	ut64 addr = core->offset;
+static ut64 numvar_instruction_next(RCore *core, ut64 addr, int n, int *ok) {
+	RAnalOp op;
 	// N forward instructions
 	ut8 data[32];
 	int i;
 	ut64 val = addr;
-	int n = 1;
-	if (input[0] == '{') {
-		n = atoi (input + 1);
-	}
-	if (n < 1) {
-		R_LOG_ERROR ("Invalid negative value");
-		n = 1;
-	}
 	for (i = 0; i < n; i++) {
 		r_io_read_at (core->io, val, data, sizeof (data));
-		RAnalOp op = {0};
+		r_anal_op_init (&op);
 		int ret = r_anal_op (core->anal, &op, val, data,
 			sizeof (data), R_ARCH_OP_MASK_BASIC);
 		if (ret < 1) {
@@ -537,8 +531,215 @@ static ut64 numvar_instruction(RCore *core, const char *input) {
 		val += op.size;
 		r_anal_op_fini (&op);
 	}
+	if (ok) {
+		*ok = true;
+	}
 	return val;
 
+}
+
+static ut64 numvar_instruction(RCore *core, const char *str, int *ok) {
+#if 0
+* `$j` -> `$ij` jump destination
+* `$f` -> `$if` fail destination
+* `$i` -> `$in` next instruction (WIP)
+* `$l` -> `$is` opcode length (RFC) why not use `s` instead?
+* `$m` -> `$ir` memory opcode reference address
+* `$v` -> `$iv` opcode immediate (RFC)
+#endif
+	const char ch0 = *str;
+	int count = 1;
+	if (ch0) {
+		const char ch1 = str[1];
+		if (ch1 == ':') {
+			count = r_num_math (NULL, str + 2);
+		} else if (ch1 == '{') {
+			count = r_num_math (NULL, str + 2);
+		} else if (isdigit (ch1)) {
+			count = r_num_math (NULL, str + 1);
+		} else if (ch1) {
+			return invalid_numvar (core, "expected :,{ after $i?");
+		}
+	}
+	if (ch0 == 'n') { // "$in"
+		return numvar_instruction_next (core, core->offset, count, ok);
+	}
+	if (ch0 == 'p') { // "$ip"
+		return numvar_instruction_prev (core, count, ok);
+	}
+	if (ch0 == 's') { // "$is"
+		return numvar_instruction_next (core, 0, count, ok);
+	}
+	if (count != 1) {
+		return invalid_numvar (core, "expected :,{ after $i?");
+	}
+	if (ok) {
+		*ok = true;
+	}
+	ut64 ret = 0;
+	RAnalOp op;
+	r_anal_op_init (&op);
+	r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize, R_ARCH_OP_MASK_BASIC);
+	r_anal_op_fini (&op); // we don't need strings or pointers, just values, which are not nullified in fini
+	switch (ch0) {
+	case 'j': // "$ij" instruction jump
+		ret = op.jump;
+		break;
+	case 'f': // "$if" instruction fail
+		ret = op.fail;
+		break;
+	case 's': // "$is" instruction size
+		ret = op.size;
+		break;
+	case 'r': // "$ir" instruction reference
+		ret = op.ptr;
+		break;
+	case 'v': // "$iv" instruction value
+		ret = op.val;
+		break;
+	default:
+		if (ok) {
+			*ok = false;
+		}
+		break;
+	}
+	return ret;
+}
+
+static ut64 numvar_k(RCore *core, const char *str, int *ok) {
+	if (!str[2]) {
+		return invalid_numvar (core, "Usage: $k:key or $k{key}");
+	}
+	char *bptr = strdup (str + 3);
+	if (str[2] == ':') {
+		// do nothing
+	} else if (str[2] == '{') {
+		char *ptr = strchr (bptr, '}');
+		if (!ptr) {
+			free (bptr);
+			return invalid_numvar (core, "missing closing brace");
+		}
+		*ptr = '\0';
+	} else {
+		free (bptr);
+		return invalid_numvar (core, "Expected '{' or ':' after 'k'");
+	}
+	char *out = sdb_querys (core->sdb, NULL, 0, bptr);
+	if (R_STR_ISNOTEMPTY (out)) {
+		if (strstr (out, "$k{")) {
+			free (bptr);
+			free (out);
+			return invalid_numvar (core, "Recursivity is not permitted here");
+		}
+		if (ok) {
+			*ok = true;
+		}
+		// XXX RNum.math is not reentrant, so we hack this to fix breaking expression
+		RNum nn = {0};
+		memcpy (&nn, core->num, sizeof (RNum));
+		return r_num_math (&nn, out);
+	}
+	free (bptr);
+	free (out);
+	return invalid_numvar (core, "unknown $k{key}");
+}
+
+static ut64 numvar_flag(RCore *core, const char *str, int *ok) {
+#if 0
+* `$f` -> address of closest flag
+  * `$fs` -> flag size
+  * `$fd` -> distance to closest flag (delta offset)
+  * `$fe` -> end of flag
+* `$f{sym.main}` -> address of sym.main flag. same as `sym.main`
+  * `$fs{sym.main}` -> size of sym.main
+  * `$fd{sym.puts}` -> sym.puts-$$
+  * `$fe{sym.main}` -> address where sym.main flag ends
+#endif
+	char ch0 = *str;
+	char *name = NULL;
+	if (ch0) {
+		const char ch1 = str[1];
+		if (ch0 == ':') {
+			name = strdup (str + 1);
+			ch0 = 0;
+		} else if (ch1 == ':') {
+			name = strdup (str + 2);
+		} else if (ch0 == '{') {
+			ch0 = 0;
+			name = strdup (str + 1);
+			char *ch = strchr (name, '}');
+			if (ch) {
+				*ch = 0;
+			} else {
+				free (name);
+				return invalid_numvar (core, "missing } in $f");
+			}
+		} else if (ch1 == '{') {
+			name = strdup (str + 2);
+			char *ch = strchr (name, '}');
+			if (ch) {
+				*ch = 0;
+			} else {
+				free (name);
+				return invalid_numvar (core, "missing } in $f");
+			}
+			// invalid
+		}
+	}
+	RFlagItem *fi = NULL;
+	ut64 addr = core->offset;
+	if (name) {
+		fi = r_flag_get (core->flags, name);
+		if (!fi) {
+			// XXX RNum.math is not reentrant, so we hack this to fix breaking expression
+			RNum nn = {0};
+			memcpy (&nn, core->num, sizeof (RNum));
+			addr = r_num_math (&nn, name);
+		}
+		free (name);
+	}
+	if (!fi) {
+		fi = r_flag_get_i (core->flags, addr);
+		if (!fi) {
+			fi = r_flag_get_at (core->flags, core->offset, true);
+		}
+	}
+	if (!fi) {
+		return invalid_numvar (core, "cant find flag");
+	}
+	switch (ch0) {
+	case 0: // "$f"
+		return core->offset;
+	case 's': // "$fs"
+		return fi->size;
+	case 'd': // "$fd"
+		return core->offset - fi->offset;
+	case 'e': // "$fe"
+		return fi->offset + fi->size;
+	}
+	return invalid_numvar (core, "unknown $f subvar");
+}
+
+static ut64 numvar_dollar(RCore *core, const char *str, int *ok) {
+	if (!strcmp (str, "$$")) {
+		return core->offset;
+	}
+	if (!strcmp (str, "$$c")) {
+		if (core->print->cur_enabled) {
+			return core->offset + core->print->cur;
+		}
+		return core->offset;
+	}
+	if (!strcmp (str, "$$$")) {
+		return core->prompt_offset;
+	}
+	if (!strcmp (str, "$$$c")) {
+		if (core->print->cur_enabled) {
+			return core->prompt_offset + core->print->cur;
+		}
+		return core->prompt_offset;
+	}
+	return invalid_numvar (core, str);
 }
 
 static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
@@ -547,8 +748,9 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 	char *ptr, *bptr, *out = NULL;
 	RFlagItem *flag;
 	RBinSection *s;
-	RAnalOp op;
 	ut64 ret = 0;
+
+	RAnalOp op;
 	r_anal_op_init (&op);
 
 	if (ok) {
@@ -640,13 +842,16 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		if (ok) {
 			*ok = true;
 		}
+		// must be deprecated
 		switch (str[1]) {
 		case 'e':
+#if 0
 		case 'j':
 		case 'f':
 		case 'm':
 		case 'v':
 		case 'l':
+#endif
 			r_anal_op_init (&op);
 			r_anal_op (core->anal, &op, core->offset, core->block, core->blocksize, R_ARCH_OP_MASK_BASIC);
 			r_anal_op_fini (&op); // we don't need strings or pointers, just values, which are not nullified in fini
@@ -657,42 +862,11 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		// XXX the above line is assuming op after fini keeps jump, fail, ptr, val, size and r_anal_op_is_eob()
 		switch (str[1]) {
 		case 'i': // "$i"
-			if (ok) {
-				*ok = true;
-			}
-			return numvar_instruction (core, str + 2);
-		case 'I': // "$I"
-			if (ok) {
-				*ok = true;
-			}
-			return numvar_instruction_backward (core, str + 2);
+			return numvar_instruction (core, str + 2, ok);
 		case '.': // can use pc, sp, a0, a1, ...
 			return r_debug_reg_get (core->dbg, str + 2);
-		case 'k': // $k{kv}
-			if (str[2] != '{') {
-				R_LOG_ERROR ("Expected '{' after 'k'");
-				break;
-			}
-			bptr = strdup (str + 3);
-			ptr = strchr (bptr, '}');
-			if (!ptr) {
-				// invalid json
-				free (bptr);
-				break;
-			}
-			*ptr = '\0';
-			ret = 0LL;
-			out = sdb_querys (core->sdb, NULL, 0, bptr);
-			if (out && *out) {
-				if (strstr (out, "$k{")) {
-					R_LOG_ERROR ("Recursivity is not permitted here");
-				} else {
-					ret = r_num_math (core->num, out);
-				}
-			}
-			free (bptr);
-			free (out);
-			return ret;
+		case 'k': // "$k{ey}" "$k:ey"
+			return numvar_k (core, str, ok);
 		case '{': // ${ev} eval var
 			bptr = strdup (str + 2);
 			ptr = strchr (bptr, '}');
@@ -740,12 +914,10 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 				}
 				free (bptr);
 				return 0; // UT64_MAX;
-			} else {
-				int rows;
-				(void)r_cons_get_size (&rows);
-				return rows;
 			}
-			break;
+			int rows;
+			(void)r_cons_get_size (&rows);
+			return rows;
 		case 'e': // $e
 			if (str[2] == '{') { // $e{flag} flag off + size
 				char *flagName = strdup (str + 3);
@@ -761,23 +933,12 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 				return UT64_MAX;
 			}
 			return r_anal_op_is_eob (&op);
-		case 'j': // $j jump address
-			return op.jump;
 		case 'p': // $p
 			return r_sys_getpid ();
 		case 'P': // $P
 			return core->dbg->pid > 0 ? core->dbg->pid : 0;
 		case 'f': // $f jump fail address
-			if (str[2] == 'l') { // $fl flag length
-				RFlagItem *fi = r_flag_get_i (core->flags, core->offset);
-				if (fi) {
-					return fi->size;
-				}
-				return 0;
-			}
-			return op.fail;
-		case 'm': // $m memref
-			return op.ptr;
+			return numvar_flag (core, str + 2, ok);
 		case 'B': // $B base address
 		case 'M': { // $M map address
 				ut64 lower = UT64_MAX;
@@ -800,11 +961,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 				return (lower == UT64_MAX)? 0LL: lower;
 			}
 			break;
-		case 'v': // $v immediate value
-			return op.val;
-		case 'l': // $l opcode length
-			return op.size;
-		case 'b': // $b
+		case 'b': // "$b" block size
 			return core->blocksize;
 		case 's': // $s file size
 			if (str[2] == '{') { // $s{flag} flag size
@@ -853,16 +1010,12 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 		case '?': // $?
 			return core->num->value; // rc;
 		case '$': // $$ offset
-			return str[2] == '$' ? core->prompt_offset : core->offset;
-		case 'o': { // $o
-			RBinSection *s = r_bin_get_section_at (r_bin_cur_object (core->bin), core->offset, true);
-			return s ? core->offset - s->vaddr + s->paddr : core->offset;
-		}
-		case 'O': // $O
-			if (core->print->cur_enabled) {
-				return core->offset + core->print->cur;
+			return numvar_dollar (core, str, ok);
+		case 'o': // $o
+			{
+				RBinSection *s = r_bin_get_section_at (r_bin_cur_object (core->bin), core->offset, true);
+				return s ? core->offset - s->vaddr + s->paddr : core->offset;
 			}
-			return core->offset;
 		case 'C': // $C nth call
 			return getref (core, atoi (str + 2), 'r', R_ANAL_REF_TYPE_CALL);
 		case 'J': // $J nth jump
@@ -890,8 +1043,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 			}
 			return 0;
 		default:
-			R_LOG_ERROR ("Invalid variable '%s'", str);
-			return 0;
+			return invalid_numvar (core, str);
 		}
 		break;
 	default:
