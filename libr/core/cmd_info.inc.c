@@ -36,6 +36,7 @@ static RCoreHelpMessage help_msg_ic = {
 	"Usage: ic", "[.-+clgjsq][jq]", "Display class information",
 	"ic", "", "List classes, methods and fields (icj for json)",
 	"ic.", "", "show class and method name in current seek",
+	"ic,", "[table-query]", "query comma separated values",
 	"ic-", "[klass.method]", "delete given klass or klass.name",
 	"ic+", "[klass.method]", "add new symbol in current seek for a given klass and method name",
 	"icc", " [lang]", "List classes, methods and fields in Header Format (see bin.lang=swift,java,objc,cxx)",
@@ -50,6 +51,7 @@ static RCoreHelpMessage help_msg_ic = {
 static RCoreHelpMessage help_msg_iz = {
 	"Usage: iz", "[][jq*]", "List strings",
 	"iz", "", "strings in data sections (in JSON/Base64)",
+	"iz,", "[:help]", "perform a table query on strings listing",
 	"iz-", " [addr]", "purge string via bin.str.purge",
 	"iz*", "", "print flags and comments r2 commands for all the strings",
 	"izz", "", "search for Strings in the whole binary",
@@ -72,7 +74,7 @@ static RCoreHelpMessage help_msg_iS = {
 	"iS.", "", "current section",
 	"iS,", "[table-query]", "list sections in table using given expression",
 	"iS=", "", "show ascii-art color bars with the section ranges",
-	"iSS", "", "list memory segments (maps with om)",
+	"iSS", "[,tablequery]", "list memory segments (maps with om)",
 	NULL
 };
 
@@ -105,7 +107,7 @@ static RCoreHelpMessage help_msg_i = {
 	"ig", "[?][h]", "guess size of binary program (igh use human units instead of number of bytes)",
 	"ih", "[?]", "show binary headers (see iH)",
 	"iH", "[?]", "show binary headers fields",
-	"ii", "[?][c,j*,]", "list the symbols imported from other libraries",
+	"ii", "[?][cj*,]", "list the symbols imported from other libraries",
 	"iic", "[?][jqk*] ([type])", "classify imports",
 	"iI", "", "binary info", // deprecate imho, may confuse with il and its already in `i`
 	"ik", " [query]", "key-value database from RBinObject",
@@ -1042,10 +1044,10 @@ static void cmd_ic0(RCore *core, RBinObject *obj, int mode, PJ *pj, bool is_arra
 			continue;
 		}
 		if (is_doublerad) {
-			r_cons_printf ("ac %s\n", kname);
+			r_cons_printf ("'ac %s\n", kname);
 			r_list_foreach (cls->methods, iter2, sym) {
 				const char *name = r_bin_name_tostring2 (sym->name, pref);
-				r_cons_printf ("ac %s %s 0x%08"PFMT64x"\n", kname,
+				r_cons_printf ("'ac %s %s 0x%08"PFMT64x"\n", kname,
 						name, iova? sym->vaddr: sym->paddr);
 			}
 			continue;
@@ -1172,6 +1174,8 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 	case '+': // "ic+"
 		cmd_ic_add (core, r_str_trim_head_ro (input + 1));
 		break;
+	case ',':
+		mode = ',';
 	// commands that iterate
 	case ' ': // "ic "
 	case 'k': // "ick"
@@ -1214,8 +1218,8 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 				return;
 			}
 			r_list_foreach (objs, objs_iter, bf) {
-				RBinObject *obj = bf->bo;
-				if (!obj || !obj->classes || r_list_empty (obj->classes)) {
+				RBinObject *bo = bf->bo;
+				if (!bo || !bo->classes || r_list_empty (bo->classes)) {
 					if (r_str_startswith (input, "lc")) { // "iclc"
 						r_cons_printf ("0\n");
 					}
@@ -1232,7 +1236,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 				core->bin->cur = bf;
 
 				if (is_superquiet && is_jvm) {
-					r_list_foreach (obj->classes, iter, cls) {
+					r_list_foreach (bo->classes, iter, cls) {
 						const char *kname = r_bin_name_tostring (cls->name);
 						if (!isKnownAndroidPackage (kname)) {
 							r_cons_printf ("%s\n", kname);
@@ -1240,13 +1244,13 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 					}
 					break;
 				}
-				tts_say (core, "classes", r_list_length (obj->classes));
+				tts_say (core, "classes", r_list_length (bo->classes));
 				switch (cmd) {
 				case 'g':
-					cmd_icg (core, obj, arg);
+					cmd_icg (core, bo, arg);
 					break;
 				case 's': // "ics"
-					r_list_foreach (obj->classes, iter, cls) {
+					r_list_foreach (bo->classes, iter, cls) {
 						const char *kname = r_bin_name_tostring (cls->name);
 						r_list_foreach (cls->methods, iter2, sym) {
 							ut64 addr = iova? sym->vaddr: sym->paddr;
@@ -1259,13 +1263,13 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 					}
 					break;
 				case 'k': // "ick"
-					classdump_keys (core, obj);
-					return;
+					classdump_keys (core, bo);
+					break;
 				case 'l': // "icl"
 					if (r_str_startswith (input, "lc")) {
-						cmd_ic0 (core, obj, 'c', pj, is_array, va, idx, cls_name, &count, is_doublerad);
+						cmd_ic0 (core, bo, 'c', pj, is_array, va, idx, cls_name, &count, is_doublerad);
 					} else {
-						r_list_foreach (obj->classes, iter, cls) {
+						r_list_foreach (bo->classes, iter, cls) {
 							r_list_foreach (cls->methods, iter2, sym) {
 								const char *comma = iter2->p? " ": "";
 								r_cons_printf ("%s0x%"PFMT64x, comma,
@@ -1283,7 +1287,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 					ut64 min = UT64_MAX;
 					const char *method = NULL;
 					ut64 max = 0LL;
-					r_list_foreach (obj->classes, iter, cls) {
+					r_list_foreach (bo->classes, iter, cls) {
 						method = NULL;
 						r_list_foreach (cls->methods, iter2, sym) {
 							ut64 at = iova? sym->vaddr: sym->paddr;
@@ -1315,7 +1319,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 					if (mode == '*') {
 						mode |= R_MODE_RADARE;
 					} else if (mode == 'k') { // "icck"
-						classdump_keys (core, obj);
+						classdump_keys (core, bo);
 						return;
 					}
 					const char *lang = strchr (input, ' ');
@@ -1324,7 +1328,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 						olang = strdup (r_config_get (core->config, "bin.lang"));
 						r_config_set (core->config, "bin.lang", lang + 1);
 					}
-					RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (obj->classes));
+					RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (bo->classes));
 					if (olang) {
 						r_config_set (core->config, "bin.lang", olang);
 						free (olang);
@@ -1336,17 +1340,22 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 						mode = R_MODE_JSON;
 					}
 					// TODO add the ability to filter by name
-					RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (obj->classes));
+					RBININFO ("classes", R_CORE_BIN_ACC_CLASSES, NULL, r_list_length (bo->classes));
 					break;
 				case ' ': // "ic"
 				case 0: // "ic"
+					cmd_ic0 (core, bo, mode, pj, is_array, va, idx, cls_name, &count, is_doublerad);
+					break;
 				default:
-					cmd_ic0 (core, obj, mode, pj, is_array, va, idx, cls_name, &count, is_doublerad);
+					r_core_return_invalid_command (core, "ic", mode);
 					break;
 				}
 				core->bin->cur = cur;
 			}
 		}
+		break;
+	default:
+		r_core_return_invalid_command (core, "ic", cmd);
 		break;
 	}
 }
@@ -1411,12 +1420,16 @@ static void cmd_iz(RCore *core, PJ *pj, int mode, int is_array, bool va, const c
 		// "iz"
 		bool validcmd = true;
 		switch (input[1]) {
-		case 'J':
+		case ',': // "iz,"
+			R_FREE (core->table_query);
+			core->table_query = strdup (input + 2);
+			break;
+		case 'J': // "izJ"
 			validcmd = false;
 			break;
-		case '*':
-		case 'j':
-		case 0:
+		case '*': // "iz*"
+		case 'j': // "izj"
+		case 0: // "iz"
 			validcmd = true;
 			break;
 		case 'q':
@@ -1474,6 +1487,10 @@ static void cmd_iS(RCore *core, const char *input, PJ **_pj, int mode, const boo
 		if (input[1] == 'S') {
 			name = "segments";
 			input++;
+			if (input[1] == ',') {
+				R_FREE (core->table_query);
+				core->table_query = strdup (input + 2);
+			}
 			action = R_CORE_BIN_ACC_SEGMENTS;
 		}
 		switch (input[1]) {
@@ -1951,6 +1968,10 @@ static int cmd_info(void *data, const char *input) {
 			RListIter *iter;
 			RBinFile *bf;
 			RBinFile *cur = core->bin->cur;
+			if (input[1] == ',') {
+				R_FREE (core->table_query);
+				core->table_query = strdup (input + 2);
+			}
 			if (!r_list_empty (objs)) {
 				r_list_foreach (objs, iter, bf) {
 					RBinObject *obj = bf->bo;
