@@ -727,18 +727,17 @@ static bool check_string_at(RCore *core, ut64 addr) {
 
 static void r_anal_set_stringrefs(RCore *core, RAnalFunction *fcn) {
 	RVecAnalRef *refs = r_anal_function_get_refs (fcn);
-	if (!refs) {
-		return;
-	}
-
-	RAnalRef *ref;
-	R_VEC_FOREACH (refs, ref) {
-		const ut32 rt = R_ANAL_REF_TYPE_MASK (ref->type);
-		if (rt == R_ANAL_REF_TYPE_DATA && check_string_at (core, ref->addr)) {
-			r_anal_xrefs_set (core->anal, ref->at, ref->addr, R_ANAL_REF_TYPE_STRN | R_ANAL_REF_TYPE_READ);
+	if (refs) {
+		RAnalRef *ref;
+		R_VEC_FOREACH (refs, ref) {
+			const ut32 rt = R_ANAL_REF_TYPE_MASK (ref->type);
+			if (rt == R_ANAL_REF_TYPE_DATA && check_string_at (core, ref->addr)) {
+				// const int type = core_type_by_addr (core, ref->addr);
+				r_anal_xrefs_set (core->anal, ref->at, ref->addr, R_ANAL_REF_TYPE_STRN | R_ANAL_REF_TYPE_READ);
+			}
 		}
+		RVecAnalRef_free (refs);
 	}
-	RVecAnalRef_free (refs);
 }
 
 static bool r_anal_try_get_fcn(RCore *core, RAnalRef *ref, int fcndepth, int refdepth) {
@@ -4603,6 +4602,10 @@ static bool found_xref(RCore *core, ut64 at, ut64 xref_to, RAnalRefType type, PJ
 	if (!rad) {
 		if (cfg_anal_strings && R_ANAL_REF_TYPE_MASK (type) == R_ANAL_REF_TYPE_DATA) {
 			add_string_ref (core, at, xref_to);
+		} else if (cfg_anal_strings && R_ANAL_REF_TYPE_MASK (type) == R_ANAL_REF_TYPE_ICOD) {
+			add_string_ref (core, at, xref_to);
+		} else if (cfg_anal_strings && R_ANAL_REF_TYPE_MASK (type) == R_ANAL_REF_TYPE_STRN) {
+			add_string_ref (core, at, xref_to);
 		} else if (xref_to) {
 			r_anal_xrefs_set (core->anal, at, xref_to, type);
 		}
@@ -4636,7 +4639,8 @@ static bool found_xref(RCore *core, ut64 at, ut64 xref_to, RAnalRefType type, PJ
 	return true;
 }
 
-ut64 r_anal_perm_to_reftype(int perm) {
+static ut64 r_anal_perm_to_reftype(int perm) {
+	// XXX we have apis in anal/xrefs.c but nothing like this
 	ut64 refType = 0;
 	if (perm & 1) refType |= R_ANAL_REF_TYPE_READ;
 	if (perm & 2) refType |= R_ANAL_REF_TYPE_WRITE;
@@ -4662,7 +4666,6 @@ R_API int r_core_anal_search_xrefs(RCore *core, ut64 from, ut64 to, PJ *pj, int 
 	}
 
 	const bool search_badpages = r_config_get_b (core->config, "search.badpages");
-
 	if (core->blocksize <= OPSZ) {
 		R_LOG_ERROR ("block size too small");
 		return -1;
@@ -4718,7 +4721,7 @@ R_API int r_core_anal_search_xrefs(RCore *core, ut64 from, ut64 to, PJ *pj, int 
 			break;
 		}
 		if (search_badpages) {
-			memset (block, -1, bsz);
+			memset (block, 0xff, bsz);
 			if (!memcmp (buf, block, bsz)) {
 				if (!uninit) {
 					if (bsz != left) {
@@ -4749,9 +4752,25 @@ R_API int r_core_anal_search_xrefs(RCore *core, ut64 from, ut64 to, PJ *pj, int 
 		(void) r_anal_op (core->anal, &op, at, buf, bsz, R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_HINT);
 		while ((i + maxopsz) < bsz && !r_cons_is_breaked ()) {
 			r_anal_op_fini (&op);
+			// check if meta tells its code
+			{
+				ut64 size;
+				RAnalMetaItem *mi = r_meta_get_at (core->anal, at + i, R_META_TYPE_ANY, &size);
+				if (mi) {
+					switch (mi->type) {
+					case R_META_TYPE_FORMAT:
+					case R_META_TYPE_DATA:
+					case R_META_TYPE_STRING:
+						i += size;
+						continue;
+					default:
+						break;
+					}
+				}
+			}
 			ret = r_anal_op (core->anal, &op, at + i, buf + i, bsz - i, R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_HINT);
 			if (ret < 1) {
-				R_LOG_DEBUG ("aar invalid op %llx %d", at + i, codealign);
+				R_LOG_DEBUG ("aar invalid op 0x%"PFMT64x" %d", at + i, codealign);
 				i += minopsz;
 				if (codealign > 1) {
 					int d = (at + i) % codealign;
@@ -4775,14 +4794,31 @@ R_API int r_core_anal_search_xrefs(RCore *core, ut64 from, ut64 to, PJ *pj, int 
 			}
 			// find references
 			if (op.ptr && op.ptr != UT64_MAX && op.ptr != UT32_MAX) {
+#if 1
+				const int type = core_type_by_addr (core, op.ptr);
+				/// XXX R2_600. we need op.ptrdir . because op.ptr can be op[0] or op[1]
+				const ut64 perm = (type == R_ANAL_REF_TYPE_STRN)? R_ANAL_OP_DIR_READ: (op.direction &= (~R_ANAL_OP_DIR_REF));
+				const int reftype = type | r_anal_perm_to_reftype (perm);
+#else
 				const ut64 perm = op.direction &= (~R_ANAL_OP_DIR_REF);
-				if (found_xref (core, op.addr, op.ptr, R_ANAL_REF_TYPE_DATA | r_anal_perm_to_reftype(perm), pj, rad, cfg_debug, cfg_anal_strings)) {
+				const int reftype = R_ANAL_REF_TYPE_DATA | r_anal_perm_to_reftype (perm);
+#endif
+				if (found_xref (core, op.addr, op.ptr, reftype, pj, rad, cfg_debug, cfg_anal_strings)) {
 					count++;
 				}
 			} else {
 				// check for using reg+disp, which shouldnt be valid if op.ptr is set
 				if (op.addr > 512 && op.disp > 512 && op.disp && op.disp != UT64_MAX) {
-					if (found_xref (core, op.addr, op.disp, R_ANAL_REF_TYPE_DATA, pj, rad, cfg_debug, cfg_anal_strings)) {
+#if 0
+					// TODO: experiment with this fix
+					// R2R db/anal/x86_32
+					const int type = core_type_by_addr (core, op.disp);
+					const ut64 perm = op.direction &= (~R_ANAL_OP_DIR_REF);
+					const int reftype = type | r_anal_perm_to_reftype (perm);
+#else
+					const int reftype = R_ANAL_REF_TYPE_DATA;
+#endif
+					if (found_xref (core, op.addr, op.disp, reftype, pj, rad, cfg_debug, cfg_anal_strings)) {
 						count++;
 					}
 				}
@@ -6099,7 +6135,20 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 			// arm64
 			if (cur && arch == R2_ARCH_ARM64) {
 				if (CHECKREF (ESIL->cur)) {
+#if 1
+					int type = core_type_by_addr (core, ESIL->cur);
+					if (type == R_ANAL_REF_TYPE_NULL) {
+						type = R_ANAL_REF_TYPE_DATA;
+					}
+					if (type == R_ANAL_REF_TYPE_ICOD) {
+						type |= R_ANAL_REF_TYPE_EXEC;
+					} else {
+						type |= R_ANAL_REF_TYPE_READ;
+					}
+					r_anal_xrefs_set (core->anal, cur, ESIL->cur, type);
+#else
 					r_anal_xrefs_set (core->anal, cur, ESIL->cur, R_ANAL_REF_TYPE_STRN | R_ANAL_REF_TYPE_READ);
+#endif
 				}
 #if 0
 				ut64 dst = esilbreak_last_read;
@@ -6159,9 +6208,10 @@ R_API void r_core_anal_esil(RCore *core, const char *str /* len */, const char *
 				ut64 dst = ESIL->cur;
 				if ((target && dst == ntarget) || !target) {
 					if (CHECKREF (dst)) {
-						int type = core_type_by_addr (core, dst); // R_ANAL_REF_TYPE_DATA;
-						RAnalRefType ref_type = type == UT64_MAX ? R_ANAL_REF_TYPE_CODE : type;
-						r_anal_xrefs_set (core->anal, cur, dst, ref_type | R_ANAL_REF_TYPE_WRITE);
+						const int type = core_type_by_addr (core, dst);
+						RAnalRefType ref_type = (type == -1)? R_ANAL_REF_TYPE_CODE : type;
+						ref_type |= R_ANAL_REF_TYPE_READ; // maybe ICOD instead of CODE
+						r_anal_xrefs_set (core->anal, cur, dst, ref_type);
 					}
 				}
 				if (cfg_anal_strings) {
