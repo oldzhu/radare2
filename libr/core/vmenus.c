@@ -475,6 +475,8 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 	const int nbits = sizeof (ut64) * 8;
 	bool colorBits = false;
 	int analopType;
+	ut8 yankBuffer[8] = {0};
+	int yankSize = 0;
 	int i, j, x = 0;
 	RAnalOp analop;
 	ut8 buf[sizeof (ut64)];
@@ -699,6 +701,18 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 				wordsize = 1;
 			}
 			break;
+		case 'e': // swap endian
+			{
+				ut8 a[8];
+				memcpy (a, buf, sizeof (a));
+				const int nbyte = x / 8;
+				const int last = R_MIN (nbyte + wordsize, 8);
+				int i;
+				for (i = nbyte; i < last; i++) {
+					buf[i] = a[last - 1 - i + nbyte];
+				}
+			}
+			break;
 		case 'Q':
 		case 'q':
 			if (analop.bytes) {
@@ -844,6 +858,28 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 		case 'b':
 			bitsInLine = !bitsInLine;
 			break;
+		case 'y': // yank
+			{
+				const int nbyte = x / 8;
+				const int last = R_MIN (nbyte + wordsize, 8);
+				yankSize = last - nbyte + 1;
+				int i;
+				for (i = nbyte; i < last; i++) {
+					yankBuffer[i - nbyte] = buf[i];
+				}
+			}
+			break;
+		case 'Y': // paste
+			{
+				const int nbyte = x / 8;
+				const int last = R_MIN (nbyte + wordsize, yankSize + nbyte);
+				int i;
+				int j = 0;
+				for (i = nbyte; i < last; i++) {
+					buf[i] = yankBuffer[j++];
+				}
+			}
+			break;
 		case '?':
 			r_cons_clear00 ();
 			r_cons_printf (
@@ -851,10 +887,12 @@ R_API bool r_core_visual_bit_editor(RCore *core) {
 			" q     - quit the bit editor\n"
 			" R     - randomize color palette\n"
 			" b     - toggle bitsInLine\n"
+			" e     - toggle endian of the selected word\n"
 			" j/k   - toggle bit value (same as space key)\n"
 			" J/K   - next/prev instruction (so+1,so-1)\n"
 			" h/l   - select next/previous bit\n"
 			" w/W   - increment 2 or 4 the wordsize\n"
+			" y/Y   - yank/paste selected bits\n"
 			" +/-   - increment or decrement byte value\n"
 			" </>   - rotate left/right byte value\n"
 			" i     - insert numeric value of byte\n"
@@ -4809,12 +4847,12 @@ R_API void r_core_visual_colors(RCore *core) {
 #define CASE_RGB(x,X,y) \
 	case x:if ((y) > 0x00) { (y)--; } break;\
 	case X:if ((y) < 0xff) { (y)++; } break;
-		CASE_RGB ('R','r',rcolor.r);
-		CASE_RGB ('G','g',rcolor.g);
-		CASE_RGB ('B','b',rcolor.b);
-		CASE_RGB ('E','e',rcolor.r2);
-		CASE_RGB ('F','f',rcolor.g2);
-		CASE_RGB ('V','v',rcolor.b2);
+		CASE_RGB ('R', 'r', rcolor.r);
+		CASE_RGB ('G', 'g', rcolor.g);
+		CASE_RGB ('B', 'b', rcolor.b);
+		CASE_RGB ('E', 'e', rcolor.r2);
+		CASE_RGB ('F', 'f', rcolor.g2);
+		CASE_RGB ('V', 'v', rcolor.b2);
 		case 'Q':
 		case 'q':
 			free (res);
