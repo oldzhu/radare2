@@ -3411,7 +3411,7 @@ static void cmd_print_op(RCore *core, const char *input) {
 			algo = r_list_get_n (args, 1);
 		}
 		if (!args || !algo) {
-			r_crypto_list (core->crypto, r_cons_printf, 0 | (int)R_CRYPTO_TYPE_SIGNATURE << 8);
+			r_crypto_list (core->crypto, r_cons_printf, 0, R_CRYPTO_TYPE_SIGNATURE);
 			r_core_cmd_help_match (core, help_msg_po, "poS");
 			break;
 		}
@@ -3450,7 +3450,7 @@ static void cmd_print_op(RCore *core, const char *input) {
 			algo = r_list_get_n (args, 1);
 		}
 		if (!args || !algo) {
-			r_crypto_list (core->crypto, r_cons_printf, 0 | (int)R_CRYPTO_TYPE_ENCRYPT << 8);
+			r_crypto_list (core->crypto, r_cons_printf, 0, R_CRYPTO_TYPE_ENCRYPT);
 			r_core_cmd_help_match_spec (core, help_msg_po, "po", input[1]);
 			break;
 		}
@@ -3917,19 +3917,19 @@ static bool cmd_print_ph(RCore *core, const char *input) {
 	}
 	if (!i0 || i0 == 'l' || i0 == 'L') {
 		RCrypto *cry = r_crypto_new ();
-		r_crypto_list (cry, NULL, 'q' | (int)R_CRYPTO_TYPE_HASHER << 8);
+		r_crypto_list (cry, NULL, 'q', R_CRYPTO_TYPE_HASH);
 		r_crypto_free (cry);
 		return true;
 	}
 	if (i0 == 'j') { // "phj"
 		RCrypto *cry = r_crypto_new ();
-		r_crypto_list (cry, r_cons_printf, 'j' | (int)R_CRYPTO_TYPE_ALL << 8);
+		r_crypto_list (cry, r_cons_printf, 'j', R_CRYPTO_TYPE_ALL);
 		r_crypto_free (cry);
 		return true;
 	}
 	if (i0 == 'J') { // "phJ"
 		RCrypto *cry = r_crypto_new ();
-		r_crypto_list (cry, r_cons_printf, 'J' | (int)R_CRYPTO_TYPE_HASHER << 8);
+		r_crypto_list (cry, r_cons_printf, 'J', R_CRYPTO_TYPE_HASH);
 		r_crypto_free (cry);
 		return true;
 	}
@@ -5837,11 +5837,7 @@ static ut8 *decode_text(RCore *core, ut64 offset, size_t len, bool zeroend) {
 			out = calloc (len, 10);
 			if (out) {
 				r_io_read_at (core->io, core->offset, data, len);
-#if R2_USE_NEW_ABI
 				r_charset_encode_str (core->print->charset, out, out_len, data, len, false);
-#else
-				r_charset_encode_str (core->print->charset, out, out_len, data, len);
-#endif
 				free (data);
 			}
 		}
@@ -7666,11 +7662,7 @@ static int cmd_print(void *data, const char *input) {
 							ut8 *data = malloc (len);
 							if (data) {
 								r_io_read_at (core->io, core->offset, data, len);
-#if R2_USE_NEW_ABI
 								(void)r_charset_encode_str (core->print->charset, out, out_len, data, len, true);
-#else
-								(void)r_charset_encode_str (core->print->charset, out, out_len, data, len);
-#endif
 								r_print_string (core->print, core->offset,
 									out, len, R_PRINT_STRING_ZEROEND);
 								free (data);
