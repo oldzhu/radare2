@@ -365,7 +365,6 @@ static void _print_strings(RCore *r, RList *list, PJ *pj, int mode, int va) {
 		r_flag_space_set (r->flags, R_FLAGS_FS_STRINGS);
 		r_cons_break_push (NULL, NULL);
 	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_println ("[Strings]");
 		r_table_set_columnsf (table, "nXXnnsss", "nth", "paddr", "vaddr", "len", "size", "section", "type", "string");
 	}
 	RBinString b64 = {0};
@@ -1380,7 +1379,6 @@ static bool bin_source(RCore *r, PJ *pj, int mode) {
 		}
 		r_list_free (list);
 	}
-	r_cons_printf ("[Source file]\n");
 	r_list_uniq_inplace (final_list, srclineVal);
 	r_list_foreach (final_list, iter2, srcline) {
 		r_cons_printf ("%s\n", srcline);
@@ -1429,7 +1427,6 @@ static bool bin_main(RCore *r, PJ *pj, int mode, int va) {
 		pj_kn (pj, "paddr", binmain->paddr);
 		pj_end (pj);
 	} else {
-		r_cons_printf ("[Main]\n");
 		r_cons_printf ("vaddr=0x%08"PFMT64x" paddr=0x%08"PFMT64x"\n",
 			addr, binmain->paddr);
 	}
@@ -1462,12 +1459,6 @@ static bool bin_entry(RCore *r, PJ *pj, int mode, ut64 laddr, int va, bool inifi
 		r_cons_printf ("fs+symbols\n");
 	} else if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
-	} else if (IS_MODE_NORMAL (mode)) {
-		if (inifin) {
-			r_cons_printf ("[Constructors]\n");
-		} else {
-			r_cons_printf ("[Entrypoints]\n");
-		}
 	}
 
 	r_list_foreach (entries, iter, entry) {
@@ -1582,8 +1573,6 @@ static bool bin_entry(RCore *r, PJ *pj, int mode, ut64 laddr, int va, bool inifi
 		r_cons_printf ("fs-\n");
 	} else if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
-	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_printf ("\n%i entrypoints\n", init_i + fini_i + preinit_i + i);
 	}
 	return true;
 }
@@ -1859,7 +1848,6 @@ static bool bin_relocs(RCore *r, PJ *pj, int mode, int va) {
 	R_RETURN_VAL_IF_FAIL (table, false);
 	Sdb *db = NULL;
 	char *sdb_module = NULL;
-	int i = 0;
 
 	R_TIME_PROFILE_BEGIN;
 
@@ -1911,7 +1899,6 @@ static bool bin_relocs(RCore *r, PJ *pj, int mode, int va) {
 	if (IS_MODE_RAD (mode)) {
 		r_cons_println ("fs relocs");
 	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_println ("[Relocations]");
 		r_table_set_columnsf (table, "XXsds", "vaddr", "paddr", "type", "ntype", "name");
 	} else if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
@@ -2054,7 +2041,6 @@ static bool bin_relocs(RCore *r, PJ *pj, int mode, int va) {
 				bin_reloc_type_name (reloc), reloc->ntype, res);
 			free (res);
 		}
-		i++;
 	}
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
@@ -2066,9 +2052,10 @@ static bool bin_relocs(RCore *r, PJ *pj, int mode, int va) {
 		}
 		if (show_table) {
 			char *s = r_table_tostring (table);
-			r_cons_printf ("\n%s\n", s);
-			free (s);
-			r_cons_printf ("\n%i relocations\n", i);
+			if (s) {
+				r_cons_print (s);
+				free (s);
+			}
 		}
 	}
 
@@ -2184,7 +2171,6 @@ static bool bin_imports(RCore *r, PJ *pj, int mode, int va, const char *name) {
 	} else if (IS_MODE_RAD (mode)) {
 		r_cons_println ("fs imports");
 	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_println ("[Imports]");
 		r_table_set_columnsf (table, "nXssss", "nth", "vaddr", "bind", "type", "lib", "name");
 	}
 	r_list_foreach (imports, iter, import) {
@@ -2273,7 +2259,7 @@ static bool bin_imports(RCore *r, PJ *pj, int mode, int va, const char *name) {
 		}
 		if (show_table) {
 			char *s = r_table_tostring (table);
-			r_cons_printf ("%s\n", s);
+			r_cons_print (s);
 			free (s);
 		}
 	}
@@ -2373,17 +2359,15 @@ static void snInit(RCore *r, SymName *sn, RBinSymbol *sym, const char *lang, boo
 }
 
 static void snFini(SymName *sn) {
-	if (sn) {
-		R_FREE (sn->name);
-		R_FREE (sn->libname);
-		R_FREE (sn->nameflag);
-		R_FREE (sn->demname);
-		R_FREE (sn->demflag);
-		R_FREE (sn->classname);
-		R_FREE (sn->classflag);
-		R_FREE (sn->methname);
-		R_FREE (sn->methflag);
-	}
+	R_FREE (sn->name);
+	R_FREE (sn->libname);
+	R_FREE (sn->nameflag);
+	R_FREE (sn->demname);
+	R_FREE (sn->demflag);
+	R_FREE (sn->classname);
+	R_FREE (sn->classflag);
+	R_FREE (sn->methname);
+	R_FREE (sn->methflag);
 }
 
 static bool its_an_export(RBinSymbol *s) {
@@ -2496,14 +2480,10 @@ static bool bin_symbols(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at,
 	} else if (at == UT64_MAX && exponly) {
 		if (IS_MODE_RAD (mode)) {
 			r_cons_printf ("fs exports\n");
-		} else if (IS_MODE_NORMAL (mode) && !r->table_query) {
-			r_cons_printf (printHere ? "" : "[Exports]\n");
 		}
 	} else if (at == UT64_MAX && !exponly) {
 		if (IS_MODE_RAD (mode)) {
 			r_cons_printf ("fs symbols\n");
-		} else if (IS_MODE_NORMAL (mode) && !r->table_query) {
-			r_cons_printf (printHere ? "" : "[Symbols]\n");
 		}
 	}
 	if (IS_MODE_NORMAL (mode)) {
@@ -2735,7 +2715,7 @@ next:
 			}
 		}
 		char *s = r_table_tostring (table);
-		r_cons_printf ("%s", s);
+		r_cons_print (s);
 		free (s);
 	}
 
@@ -2790,15 +2770,14 @@ static char *filter_hash_string(const char *chksum) {
 	if (!chksum) {
 		return NULL;
 	}
-
-	char *aux, *ret = NULL;
+	char *ret = NULL;
 	bool isFirst = true;
 	RList *hashlist = r_str_split_duplist (chksum, ",", true);
 	RListIter *iter;
 	char *hashname;
 	r_list_foreach (hashlist, iter, hashname) {
 		if (r_hash_name_to_bits (hashname)) {
-			aux = r_str_newf (isFirst? "%s" : ", %s", hashname);
+			char *aux = r_str_newf (isFirst? "%s" : ", %s", hashname);
 			ret = r_str_append (ret, aux);
 			free (aux);
 			if (isFirst) {
@@ -2870,9 +2849,6 @@ static bool io_create_mem_map(RIO *io, RBinSection *sec, ut64 at, ut64 gap) {
 	map->name = r_str_newf ("mmap.%s", sec->name);
 	return true;
 }
-
-
-
 
 static void add_section(RCore *core, RBinSection *sec, ut64 addr, int fd) {
 	if (!r_io_desc_get (core->io, fd) || UT64_ADD_OVFCHK (sec->size, sec->paddr) ||
@@ -2968,7 +2944,7 @@ static bool bin_map_sections_to_segments(RBin *bin, PJ *pj, int mode) {
 	if (IS_MODE_NORMAL (mode)) {
 		r_cons_printf ("Section to Segment mapping:\n");
 		char *s = r_table_tostring (table);
-		r_cons_printf ("%s\n", s);
+		r_cons_print (s);
 		free (s);
 	}
 	r_list_free (segments);
@@ -3048,7 +3024,7 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 		}
 		if (show_table) {
 			char *s = r_table_tostring (table);
-			r_cons_printf ("\n%s\n", s);
+			r_cons_print (s);
 			free (s);
 		}
 		r_table_free (table);
@@ -3061,9 +3037,6 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 		}
 	} else if (IS_MODE_RAD (mode) && at == UT64_MAX) {
 		r_cons_printf ("fs %ss\n", type);
-	} else if (IS_MODE_NORMAL (mode) && at == UT64_MAX && !printHere) {
-		// R2_600 - remove this [Sections] header
-		r_cons_printf ("[%s]\n", print_segments ? "Segments" : "Sections");
 	} else if (IS_MODE_NORMAL (mode) && printHere) {
 		r_cons_printf ("Current section\n");
 	} else if (IS_MODE_SET (mode)) {
@@ -3342,8 +3315,6 @@ static bool bin_sections(RCore *r, PJ *pj, int mode, ut64 laddr, int va, ut64 at
 	io_section_info = NULL;
 	if (IS_MODE_JSON (mode) && !printHere) {
 		pj_end (pj);
-	} else if (IS_MODE_NORMAL (mode) && at == UT64_MAX && !printHere) {
-		// r_cons_printf ("\n%i sections\n", i);
 	}
 	// run the formats now
 	r_list_foreach (sections, iter, section) {
@@ -3365,7 +3336,7 @@ out:
 		}
 		if (show_table) {
 			char *s = r_table_tostring (table);
-			r_cons_printf ("\n%s\n", s);
+			r_cons_print (s);
 			free (s);
 		}
 	}
@@ -3380,7 +3351,6 @@ static bool bin_fields(RCore *r, PJ *pj, int mode, int va) {
 	const int pref = r_config_get_b (r->config, "asm.demangle")? 'd': 0;
 	RListIter *iter;
 	RBinField *field;
-	int i = 0;
 	RBin *bin = r->bin;
 	RBinObject *o = r_bin_cur_object (bin);
 	if (!o) {
@@ -3404,8 +3374,6 @@ static bool bin_fields(RCore *r, PJ *pj, int mode, int va) {
 		pj_a (pj);
 	} else if (IS_MODE_RAD (mode)) {
 		r_cons_println ("fs+header");
-	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_println ("[Header fields]");
 	}
 	r_list_foreach (fields, iter, field) {
 		const bool haveComment = R_STR_ISNOTEMPTY (field->comment);
@@ -3470,14 +3438,11 @@ static bool bin_fields(RCore *r, PJ *pj, int mode, int va) {
 			r_cons_printf ("0x%08"PFMT64x" 0x%08"PFMT64x" %s\n",
 				field->vaddr, v, r_bin_name_tostring2 (field->name, pref));
 		}
-		i++;
 	}
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	} else if (IS_MODE_RAD (mode)) {
 		r_cons_println ("fs-");
-	} else if (IS_MODE_NORMAL (mode)) {
-		r_cons_printf ("\n%i fields\n", i);
 	}
 
 	return true;
@@ -4214,7 +4179,6 @@ static bool bin_size(RCore *r, PJ *pj, int mode) {
 static bool bin_libs(RCore *r, PJ *pj, int mode) {
 	RListIter *iter;
 	char* lib;
-	int i = 0;
 
 	RList *libs = r_bin_get_libs (r->bin);
 	if (IS_MODE_JSON (mode)) {
@@ -4222,9 +4186,6 @@ static bool bin_libs(RCore *r, PJ *pj, int mode) {
 	} else {
 		if (!libs) {
 			return false;
-		}
-		if (IS_MODE_NORMAL (mode)) {
-			r_cons_println ("[Linked libraries]");
 		}
 	}
 	r_list_foreach (libs, iter, lib) {
@@ -4239,13 +4200,9 @@ static bool bin_libs(RCore *r, PJ *pj, int mode) {
 			// simple and normal print mode
 			r_cons_println (lib);
 		}
-		i++;
 	}
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
-	} else if (IS_MODE_NORMAL (mode)) {
-		const char *libstr = (i > 1)? "libraries": "library";
-		r_cons_printf ("\n%i %s\n", i, libstr);
 	}
 	return true;
 }
@@ -4294,11 +4251,6 @@ static void bin_mem_print(PJ *pj, RList *mems, int perms, int depth, int mode) {
 static bool bin_mem(RCore *r, PJ *pj, int mode) {
 	if (!r) {
 		return false;
-	}
-	if (!IS_MODE_JSON (mode)) {
-		if (!(IS_MODE_RAD (mode) || IS_MODE_SET (mode))) {
-			r_cons_println ("[Memory]\n");
-		}
 	}
 	RList *mem = r_bin_get_mem (r->bin);
 	if (!mem) {

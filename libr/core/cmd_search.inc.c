@@ -820,6 +820,9 @@ R_API RList *r_core_get_boundaries_prot(RCore *core, R_UNUSED int perm, const ch
 	const RInterval search_itv = {search_from, search_to - search_from};
 	if (!mode) {
 		mode = r_config_get (core->config, bound_in);
+		if (!mode) {
+			mode = "search";
+		}
 	}
 	if (perm == -1) {
 		perm = R_PERM_RWX;
@@ -4058,19 +4061,21 @@ static int chatoi(const char *arg) {
 
 static bool is_json_command(const char *input, int *param_offset) {
 	const char *lastch = strchr (input, ' ');
-	const char *nextch = NULL;
-	if (lastch && lastch > input) {
-		lastch--;
-		nextch = r_str_trim_head_ro (lastch);
-	} else {
-		lastch = input + strlen (input) - 1;
-	}
-	if (param_offset) {
-		if (*lastch && lastch[1]) {
-			int delta = 2 + (nextch - input);
-			*param_offset = delta;
+	if (lastch) {
+		if (lastch > input) {
+			lastch--;
+			const char *nextch = r_str_trim_head_ro (lastch);
+			if (param_offset) {
+				if (*lastch && lastch[1]) {
+					int delta = 2 + (nextch - input);
+					*param_offset = delta;
+				}
+			}
+			return (*lastch == 'j');
 		}
+		return false;
 	}
+	lastch = input + strlen (input) - 1;
 	return (*lastch == 'j');
 }
 
@@ -5029,16 +5034,6 @@ reread:
 		}
 		// fallthrough
 	case ' ': // "/ " search string
-#if 0
-		if (!json) {
-			eprintf ("Searching %d byte(s) from 0x%08"PFMT64x " to 0x%08"PFMT64x ": ",
-					len, search_itv.addr, r_itv_end (search_itv));
-			for (i = 0; i < len; i++) {
-				eprintf ("%02x ", (ut8) inp[i]);
-			}
-			eprintf ("\n");
-		}
-#endif
 		{
 			const int distance = r_config_get_i (core->config, "search.distance");
 			inp = strdup (input + 1 + ignorecase + (param.outmode == R_MODE_JSON ? 1 : 0));

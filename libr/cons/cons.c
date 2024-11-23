@@ -9,7 +9,7 @@
 R_LIB_VERSION (r_cons);
 
 static R_TH_LOCAL int oldraw = -1;
-static R_TH_LOCAL RConsContext r_cons_context_default = {{{{0}}}};
+static R_TH_LOCAL RConsContext r_cons_context_default = {0};
 static R_TH_LOCAL RCons g_cons_instance = {0};
 static R_TH_LOCAL RCons *r_cons_instance = NULL;
 static R_TH_LOCAL ut64 prev = 0LL; //r_time_now_mono ();
@@ -58,23 +58,19 @@ typedef struct {
 	void *event_interrupt_data;
 } RConsBreakStack;
 
-#if R2_USE_NEW_ABI
 static void r_cons_grep_word_free(RConsGrepWord *gw) {
 	if (gw) {
 		free (gw->str);
 		free (gw);
 	}
 }
-#endif
 
 static void cons_grep_reset(RConsGrep *grep) {
 	if (grep) {
 		R_FREE (grep->str);
 		ZERO_FILL (*grep);
-#if R2_USE_NEW_ABI
 		r_list_free (grep->strings);
 		grep->strings = r_list_newf ((RListFree)r_cons_grep_word_free);
-#endif
 		grep->line = -1;
 		grep->sort = -1;
 		grep->sort_invert = false;
@@ -923,17 +919,10 @@ R_API int r_cons_get_buffer_len(void) {
 
 R_API void r_cons_filter(void) {
 	/* grep */
-#if R2_USE_NEW_ABI
 	if (C->filter || r_list_length (C->grep.strings) > 0 || C->grep.tokens_used || C->grep.less || C->grep.json) {
 		(void)r_cons_grepbuf ();
 		C->filter = false;
 	}
-#else
-	if (C->filter || C->grep.nstrings > 0 || C->grep.tokens_used || C->grep.less || C->grep.json) {
-		(void)r_cons_grepbuf ();
-		C->filter = false;
-	}
-#endif
 	/* html */
 	if (C->is_html) {
 		int newlen = 0;
@@ -1039,11 +1028,7 @@ R_API void r_cons_last(void) {
 
 static bool lastMatters(void) {
 	return (C->buffer_len > 0 &&
-#if R2_USE_NEW_ABI
-		(C->lastEnabled && !C->filter && r_list_empty (C->grep.strings))
-#else
-		(C->lastEnabled && !C->filter && C->grep.nstrings < 1)
-#endif
+		(C->lastEnabled && !C->filter && r_list_empty (C->grep.strings)) \
 		&& !C->grep.tokens_used && !C->grep.less \
 		&& !C->grep.json && !C->is_html);
 }

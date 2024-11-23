@@ -18,15 +18,12 @@ NAME=xcoff sections
 FILE=bins/xcoff/file-xcoff-aix51
 CMDS=iS
 EXPECT=<<EOF
-[Sections]
-
 nth paddr         size vaddr        vsize perm type   name
 ----------------------------------------------------------
 0   0x00000128  0x3722 0x10000128  0x3722 -r-x TEXT   .text-0
 1   0x0000384a   0x4ba 0x2000084a   0x4ba -rw- DATA   .data-1
 2   0x00000000    0x1c 0x20000d04    0x1c -rw- BSS    .bss-2
 3   0x00003d04   0xc73 0x00000000   0xc73 ---- LOADER .loader-3
-
 EOF
 RUN
 
@@ -57,10 +54,7 @@ NAME=xcoff entrypoint
 FILE=bins/xcoff/file-xcoff-aix51
 CMDS=ie
 EXPECT=<<EOF
-[Entrypoints]
 vaddr=0x10000128 paddr=0x00000000 haddr=-1 type=program
-
-1 entrypoints
 EOF
 RUN
 
@@ -68,7 +62,6 @@ NAME=xcoff imports
 FILE=bins/xcoff/file-xcoff-aix51
 CMDS=ii
 EXPECT=<<EOF
-[Imports]
 nth vaddr      bind type lib name
 ---------------------------------
 0   ---------- NONE UNK      errno
@@ -101,7 +94,6 @@ nth vaddr      bind type lib name
 27  ---------- NONE UNK      optind
 28  ---------- NONE FUNC     getline
 29  ---------- NONE UNK      optarg
-
 EOF
 RUN
 
@@ -109,7 +101,6 @@ NAME=xcoff imports 2
 FILE=bins/xcoff/gcc-ppc32-aix-dwarf2-exec
 CMDS=ii
 EXPECT=<<EOF
-[Imports]
 nth vaddr      bind type lib name
 ---------------------------------
 0   ---------- NONE UNK      errno
@@ -119,6 +110,5 @@ nth vaddr      bind type lib name
 4   ---------- NONE FUNC     fflush
 5   ---------- NONE FUNC     puts
 6   ---------- NONE UNK      __crt0v
-
 EOF
 RUN

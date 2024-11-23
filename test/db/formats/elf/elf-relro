@@ -10,8 +10,6 @@ NAME=ELF: arm64 relocs crashing
 FILE=bins/elf/librsjni_androix.so
 CMDS=ir
 EXPECT=<<EOF
-[Relocations]
-
 vaddr      paddr      type   ntype name
 ---------------------------------------
 0x0000e210 0x0000e210 SET_64 1026  __cxa_finalize
@@ -31,9 +29,6 @@ vaddr      paddr      type   ntype name
 0x0000e280 0x0000e280 SET_64 1026  memcpy
 0x0000e288 0x0000e288 SET_64 1026  memset
 0x0000e290 0x0000e290 SET_64 1026  dlsym
-
-
-17 relocations
 EOF
 RUN
 
@@ -41,7 +36,6 @@ NAME=ELF: arm64 imports crashing
 FILE=bins/elf/librsjni_androix.so
 CMDS=ii
 EXPECT=<<EOF
-[Imports]
 nth vaddr      bind   type lib name
 -----------------------------------
 1   0x0000b7c0 GLOBAL FUNC     __cxa_finalize
@@ -59,7 +53,6 @@ nth vaddr      bind   type lib name
 13  0x0000b840 GLOBAL FUNC     malloc
 14  0x0000b8a0 GLOBAL FUNC     memcpy
 15  0x0000b8b0 GLOBAL FUNC     memset
-
 EOF
 RUN
 
@@ -88,7 +81,6 @@ ii
 EOF
 EXPECT=<<EOF
 info/elf.relro=full
-[Imports]
 nth vaddr      bind   type   lib name
 -------------------------------------
 2   0x00051f60 GLOBAL FUNC       __ctype_toupper_loc
@@ -301,7 +293,6 @@ nth vaddr      bind   type   lib name
 209 0x000525b0 GLOBAL FUNC       iconv_open
 210 0x000525b8 GLOBAL FUNC       __sprintf_chk
 211 0x000525c0 GLOBAL FUNC       socket
-
 EOF
 RUN
 
