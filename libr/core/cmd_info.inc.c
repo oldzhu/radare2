@@ -824,7 +824,7 @@ static void cmd_ic_comma(RCore *core, const char *input) {
 	RListIter *objs_iter;
 	RBinFile *bf;
 	RBinFile *cur = core->bin->cur;
-	RTable *t = r_core_table (core, "flags");
+	RTable *t = r_core_table_new (core, "flags");
 	RTableColumnType *typeString = r_table_type ("string");
 	RTableColumnType *typeNumber = r_table_type ("number");
 	r_table_add_column (t, typeNumber, "addr", 0);
@@ -1097,7 +1097,7 @@ static void cmd_ic0(RCore *core, RBinObject *obj, int mode, PJ *pj, bool is_arra
 			} else {
 				r_cons_printf ("class %s\n", kname);
 				r_list_foreach (cls->methods, iter2, sym) {
-					char *flags = r_core_bin_attr_tostring (sym->attr, true);
+					char *flags = r_core_bin_attr_tostring (core, sym->attr, true);
 					const char *name = r_bin_name_tostring (sym->name);
 					r_cons_printf ("0x%08"PFMT64x " method %s %-4s %s\n",
 							iova? sym->vaddr: sym->paddr,
@@ -1117,7 +1117,7 @@ static void cmd_ic0(RCore *core, RBinObject *obj, int mode, PJ *pj, bool is_arra
 		default:
 			r_cons_printf ("class %s\n", kname);
 			r_list_foreach (cls->methods, iter2, sym) {
-				char *flags = r_core_bin_attr_tostring (sym->attr, true);
+				char *flags = r_core_bin_attr_tostring (core, sym->attr, true);
 				const char *name = r_bin_name_tostring (sym->name);
 				r_cons_printf ("0x%08"PFMT64x " method %s %-4s %s\n",
 						iova? sym->vaddr: sym->paddr,
@@ -2168,11 +2168,13 @@ static int cmd_info(void *data, const char *input) {
 		if (r_str_startswith (input, "iaito")) {
 			R_LOG_ERROR ("Missing plugin. Run: r2pm -ci r2iaito");
 		} else if (input[1] == 'j') {
+			RTable *t = r_core_table_new (core, "archs");
 			pj_o (pj); // weird
-			r_bin_list_archs (core->bin, pj, 'j');
+			r_bin_list_archs (core->bin, pj, t, 'j');
 			pj_end (pj);
 		} else {
-			r_bin_list_archs (core->bin, NULL, 1);
+			RTable *t = r_core_table_new (core, "archs");
+			r_bin_list_archs (core->bin, NULL, t, 1);
 		}
 		break;
 	case 'e': // "ie"
@@ -2187,14 +2189,14 @@ static int cmd_info(void *data, const char *input) {
 			const char *fn = (input[1] == ' ')
 				? r_str_trim_head_ro (input + 2): desc->name;
 			struct fdof_t fof = { core, fn, -1 };
-			r_id_storage_foreach (core->io->files, fdof_cb, &fof);
+			r_id_storage_foreach (&core->io->files, fdof_cb, &fof);
 			if (fof.fd != -1) {
 				oldfd = fof.fd;
 			}
 			ut64 baddr = r_config_get_i (core->config, "bin.baddr");
 			fof.fd = -1;
 			r_core_bin_load (core, fn, baddr);
-			r_id_storage_foreach (core->io->files, fdof_cb, &fof);
+			r_id_storage_foreach (&core->io->files, fdof_cb, &fof);
 			if (fof.fd != oldfd) {
 				r_core_cmdf (core, "o-%d", fof.fd);
 			}

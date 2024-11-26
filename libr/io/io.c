@@ -105,7 +105,7 @@ R_API RList* r_io_open_many(RIO* io, const char* uri, int perm, int mode) {
 	RList* desc_list;
 	RListIter* iter;
 	RIODesc* desc;
-	R_RETURN_VAL_IF_FAIL (io && io->files && uri, NULL);
+	R_RETURN_VAL_IF_FAIL (io && io->files.pool && uri, NULL);
 	RIOPlugin* plugin = r_io_plugin_resolve (io, uri, 1);
 	if (!plugin || !plugin->open_many || !plugin->close) {
 		return NULL;
@@ -449,13 +449,14 @@ R_API bool r_io_set_write_mask(RIO* io, const ut8* mask, int len) {
 	return true;
 }
 
-R_API ut64 r_io_p2v(RIO *io, ut64 pa) {
-	R_RETURN_VAL_IF_FAIL (io, 0);
-	RIOMap *map = r_io_map_get_paddr (io, pa);
-	if (map) {
-		return pa - map->delta + r_io_map_begin (map);
+R_API bool r_io_p2v(RIO *io, ut64 p, ut64 *v) {
+	R_RETURN_VAL_IF_FAIL (io && v, false);
+	RIOMap *map = r_io_map_get_paddr (io, p);
+	if (!map) {
+		return false;
 	}
-	return UT64_MAX;
+	*v = p - map->delta + r_io_map_begin (map);
+	return true;
 }
 
 R_API ut64 r_io_v2p(RIO *io, ut64 va) {
@@ -572,7 +573,7 @@ static bool drain_cb(void *user, void *data, ut32 id) {
 
 R_API void r_io_drain_overlay(RIO *io) {
 	R_RETURN_IF_FAIL (io);
-	r_id_storage_foreach (io->maps, drain_cb, NULL);
+	r_id_storage_foreach (&io->maps, drain_cb, NULL);
 }
 
 R_API bool r_io_get_region_at(RIO *io, RIORegion *region, ut64 addr) {

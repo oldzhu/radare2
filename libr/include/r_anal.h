@@ -527,7 +527,7 @@ typedef struct r_anal_var_access_t {
 } RAnalVarAccess;
 
 typedef struct r_anal_var_constraint_t {
-	_RAnalCond cond;
+	RAnalCondType cond;
 	ut64 val;
 } RAnalVarConstraint;
 
@@ -594,11 +594,12 @@ typedef struct r_anal_bind_t {
 	RAnalUse use;
 } RAnalBind;
 
-#define R_ANAL_COND_SINGLE(x) (!x->arg[1] || x->arg[0]==x->arg[1])
+#define R_ANAL_CONDTYPE_SINGLE(x) (!x->right || x->left==x->right)
 
 typedef struct r_anal_cond_t {
 	int type; // filled by CJMP opcode
-	RArchValue *arg[2]; // filled by CMP opcode
+	RArchValue *left; // filled by CMP left opcode
+	RArchValue *right; // filled by CMP right opcode
 } RAnalCond;
 
 typedef struct r_anal_bb_t {
@@ -720,6 +721,26 @@ typedef struct r_anal_esil_cfg_t {
 	RGraphNode *end;
 	RGraph *g;
 } RAnalEsilCFG;
+
+// this is 80-bit offsets so we can address every piece of esil in an instruction
+typedef struct r_anal_esil_expr_offset_t {
+	ut64 off;
+	ut16 idx;
+} RAnalEsilEOffset;
+
+typedef enum {
+	R_ANAL_ESIL_BLOCK_ENTER_NORMAL = 0,
+	R_ANAL_ESIL_BLOCK_ENTER_TRUE,
+	R_ANAL_ESIL_BLOCK_ENTER_FALSE,
+	R_ANAL_ESIL_BLOCK_ENTER_GLUE,
+} RAnalEsilBlockEnterType;
+
+typedef struct r_anal_esil_basic_block_t {
+	RAnalEsilEOffset first;
+	RAnalEsilEOffset last;
+	char *expr;	//synthesized esil-expression for this block
+	RAnalEsilBlockEnterType enter;	//maybe more type is needed here
+} RAnalEsilBB;
 
 enum {
 	R_ANAL_ESIL_DFG_TAG_CONST = 1,
@@ -1108,7 +1129,7 @@ R_API RVecAnalRef *r_anal_xrefs_get(RAnal *anal, ut64 to);
 R_API RVecAnalRef *r_anal_refs_get(RAnal *anal, ut64 from);
 R_API bool r_anal_xrefs_has_xrefs_at(RAnal *anal, ut64 at);
 R_API RVecAnalRef *r_anal_xrefs_get_from(RAnal *anal, ut64 to);
-R_API void r_anal_xrefs_list(RAnal *anal, int rad, const char *arg);
+R_API void r_anal_xrefs_list(RAnal *anal, int rad, const char *arg, RTable *t);
 R_API ut64 r_anal_xrefs_count(RAnal *anal);
 R_API ut64 r_anal_xrefs_count_at(RAnal *anal, ut64 to);
 R_API RVecAnalRef *r_anal_function_get_refs(RAnalFunction *fcn);
@@ -1199,6 +1220,7 @@ R_API char *r_anal_cond_tostring(RAnalCond *cond);
 R_API int r_anal_cond_eval(RAnal *anal, RAnalCond *cond);
 R_API RAnalCond *r_anal_cond_new_from_string(const char *str);
 R_API const char *r_anal_cond_type_tostring(int cc);
+R_API const char *r_anal_cond_typeexpr_tostring(int cc);
 
 /* jmptbl */
 R_API bool r_anal_jmptbl(RAnal *anal, RAnalFunction *fcn, RAnalBlock *block, ut64 jmpaddr, ut64 table, ut64 tablesize, ut64 default_addr);
@@ -1327,10 +1349,10 @@ R_API void r_meta_rebase(RAnal *anal, ut64 diff);
 R_API ut64 r_meta_get_size(RAnal *a, RAnalMetaType type);
 
 R_API const char *r_meta_type_tostring(int type);
-R_API void r_meta_print(RAnal *a, RAnalMetaItem *d, ut64 start, ut64 size, int rad, PJ *pj, bool show_full);
-R_API void r_meta_print_list_all(RAnal *a, int type, int rad, const char *tq);
-R_API void r_meta_print_list_at(RAnal *a, ut64 addr, int rad, const char *tq);
-R_API void r_meta_print_list_in_function(RAnal *a, int type, int rad, ut64 addr, const char *tq);
+R_API void r_meta_print(RAnal *a, RAnalMetaItem *d, ut64 start, ut64 size, int rad, PJ *pj, RTable *t, bool show_full);
+R_API void r_meta_print_list_all(RAnal *a, int type, int rad, const char *tq, RTable *t);
+R_API void r_meta_print_list_at(RAnal *a, ut64 addr, int rad, const char *tq, RTable *t);
+R_API void r_meta_print_list_in_function(RAnal *a, int type, int rad, ut64 addr, const char *tq, RTable *t);
 
 /* hints */
 

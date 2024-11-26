@@ -1099,7 +1099,7 @@ static RCoreHelpMessage help_msg_ax = {
 	// "axg*", " [addr]", "show xrefs graph to given address, use .axg*;aggv",
 	// "axgj", " [addr]", "show xrefs graph to reach current function in json format",
 	"axi", " addr [at]", "add indirect code reference (see ax?)",
-	"axj", "", "add jmp reference", // list refs in json format",
+	"axj", "", "add jmp reference", // list refs in json format", // R2_600 XXX this is wrong. axj must be listing xrefs with json
 	"axl", "[jcq]", "list xrefs (axlc = count, axlq = quiet, axlj = json)",
 	"axm", " addr [at]", "copy data/code references pointing to addr to also point to curseek (or at)",
 	"axq", "", "list refs in quiet/human-readable format",
@@ -2996,7 +2996,7 @@ static void anal_bb_list(RCore *core, const char *input) {
 		pj_o (pj);
 		pj_ka (pj, "blocks");
 	} else if (mode == ',' || mode == 't') {
-		table = r_table_new ("bbs");
+		table = r_core_table_new (core, "bbs");
 		RTableColumnType *s = r_table_type ("string");
 		RTableColumnType *n = r_table_type ("number");
 		r_table_add_column (table, n, "addr", 0);
@@ -3332,7 +3332,7 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 			}
 			r_list_append (flist, info);
 		}
-		RTable *table = r_core_table (core, "fcnbbs");
+		RTable *table = r_core_table_new (core, "fcnbbs");
 		if (!table) {
 			return false;
 		}
@@ -3348,7 +3348,7 @@ static bool anal_fcn_list_bb(RCore *core, const char *input, bool one) {
 
 	RTable *t = NULL;
 	if (mode == ',') {
-		t = r_table_new ("fcnbbs");
+		t = r_core_table_new (core, "fcnbbs");
 		r_table_set_columnsf (t, "xdxx", "addr", "size", "jump", "fail");
 	}
 	r_list_foreach (fcn->bbs, iter, b) {
@@ -3967,7 +3967,7 @@ static Sdb *__core_cmd_anal_fcn_stats(RCore *core, const char *input) {
 	} else if (*input == 't') {
 		SdbList *ls = sdb_foreach_list (db, true);
 		SdbListIter *it;
-		RTable *t = r_table_new ("fcnstats");
+		RTable *t = r_core_table_new (core, "fcnstats");
 		SdbKv *kv;
 		RTableColumnType *typeString = r_table_type ("string");
 		RTableColumnType *typeNumber = r_table_type ("number");
@@ -4030,7 +4030,7 @@ static void __core_cmd_anal_fcn_allstats(RCore *core, const char *input) {
 		}
 		ls_free (ls);
 	}
-	RTable *t = r_table_new ("fcnallstats");
+	RTable *t = r_core_table_new (core, "fcnallstats");
 	SdbList *ls = sdb_foreach_list (d, true);
 	RTableColumnType *typeString = r_table_type ("string");
 	RTableColumnType *typeNumber = r_table_type ("number");
@@ -10424,7 +10424,10 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 	case 'q': // "axq"
 	case '*': // "ax*"
 	case ',': // "ax,"
-		r_anal_xrefs_list (core->anal, input[0], *input? r_str_trim_head_ro (input + 1): "");
+		{
+			RTable *table = (*input == ',')? r_core_table_new (core, "xrefs"): NULL;
+			r_anal_xrefs_list (core->anal, input[0], *input? r_str_trim_head_ro (input + 1): "", table);
+		}
 		break;
 	case '.':
 		if (input[1] == 'j') { // "ax.j"
@@ -10487,7 +10490,8 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 			r_core_cmd_help (core, help_msg_axl);
 			break;
 		case 'j': // "axlj"
-			r_anal_xrefs_list (core->anal, 'j', "");
+			// XXX axj != axlj r_core_cmd_call (core, "axj");
+			r_anal_xrefs_list (core->anal, 'j', 0, NULL);
 			break;
 		case 'c': // "axlc"
 			{
@@ -10544,7 +10548,7 @@ static bool cmd_anal_refs(RCore *core, const char *input) {
 				r_list_free (ufuncs);
 			} else if (input[1] == ',') { // "axt,"
 				RAnalRef *ref;
-				RTable *table = r_table_new ("bbs");
+				RTable *table = r_core_table_new (core, "bbs");
 				RTableColumnType *s = r_table_type ("string");
 				RTableColumnType *n = r_table_type ("number");
 				r_table_add_column (table, n, "fcn", 0);

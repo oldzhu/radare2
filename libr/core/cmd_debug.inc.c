@@ -2116,7 +2116,7 @@ R_API void r_core_debug_rr(RCore *core, RReg *reg, int mode) {
 	RList *list = r_reg_get_list (reg, R_REG_TYPE_GPR);
 	RListIter *iter;
 	RRegItem *r;
-	RTable *t = r_core_table (core, "regs");
+	RTable *t = r_core_table_new (core, "regs");
 
 	if (mode == 'j') {
 		r_config_set_i (core->config, "scr.color", 0);
@@ -2484,7 +2484,7 @@ static char *__table_format_string(RTable *t, int fmt) {
 static void __tableRegList(RCore *core, RReg *reg, const char *str) {
 	int i;
 	RRegItem *e;
-	RTable *t = r_core_table (core, "regprofile");
+	RTable *t = r_core_table_new (core, "regprofile");
 	RTableColumnType *typeString = r_table_type ("string");
 	RTableColumnType *typeNumber = r_table_type ("number");
 	RTableColumnType *typeBoolean = r_table_type ("boolean");
@@ -5444,19 +5444,19 @@ static int cmd_debug(void *data, const char *input) {
 		// TODO: define ranges? to display only some traces, allow to scroll on this disasm? ~.. ?
 		switch (input[1]) {
 		case '\0': // "dt"
-			r_debug_trace_list (core->dbg, 0, core->offset);
-			break;
 		case '=': // "dt="
-			r_debug_trace_list (core->dbg, '=', core->offset);
-			break;
 		case 'q': // "dtq"
-			r_debug_trace_list (core->dbg, 'q', core->offset);
-			break;
 		case 'j': // "dtj"
-			r_debug_trace_list (core->dbg, 'j', core->offset);
+			r_debug_trace_list (core->dbg, input[1], core->offset, NULL);
 			break;
 		case '*': // "dt*"
-			r_debug_trace_list (core->dbg, 1, core->offset);
+			r_debug_trace_list (core->dbg, 1, core->offset, NULL);
+			break;
+		case ',': // "dt,"
+			{
+				RTable *t = r_core_table_new (core, "traces");
+				r_debug_trace_list (core->dbg, ',', core->offset, t);
+			}
 			break;
 		case ' ': // "dt [addr]"
 			if ((t = r_debug_trace_get (core->dbg,

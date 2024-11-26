@@ -2532,10 +2532,7 @@ static void annotated_hexdump(RCore *core, const char *str, int len) {
 		echars = chars;
 		ut64 ea = addr;
 		if (core->print->pava) {
-			ut64 va = r_io_p2v (core->io, addr);
-			if (va != UT64_MAX) {
-				ea = va;
-			}
+			r_io_p2v (core->io, addr, &ea);
 		}
 		if (usecolor) {
 			append (ebytes, core->cons->context->pal.offset);
@@ -4391,7 +4388,7 @@ static bool cmd_print_blocks(RCore *core, const char *input) {
 		pj_a (pj);
 		break;
 	case 'h': { // "p-h"
-		t = r_core_table (core, "navbar");
+		t = r_core_table_new (core, "navbar");
 		if (!t) {
 			goto cleanup;
 		}
@@ -5653,7 +5650,7 @@ static char *__op_refs(RCore *core, RAnalOp *op, int n) {
 
 static void r_core_disasm_table(RCore *core, int l, const char *input) {
 	int i;
-	RTable *t = r_core_table (core, "disasm");
+	RTable *t = r_core_table_new (core, "disasm");
 	char *arg = strchr (input, ' ');
 	if (arg) {
 		input = arg + 1;
@@ -6163,10 +6160,7 @@ static void cmd_print_pxb(RCore *core, int len, const char *input) {
 		if (c == 0) {
 			ut64 ea = core->offset + i;
 			if (core->print->pava) {
-				ut64 va = r_io_p2v (core->io, ea);
-				if (va != UT64_MAX) {
-					ea = va;
-				}
+				r_io_p2v (core->io, ea, &ea);
 			}
 			r_print_section (core->print, ea);
 			r_print_offset (core->print, ea, 0, 0, NULL);
