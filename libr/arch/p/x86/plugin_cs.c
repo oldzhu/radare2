@@ -4393,6 +4393,11 @@ static int archinfo(RArchSession *as, ut32 q) {
 	case R_ARCH_INFO_CODE_ALIGN:
 	case R_ARCH_INFO_DATA_ALIGN:
 		return 0;
+	case R_ARCH_INFO_FUNC_ALIGN:
+		if (as->config->bits == 64) {
+			return 4;
+		}
+		return 0;
 	case R_ARCH_INFO_MAXOP_SIZE:
 		return 16;
 	case R_ARCH_INFO_INVOP_SIZE:
@@ -4420,6 +4425,9 @@ static RList *anal_preludes(RArchSession *as) {
 		r_list_append (l, strdup ("554889e5"));
 		r_list_append (l, strdup ("55488bec"));
 		r_list_append (l, strdup ("f30f1efa")); // endbr64
+		// r_list_append (l, strdup ("4157415653")); // push r15,r14,rbx
+		r_list_append (l, strdup ("5541574156")); // push rbp,r15,r14
+		r_list_append (l, strdup ("415741564154")); // push r15,r14,r13,r12
 		break;
 	default:
 		// nothing to do on x86-16
