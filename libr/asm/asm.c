@@ -194,20 +194,7 @@ R_API RAsm *r_asm_new(void) {
 }
 
 // TODO must use the internal rparse api when both libraries are merged
-R_API bool r_asm_sub_names_input(RAsm *a, const char *f) {
-	R_RETURN_VAL_IF_FAIL (a && f, false);
-	if (!a->ifilter) {
-		a->ifilter = r_parse_new ();
-	}
-	if (!r_parse_use (a->ifilter, f)) {
-		r_parse_free (a->ifilter);
-		a->ifilter = NULL;
-		return false;
-	}
-	return true;
-}
-
-// TODO must use the internal rparse api when both libraries are merged
+// R2_600 - just call r_asm_parse_use ()
 R_API bool r_asm_sub_names_output(RAsm *a, const char *f) {
 	R_RETURN_VAL_IF_FAIL (a && f, false);
 	if (!a->ofilter) {
@@ -422,7 +409,7 @@ R_API int r_asm_disassemble(RAsm *a, RAnalOp *op, const ut8 *buf, int len) {
 		}
 	}
 	if (a->ofilter) {
-		char *newtext = r_parse_instruction (a->ofilter, op->mnemonic);
+		char *newtext = r_parse_pseudo (a->ofilter, op->mnemonic);
 		if (newtext) {
 			r_anal_op_set_mnemonic (op, op->addr, newtext);
 		}
@@ -498,9 +485,6 @@ static int r_asm_assemble(RAsm *a, RAnalOp *op, const char *buf) {
 	if (!b) {
 		return 0;
 	}
-	if (a->ifilter) {
-		r_parse_parse (a->ifilter, buf, b);
-	}
 	r_str_case (b, false); // to-lower
 	if (a->analb.anal) {
 		ut8 buf[256] = {0};
@@ -551,7 +535,7 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len) {
 		}
 		ret = op.size;
 		if (a->ofilter) {
-			char *newtext = r_parse_instruction (a->ofilter, op.mnemonic);
+			char *newtext = r_parse_pseudo (a->ofilter, op.mnemonic);
 			if (newtext) {
 				free (op.mnemonic);
 				op.mnemonic = newtext;
@@ -580,8 +564,11 @@ R_API RAsmCode* r_asm_mdisassemble_hexstr(RAsm *a, RParse *p, const char *hexstr
 	}
 	RAsmCode *ret = r_asm_mdisassemble (a, buf, (ut64)len);
 	if (ret && p) {
-		// XXX this can crash the output buffer
-		r_parse_parse (p, ret->assembly, ret->assembly);
+		char *res = r_parse_pseudo (p, ret->assembly);
+		if (res) {
+			free (ret->assembly);
+			ret->assembly = res;
+		}
 	}
 	free (buf);
 	return ret;
@@ -979,9 +966,6 @@ R_API RAsmCode *r_asm_massemble(RAsm *a, const char *assembly) {
 			} else { /* Instruction */
 				char *str = ptr_start;
 				r_str_trim (str);
-				if (a->ifilter) {
-					r_parse_parse (a->ifilter, ptr_start, ptr_start);
-				}
 				if (acode->equs) {
 					if (!*ptr_start) {
 						continue;

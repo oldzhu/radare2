@@ -28,8 +28,7 @@ typedef struct r_parse_t {
 	int maxflagnamelen;
 	int minval;
 	char *retleave_asm;
-	struct r_parse_plugin_t *cur;
-	// RAnal *anal; // weak anal ref XXX do not use. use analb.anal
+	struct r_parse_plugin_t *cur; // XXX move into session
 	RList *parsers;
 	RAnalVarList varlist;
 	st64 (*get_ptr_at)(RAnalFunction *fcn, st64 delta, ut64 addr);
@@ -38,7 +37,11 @@ typedef struct r_parse_t {
 	RAnalBind analb;
 	RFlagGetAtAddr flag_get; // XXX
 	RAnalLabelAt label_get;
-} RParse; // TODO rename to RAsmParseState
+} RParse;
+
+typedef int (*RParsePluginParse)(RParse *p, const char *data, char *str);
+typedef int (*RParsePluginFilter)(RParse *p, ut64 addr, RFlag *f, char *data, char *str, int len, bool big_endian);
+typedef bool (*RParsePluginSubvar)(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len);
 
 // TODO Rename to asm plugins?
 typedef struct r_parse_plugin_t {
@@ -46,13 +49,16 @@ typedef struct r_parse_plugin_t {
 	bool (*init)(RParse *p, void *user); // returns an RAsmParseState*
 	int (*fini)(RParse *p, void *user); // receives the asmparsestate
 
-	int (*parse)(RParse *p, const char *data, char *str);
-	// UNUSED bool (*assemble)(RParse *p, char *data, char *str);
-	int (*filter)(RParse *p, ut64 addr, RFlag *f, char *data, char *str, int len, bool big_endian);
-	bool (*subvar)(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len);
-	// int (*replace)(int argc, const char *argv[], char *newstr); // rename to pseudo!
-	// int (*pseudo)(int argc, const char *argv[], char *newstr); // rename to pseudo!
+	RParsePluginParse parse;
+	RParsePluginFilter filter;
+	RParsePluginSubvar subvar;
 } RParsePlugin;
+
+typedef struct r_parse_session_t {
+	RParse *p;
+	RParsePlugin *cur;
+	void *data;
+} RParseSession;
 
 #ifdef R_API
 
@@ -66,13 +72,17 @@ R_API bool r_parse_plugin_add(RParse *p, RParsePlugin *plugin);
 R_API bool r_parse_plugin_remove(RParse *p, RParsePlugin *plugin);
 R_API bool r_parse_use(RParse *p, const char *name);
 
+#define R_PARSE_FILTER_IMMTRIM 1
+#define R_PARSE_FILTER_SUBVAR 2
+#define R_PARSE_FILTER_FILTER 4
+#define R_PARSE_FILTER_INSTRUCTION 8
+
 /* action */
-R_API bool r_parse_parse(RParse *p, const char *data, char *str);
-R_API char *r_parse_instruction(RParse *p, const char *data);
-R_API bool r_parse_assemble(RParse *p, char *data, char *str); // XXX deprecate, unused and probably useless, related to write-hack
+// DEPRECATED R_API bool r_parse_parse(RParse *p, const char *data, char *str);
+R_API char *r_parse_pseudo(RParse *p, const char *data);
 R_API bool r_parse_filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, char *str, int len, bool big_endian);
 R_API bool r_parse_subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len);
-R_API char *r_parse_immtrim(char *opstr);
+R_API char *r_parse_immtrim(RParse *p, const char *opstr);
 
 /* plugin pointers */
 extern RParsePlugin r_parse_plugin_6502_pseudo;
