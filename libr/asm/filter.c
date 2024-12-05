@@ -1,6 +1,8 @@
 /* radare2 - LGPL - Copyright 2009-2024 - nibble, pancake, maijin */
 
-#include <r_parse.h>
+#include <r_asm.h>
+
+#define FILTER_DWORD 0
 
 #define isx86separator(x) ( \
 	(x) == ' '||(x) == '\t'||(x) == '\n'|| (x) == '\r'||(x) == ' '|| \
@@ -140,16 +142,26 @@ static void __replaceRegisters(RReg *reg, char *s, bool x86) {
 	}
 }
 
-static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, char *str, int len, bool big_endian) {
+static bool filter(RAsmPluginSession *aps, ut64 addr, RFlag *f, RAnalHint *hint, char *data, char *str, int len, bool big_endian) {
+	RAsm *a = aps->rasm;
+	RParse *p = a->parse;
 	char *ptr = data, *ptr2, *ptr_backup;
 	RAnalFunction *fcn;
 	RFlagItem *flag;
 	ut64 off;
-	const int bits = p->analb.anal->config->bits; /// if we move this api into r_asm, we can use a->config->bits directly
-	const int seggrn = p->analb.anal->config->seggrn;
+	RArchConfig *ac = R_UNWRAP3 (a, analb.anal, config);
+	if (!ac) {
+		eprintf ("%p\n", a->analb.anal);
+		R_LOG_ERROR ("no anal bind?");
+		return false;
+	}
+	const int bits = ac->bits;
+	// a->analb.anal->config->bits; /// if we move this api into r_asm, we can use a->config->bits directly
+	const int seggrn = ac->seggrn;
+	// a->analb.anal->config->seggrn;
 	bool x86 = false;
 	bool arm = false;
-	const char *pname = R_UNWRAP3 (p, cur, meta.name);
+	const char *pname = R_UNWRAP4 (a, cur, plugin, meta.name);
 	if (pname) {
 		if (r_str_startswith (pname, "x86")) {
 			x86 = true;
@@ -167,9 +179,9 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 	replaceWords (ptr, "qword ", src);
 #endif
 	if (p->subreg) {
-		__replaceRegisters (p->analb.anal->reg, ptr, false);
+		__replaceRegisters (a->analb.anal->reg, ptr, false);
 		if (x86) {
-			__replaceRegisters (p->analb.anal->reg, ptr, true);
+			__replaceRegisters (a->analb.anal->reg, ptr, true);
 		}
 	}
 	ptr2 = NULL;
@@ -198,7 +210,7 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 			off = r_num_get (NULL, ptr);
 		}
 		if (off >= p->minval) {
-			fcn = p->analb.get_fcn_in (p->analb.anal, off, 0);
+			fcn = a->analb.get_fcn_in (a->analb.anal, off, 0);
 			if (fcn && fcn->addr == off) {
 				*ptr = 0;
 				// hack to realign pointer for colours
@@ -511,7 +523,7 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 				break;
 			case 10:
 				{
-					RList *regs = r_reg_get_list (p->analb.anal->reg, R_REG_TYPE_GPR);
+					RList *regs = r_reg_get_list (a->analb.anal->reg, R_REG_TYPE_GPR);
 					RRegItem *reg;
 					RListIter *iter;
 					bool imm32 = false;
@@ -548,8 +560,8 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 				}
 				break;
 			case 80:
-				if (p && p->analb.anal && p->analb.anal->syscall) {
-					RSyscallItem *si = r_syscall_get (p->analb.anal->syscall, off, -1);
+				if (a && a->analb.anal && a->analb.anal->syscall) {
+					RSyscallItem *si = r_syscall_get (a->analb.anal->syscall, off, -1);
 					if (si) {
 						snprintf (num, sizeof (num), "%s()", si->name);
 					} else {
@@ -578,35 +590,13 @@ static bool filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, 
 	return false;
 }
 
-/// filter the opcode in data into str by following the flags and hints information
-// XXX this function have too many parameters, we need to simplify this
-// XXX too many arguments here
-// TODO we shouhld use RCoreBind and use the hintGet/flagGet methods, but we can also have rflagbind+ranalbind, but kiss pls
-// TODO: NEW SIGNATURE: R_API char *r_parse_filter(RParse *p, ut64 addr, const char *str)
-// DEPRECATE
-R_API bool r_parse_filter(RParse *p, ut64 addr, RFlag *f, RAnalHint *hint, char *data, char *str, int len, bool big_endian) {
-	filter (p, addr, f, hint, data, str, len, big_endian);
-	if (p->cur && p->cur->filter) {
-		return p->cur->filter (p, addr, f, data, str, len, big_endian);
+/// XXX very ugly arguments, redesign!
+R_API bool r_asm_parse_filter(RAsm *a, ut64 addr, RFlag *f, RAnalHint *hint, char *data, char *str, int len, bool big_endian) {
+	RAsmPluginSession *aps = a->cur;
+	filter (aps, addr, f, hint, data, str, len, big_endian);
+	RAsmPlugin *ap = R_UNWRAP3 (a, cur, plugin);
+	if (ap && ap->filter) {
+		return ap->filter (aps, addr, f, data, str, len, big_endian);
 	}
 	return false;
-}
-
-// r_asm_filter()
-// r_asm_parse()
-// r_asm_subvar()
-// r_asm_replace()
-// maybe RAsm.parse(what)
-
-// R2_600 - easier to use, should replace r_asm_filter(), but its not using rflag, analhint, endian, etc
-// this function is unused, but there's data we are missing, like the analhint.. that we must ensure that is called before calling this. so we need more tests for this.
-R_API char *r_parse_filter_dup(RParse *p, ut64 addr, const char *opstr) {
-	const size_t out_len = 256;
-	char *in = strdup (opstr);
-	char *out = calloc (out_len, 1);
-	if (!r_parse_filter (p, addr, NULL, NULL, in, out, out_len, false)) {
-		free (out);
-		return NULL;
-	}
-	return out;
 }

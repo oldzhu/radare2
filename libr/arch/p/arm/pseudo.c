@@ -1,6 +1,6 @@
 /* radare - LGPL - Copyright 2015-2024 - pancake */
 
-#include <r_parse.h>
+#include <r_asm.h>
 
 static int replace(int argc, const char *argv[], char *newstr) {
 #define MAXPSEUDOOPS 10
@@ -215,7 +215,7 @@ static int replace(int argc, const char *argv[], char *newstr) {
 	return false;
 }
 
-static int parse(RParse *p, const char *data, char *str) {
+static bool parse(RAsmPluginSession *aps, const char *data, char *str) {
 	char w0[256], w1[256], w2[256], w3[256], w4[256];
 	int i, len = strlen (data);
 	char *buf, *ptr, *optr;
@@ -354,12 +354,14 @@ static char *mount_oldstr(RParse* p, const char *reg, st64 delta, bool ucase) {
 	return oldstr;
 }
 
-static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len) {
-	R_RETURN_VAL_IF_FAIL (p, false);
+static bool subvar(RAsmPluginSession *s, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len) {
+	R_RETURN_VAL_IF_FAIL (s, false);
+	RAsm *a = s->rasm;
+	RParse *p = a->parse;
 	RList *spargs = NULL;
 	RList *bpargs = NULL;
 	RListIter *iter;
-	RAnal *anal = p->analb.anal;
+	RAnal *anal = a->analb.anal;
 	char *oldstr;
 	bool newstack = anal->opt.var_newstack;
 	char *tstr = strdup (data);
@@ -483,21 +485,21 @@ static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data
 	return true;
 }
 
-RParsePlugin r_parse_plugin_arm_pseudo = {
+RAsmPlugin r_asm_plugin_arm = {
 	.meta = {
-		.name = "arm.pseudo",
+		.name = "arm",
 		.desc = "ARM/ARM64 pseudo syntax",
 		.author = "pancake",
 		.license = "LGPL-3.0-only",
 	},
 	.parse = parse,
-	.subvar = &subvar,
+	.subvar = subvar,
 };
 
 #ifndef R2_PLUGIN_INCORE
 R_API RLibStruct radare_plugin = {
-	.type = R_LIB_TYPE_PARSE,
-	.data = &r_parse_plugin_arm_pseudo,
+	.type = R_LIB_TYPE_ASM,
+	.data = &r_asm_plugin_arm,
 	.version = R2_VERSION
 };
 #endif

@@ -524,14 +524,14 @@ static bool cb_analijmp(void *user, void *data) {
 static bool cb_asmsubvarmin(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->parser->minval = node->i_value;
+	core->rasm->parse->minval = node->i_value;
 	return true;
 }
 
 static bool cb_asmsubtail(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->parser->subtail = node->i_value;
+	core->rasm->parse->subtail = node->i_value;
 	return true;
 }
 
@@ -694,14 +694,12 @@ static bool cb_asmcpu(void *user, void *data) {
 #endif
 		return 0;
 	}
-	r_asm_set_cpu (core->rasm, node->value);
 	r_arch_config_set_cpu (core->rasm->config, node->value);
-	int v = r_anal_archinfo (core->anal, R_ARCH_INFO_CODE_ALIGN);
+	const int v = r_anal_archinfo (core->anal, R_ARCH_INFO_CODE_ALIGN);
  	if (v >= 0) {
  		core->anal->config->codealign = v;
  	}
-	// R2_590 - rename to arch.codealign
-	r_config_set_i (core->config, "asm.codealign", (v != -1)? v: 0);
+	r_config_set_i (core->config, "arch.codealign", (v != -1)? v: 0);
 	return true;
 }
 
@@ -734,7 +732,6 @@ static void update_asmbits_options(RCore *core, RConfigNode *node) {
 }
 
 static bool cb_asmarch(void *user, void *data) {
-	char asmparser[32];
 	RCore *core = (RCore *) user;
 	R_RETURN_VAL_IF_FAIL (core && core->anal, false);
 	RConfigNode *node = (RConfigNode *) data;
@@ -764,10 +761,7 @@ static bool cb_asmarch(void *user, void *data) {
 		R_LOG_ERROR ("asm.arch: cannot find '%s'", node->value);
 		return false;
 	}
-	//we should strdup here otherwise will crash if any r_config_set
-	//free the old value
-	snprintf (asmparser, sizeof (asmparser), "%s.pseudo", node->value);
-	r_config_set (core->config, "asm.parser", asmparser);
+	r_config_set (core->config, "asm.parser", node->value);
 
 	if (core->anal->cur && !(core->anal->config->bits & core->anal->config->bits)) {
 		r_config_set_i (core->config, "asm.bits", bits);
@@ -815,12 +809,12 @@ static bool cb_asmarch(void *user, void *data) {
 
 	RConfigNode *asmcpu = r_config_node_get (core->config, "asm.cpu");
 	if (asmcpu) {
-		r_asm_set_cpu (core->rasm, asmcpu->value);
+		r_arch_config_set_cpu (core->rasm->config, asmcpu->value);
 		update_asmcpu_options (core, asmcpu);
 	}
 	{
 		int v = r_anal_archinfo (core->anal, R_ARCH_INFO_CODE_ALIGN);
-		r_config_set_i (core->config, "asm.codealign", (v != -1)? v: 0);
+		r_config_set_i (core->config, "arch.codealign", (v != -1)? v: 0);
 	}
 	/* reload types and cc info */
 	// changing asm.arch changes anal.arch
@@ -915,7 +909,7 @@ static bool cb_asmbits(void *user, void *data) {
 		}
 		/* set codealign */
 		int v = r_anal_archinfo (core->anal, R_ARCH_INFO_CODE_ALIGN);
-		r_config_set_i (core->config, "asm.codealign", (v != -1)? v: 0);
+		r_config_set_i (core->config, "arch.codealign", (v != -1)? v: 0);
 	}
 	return ret;
 }
@@ -1009,13 +1003,14 @@ static bool cb_asm_invhex(void *user, void *data) {
 	return true;
 }
 
-static bool cb_asm_codealign(void *user, void *data) {
+static bool cb_arch_codealign(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	int align = node->i_value;
 	if (align < 0) {
 		align = 0;
 	}
+	core->rasm->config->codealign = align;
 	core->anal->config->codealign = align;
 	return true;
 }
@@ -1058,11 +1053,13 @@ static void update_cfgcharsets_options(RCore *core, RConfigNode *node) {
 
 static void update_asmparser_options(RCore *core, RConfigNode *node) {
 	RListIter *iter;
-	RParsePlugin *parser;
-	if (core && node && core->parser && core->parser->parsers) {
+	RList *plugins = R_UNWRAP3 (core, rasm, sessions);
+	if (core && node && plugins) {
+		RAsmPluginSession *aps;
 		r_config_node_purge_options (node);
-		r_list_foreach (core->parser->parsers, iter, parser) {
-			SETOPTIONS (node, parser->meta.name, NULL);
+		r_list_foreach (plugins, iter, aps) {
+			RAsmPlugin *p = aps->plugin;
+			SETOPTIONS (node, p->meta.name, NULL);
 		}
 	}
 }
@@ -1075,7 +1072,7 @@ static bool cb_asmparser(void *user, void *data) {
 		print_node_options (node);
 		return false;
 	}
-	return r_parse_use (core->parser, node->value);
+	return r_asm_use_parser (core->rasm, node->value);
 }
 
 typedef struct {
@@ -1209,7 +1206,7 @@ static bool cb_strpurge(void *user, void *data) {
 static bool cb_maxname(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *)data;
 	RCore *core = (RCore *) user;
-	core->parser->maxflagnamelen = node->i_value;
+	core->rasm->parse->maxflagnamelen = node->i_value;
 	return true;
 }
 
@@ -3724,7 +3721,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("asm.bytes.opcolor", "false", "colorize bytes depending on opcode size + variant information");
 	SETI ("asm.types", 1, "display the fcn types in calls (0=no,1=quiet,2=verbose)");
 	SETBPREF ("asm.midcursor", "false", "cursor in visual disasm mode breaks the instruction");
-	SETICB ("asm.codealign", 0, &cb_asm_codealign, "only recognize as valid instructions aligned to this value");
+	SETICB ("arch.codealign", 0, &cb_arch_codealign, "only recognize as valid instructions aligned to this value");
 	SETBPREF ("asm.sub.jmp", "true", "always substitute jump, call and branch targets in disassembly");
 	SETBPREF ("asm.hints", "true", "disable all asm.hint* if false");
 	SETBPREF ("asm.hint.jmp", "false", "show jump hints [numbers] in disasm");

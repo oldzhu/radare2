@@ -1,6 +1,6 @@
 /* radare - LGPL - Copyright 2024 - pancake */
 
-#include <r_parse.h>
+#include <r_asm.h>
 
 // XXX seems like '(#)' doesnt works.. so it needs to be '( # )'
 // this is a bug somewhere else
@@ -120,7 +120,7 @@ static bool replace(int argc, char *argv[], char *newstr) {
 	return false;
 }
 
-static int parse(RParse *p, const char *data, char *str) {
+static bool parse(RAsmPluginSession *aps, const char *data, char *str) {
 	char w0[256], w1[256], w2[256], w3[256];
 	int i;
 	size_t len = strlen (data);
@@ -199,7 +199,8 @@ static int parse(RParse *p, const char *data, char *str) {
 	return true;
 }
 
-static void parse_localvar(RParse *p, char *newstr, size_t newstr_len, const char *var, const char *reg, char sign, char *ireg, bool att) {
+static void parse_localvar(RAsm *a, char *newstr, size_t newstr_len, const char *var, const char *reg, char sign, char *ireg, bool att) {
+	RParse *p = a->parse;
 	RStrBuf *sb = r_strbuf_new ("");
 	if (att) {
 		if (p->localvar_only) {
@@ -254,9 +255,10 @@ static void mk_reg_str(const char *regname, int delta, bool sign, bool att, char
 	r_strbuf_free (sb);
 }
 
-// static char *subvar(RParse *p, RAnalFunction *f, RAnalOp *op) {
-static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len) {
-	RAnal *anal = p->analb.anal;
+static bool subvar(RAsmPluginSession *aps, RAnalFunction *f, ut64 addr, int oplen, char *data, char *str, int len) {
+	RAsm *a = aps->rasm;
+	RParse *p = a->parse;
+	RAnal *anal = a->analb.anal;
 	RListIter *bpargiter, *spiter;
 	char oldstr[64], newstr[64];
 	char *tstr = strdup (data);
@@ -356,7 +358,7 @@ static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data
 			if (ucase) {
 				r_str_case (oldstr, true);
 			}
-			parse_localvar (p, newstr, sizeof (newstr), sparg->name, reg, sign, ireg, att);
+			parse_localvar (a, newstr, sizeof (newstr), sparg->name, reg, sign, ireg, att);
 			char *ptr = strstr (tstr, oldstr);
 			if (ptr && (!att || *(ptr - 1) == ' ')) {
 				if (delta == 0) {
@@ -403,7 +405,7 @@ static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data
 			if (ucase) {
 				r_str_case (oldstr, true);
 			}
-			parse_localvar (p, newstr, sizeof (newstr), bparg->name, reg, sign, ireg, att);
+			parse_localvar (a, newstr, sizeof (newstr), bparg->name, reg, sign, ireg, att);
 			char *ptr = strstr (tstr, oldstr);
 			if (ptr && (!att || *(ptr - 1) == ' ')) {
 				if (delta == 0) {
@@ -456,27 +458,27 @@ static bool subvar(RParse *p, RAnalFunction *f, ut64 addr, int oplen, char *data
 	return ret;
 }
 
-static int fini(RParse *p, void *usr) {
+static void fini(RAsmPluginSession *aps) {
+	RParse *p = aps->rasm->parse;
 	R_FREE (p->retleave_asm);
-	return 0;
 }
 
-RParsePlugin r_parse_plugin_tricore_pseudo = {
+RAsmPlugin r_asm_plugin_tricore = {
 	.meta = {
-		.name = "tricore.pseudo",
+		.name = "tricore",
 		.desc = "TriCore pseudo syntax",
 		.author = "pancake",
 		.license = "LGPL-3.0-only",
 	},
-	.parse = &parse,
-	.subvar = &subvar,
-	.fini = &fini,
+	.parse = parse,
+	.subvar = subvar,
+	.fini = fini,
 };
 
 #ifndef R2_PLUGIN_INCORE
 R_API RLibStruct radare_plugin = {
-	.type = R_LIB_TYPE_PARSE,
-	.data = &r_parse_plugin_tricore_pseudo,
+	.type = R_LIB_TYPE_ASM,
+	.data = &r_asm_plugin_tricore,
 	.version = R2_VERSION
 };
 #endif

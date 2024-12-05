@@ -4,7 +4,7 @@
 #include <r_util.h>
 #include <r_flag.h>
 #include <r_anal.h>
-#include <r_parse.h>
+#include <r_asm.h>
 
 #define MAXARGS 4
 #define BUFSIZE 64
@@ -88,7 +88,7 @@ static int tokenize(const char* in, char* out[]) {
 	return count;
 }
 
-static int parse(RParse *p, const char *data, char *str) {
+static bool parse(RAsmPluginSession *aps, const char *data, char *str) {
 	int i;
 	char *argv[MAXARGS] = { NULL, NULL, NULL, NULL };
 	int argc = tokenize (data, argv);
@@ -96,17 +96,15 @@ static int parse(RParse *p, const char *data, char *str) {
 	if (!replace (argc, argv, str, BUFSIZE)) {
 		strcpy (str, data);
 	}
-
 	for (i = 0; i < MAXARGS; i++) {
 		free (argv[i]);
 	}
-
 	return true;
 }
 
-RParsePlugin r_parse_plugin_chip8_pseudo = {
+RAsmPlugin r_asm_plugin_chip8 = {
 	.meta = {
-		.name = "chip8.pseudo",
+		.name = "chip8",
 		.desc = "chip8 pseudo syntax",
 		.author = "pancake",
 		.license = "LGPL-3.0-only",
@@ -116,8 +114,8 @@ RParsePlugin r_parse_plugin_chip8_pseudo = {
 
 #ifndef R2_PLUGIN_INCORE
 R_API RLibStruct radare_plugin = {
-	.type = R_LIB_TYPE_PARSE,
-	.data = &r_parse_plugin_chip8_pseudo,
+	.type = R_LIB_TYPE_ASM,
+	.data = &r_asm_plugin_chip8,
 	.version = R2_VERSION
 };
 #endif

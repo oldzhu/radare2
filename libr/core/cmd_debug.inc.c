@@ -851,9 +851,9 @@ static int step_until_inst(RCore *core, const char *instr, bool regex) {
 		// TODO: speedup if instructions are in the same block as the previous
 		r_io_read_at (core->io, pc, buf, sizeof (buf));
 		ret = r_asm_disassemble (core->rasm, &asmop, buf, sizeof (buf));
-		eprintf ("0x%08"PFMT64x" %d %s\n", pc, ret, r_asm_op_get_asm (&asmop)); // asmop.buf_asm);
+		eprintf ("0x%08"PFMT64x" %d %s\n", pc, ret, asmop.mnemonic);
 		if (ret > 0) {
-			const char *buf_asm = r_asm_op_get_asm (&asmop);
+			const char *buf_asm = asmop.mnemonic;
 			if (regex) {
 				if (r_regex_match (instr, "e", buf_asm)) {
 					R_LOG_INFO ("Stop");
@@ -4677,7 +4677,10 @@ static int cmd_debug_continue(RCore *core, const char *input) {
 	switch (input[1]) {
 	case 0: // "dc"
 		r_reg_arena_swap (core->dbg->reg, true);
-#if __linux__
+#if 0
+		// This has been disabled as it caused `dc; dc; ood; dc` to
+		// hang on all binaries. TODO: Find the actual root cause and
+		// fix it.
 		core->dbg->continue_all_threads = true;
 #endif
 		if (r_debug_is_dead (core->dbg)) {

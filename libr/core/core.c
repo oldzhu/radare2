@@ -1970,7 +1970,7 @@ R_API char *r_core_anal_hasrefs_to_depth(RCore *core, ut64 value, PJ *pj, int de
 				r_io_read_at (core->io, value, buf, sizeof (buf));
 				r_asm_set_pc (core->rasm, value);
 				r_asm_disassemble (core->rasm, &op, buf, sizeof (buf));
-				r_strbuf_appendf (s, "'%s' ", r_asm_op_get_asm (&op));
+				r_strbuf_appendf (s, "'%s' ", op.mnemonic);
 				r_asm_op_fini (&op);
 				/* get library name */
 				{ // NOTE: dup for mapname?
@@ -2607,7 +2607,6 @@ R_API bool r_core_init(RCore *core) {
 	core->crypto = r_crypto_new ();
 	core->egg = r_egg_new ();
 // 	core->egg->rasm = core->rasm;
-	// r_anal_bind (core->anal, &(core->egg->rasm->analb));
 
 	core->undos = r_list_newf ((RListFree)r_core_undo_free);
 
@@ -2649,6 +2648,7 @@ R_API bool r_core_init(RCore *core) {
 	core->rasm->num = core->num;
 	core->anal = r_anal_new ();
 	r_anal_bind (core->anal, &core->egg->rasm->analb);
+	r_anal_bind (core->anal, &(core->rasm->analb));
 	r_asm_set_user_ptr (core->rasm, core);
 	// XXX this should be tied to RArchConfig
 	r_egg_setup (core->egg, R_SYS_ARCH, R_SYS_BITS, 0, R_SYS_OS);
@@ -2681,16 +2681,11 @@ R_API bool r_core_init(RCore *core) {
 	core->anal->cb.on_fcn_new = on_fcn_new;
 	core->anal->cb.on_fcn_delete = on_fcn_delete;
 	core->anal->cb.on_fcn_rename = on_fcn_rename;
-	r_anal_bind (core->anal, &core->rasm->analb);
 	core->print->sdb_types = core->anal->sdb_types;
 	core->rasm->syscall = r_syscall_ref (core->anal->syscall); // BIND syscall anal/asm
 	r_anal_set_user_ptr (core->anal, core);
 	core->anal->cb_printf = (void *) r_cons_printf;
-	core->parser = r_parse_new ();
-	r_anal_bind (core->anal, &(core->parser->analb));
-	core->parser->varlist = r_anal_function_get_var_fields;
-	/// XXX shouhld be using coreb
-	r_parse_set_user_ptr (core->parser, core);
+	core->rasm->parse->varlist = r_anal_function_get_var_fields;
 	core->bin = r_bin_new ();
 	r_cons_bind (&core->bin->consb);
 	// XXX we should use RConsBind instead of this hardcoded pointer
@@ -2730,9 +2725,8 @@ R_API bool r_core_init(RCore *core) {
 	core->anal->flg_class_set = core_flg_class_set;
 	core->anal->flg_class_get = core_flg_class_get;
 	core->anal->flg_fcn_set = core_flg_fcn_set;
-	r_anal_bind (core->anal, &(core->parser->analb));
-	core->parser->flag_get = r_core_flag_get_by_spaces;
-	core->parser->label_get = r_anal_function_get_label_at;
+	core->rasm->parse->flag_get = r_core_flag_get_by_spaces;
+	core->rasm->parse->label_get = r_anal_function_get_label_at;
 
 	r_core_bind (core, &(core->anal->coreb));
 
@@ -2893,7 +2887,6 @@ R_API void r_core_fini(RCore *c) {
 	free (c->asmqjmps);
 	sdb_free (c->sdb);
 	r_core_log_free (c->log);
-	r_parse_free (c->parser);
 	r_fs_shell_free (c->rfs);
 	free (c->times);
 }

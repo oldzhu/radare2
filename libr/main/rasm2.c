@@ -287,7 +287,7 @@ static int rasm_show_help(int v) {
 			" -k [kernel]  select operating system (linux, windows, darwin, android, ios, ..)\n"
 			" -l [len]     input/Output length\n"
 			" -L ([name])  list RArch plugins: (a=asm, d=disasm, e=esil)\n"
-			" -LL ([name]) list RParse plugins\n"
+			" -LL ([name]) list RAsm parse plugins\n"
 			" -N           same as r2 -N (or R2_NOPLUGINS) (not load any plugin)\n" // -n ?
 			" -o [file]    output file name (rasm2 -Bf a.asm -o a)\n"
 			" -p           run SPP over input for assembly\n" // TODO - must be done by default
@@ -517,8 +517,7 @@ static int rasm_disasm(RAsmState *as, ut64 addr, const char *buf, int len, int b
 			}
 			char *op_hex = r_asm_op_get_hex (&op);
 			printf ("0x%08" PFMT64x "  %2d %24s  %s\n",
-				as->a->pc, op.size, op_hex,
-				r_asm_op_get_asm (&op));
+				as->a->pc, op.size, op_hex, op.mnemonic);
 			free (op_hex);
 			ret += op.size;
 			r_asm_set_pc (as->a, addr+ ret);
@@ -718,6 +717,7 @@ R_API int r_main_rasm2(int argc, const char *argv[]) {
 	const char *filters = NULL;
 	const char *file = NULL;
 	bool list_plugins = false;
+	bool list_asm_plugins = false;
 	bool isbig = false;
 	bool rad = false;
 	bool use_spp = false;
@@ -809,6 +809,9 @@ R_API int r_main_rasm2(int argc, const char *argv[]) {
 			len = r_num_math (NULL, opt.arg);
 			break;
 		case 'L':
+			if (list_plugins) {
+				list_asm_plugins = true;
+			}
 			list_plugins = true;
 			break;
 		case '@':
@@ -872,7 +875,11 @@ R_API int r_main_rasm2(int argc, const char *argv[]) {
 		goto beach;
 	}
 	if (list_plugins) {
-		rarch2_list (as, opt.argv[opt.ind]);
+		if (list_asm_plugins) {
+			R_LOG_TODO ("asm-parse-plugins-list");
+		} else {
+			rarch2_list (as, opt.argv[opt.ind]);
+		}
 		ret = 1;
 		goto beach;
 	}
@@ -934,8 +941,8 @@ R_API int r_main_rasm2(int argc, const char *argv[]) {
 		goto beach;
 	}
 	if (filters) {
-		// TODO: rename to use parse
-		r_asm_sub_names_output (as->a, filters);
+		r_asm_use_parser (as->a, filters);
+		as->a->pseudo = true;
 	}
 
 	if (file) {
