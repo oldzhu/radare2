@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2011-2022 - pancake, Roc Valles, condret, killabyte */
+/* radare - LGPL - Copyright 2011-2024 - pancake, Roc Valles, condret, killabyte */
 
 #if 0
 http://www.atmel.com/images/atmel-0856-avr-instruction-set-manual.pdf
@@ -32,7 +32,6 @@ typedef struct _cpu_model_tag {
 } CPU_MODEL;
 
 typedef struct plugin_data_t {
-	RDESContext desctx;
 	CPU_MODEL *cpu;
 } PluginData;
 
@@ -128,12 +127,55 @@ CPU_MODEL cpu_models[] = {
 			cpu_reg_common,
 			cpu_memsize_m640_m1280m_m1281_m2560_m2561,
 			cpu_pagesize_7_bits,
-			NULL },
+			NULL
+		}
 	},
-	{ .model = "ATxmega128a4u", .pc = 17, .consts = { cpu_reg_common, cpu_memsize_xmega128a4u, cpu_pagesize_7_bits, NULL } }, { .model = "ATmega1280", .pc = 16, .inherit = "ATmega640" }, { .model = "ATmega1281", .pc = 16, .inherit = "ATmega640" }, { .model = "ATmega2560", .pc = 17, .inherit = "ATmega640" }, { .model = "ATmega2561", .pc = 17, .inherit = "ATmega640" }, { .model = "ATmega88", .pc = 8, .inherit = "ATmega8" },
-	//	CPU_MODEL_DECL ("ATmega168",   13, 512, 512),
-	// last model is the default AVR - ATmega8 forever!
-	{ .model = "ATmega8", .pc = 13, .consts = { cpu_reg_common, cpu_memsize_common, cpu_pagesize_5_bits, NULL } },
+	{
+		.model = "ATmega1280",
+		.pc = 16,
+		.inherit = "ATmega640"
+	},
+	{
+		.model = "ATmega1281",
+		.pc = 16,
+		.inherit = "ATmega640"
+	},
+	{
+		.model = "ATmega2560",
+		.pc = 17,
+		.inherit = "ATmega640"
+	},
+	{
+		.model = "ATmega2561",
+		.pc = 17,
+		.inherit = "ATmega640"
+	},
+	{
+		.model = "ATmega88",
+		.pc = 8,
+		.inherit = "ATmega8"
+	},
+	{
+		.model = "ATmega8",
+		.pc = 13,
+		.consts = {
+			cpu_reg_common,
+			cpu_memsize_common,
+			cpu_pagesize_5_bits,
+			NULL
+		}
+	},
+	// last model is the default AVR
+	{
+		.model = "ATxmega128a4u",
+		.pc = 17,
+		.consts = {
+			cpu_reg_common,
+			cpu_memsize_xmega128a4u,
+			cpu_pagesize_7_bits,
+			NULL
+		}
+	}
 	//{ .model = NULL },
 };
 
@@ -416,7 +458,8 @@ static void _inst__brbx(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 		return;
 	}
 	int s = buf[0] & 0x7;
-	op->jump = op->addr + ((((buf[1] & 0x03) << 6) | ((buf[0] & 0xf8) >> 2)) | (buf[1] & 0x2 ? ~((int)0x7f) : 0)) + 2;
+	op->jump = (op->addr + ((((buf[1] & 0x03) << 6) |
+		((buf[0] & 0xf8) >> 2)) | (buf[1] & 0x2? ~((int)0x7f): 0)) + 2) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + op->size;
 	op->cycles = 1; // XXX: This is a bug, because depends on eval state,
 			// so it cannot be really be known until this
@@ -426,7 +469,7 @@ static void _inst__brbx(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 	r_strbuf_appendf (&op->esil, "%d,1,<<,sreg,&,", s); // SREG(s)
 	r_strbuf_append (&op->esil, buf[1] & 0x4 ? "!," // BRBC => branch if cleared
 						  : "!,!,"); // BRBS => branch if set
-	r_strbuf_appendf (&op->esil, "?{,%"PFMT64d",pc,=,},", op->jump); // ?true => jmp
+	r_strbuf_appendf (&op->esil, "?{,0x%"PFMT64x",pc,:=,},", op->jump); // ?true => jmp
 }
 
 static void _inst__break(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -467,7 +510,8 @@ static void _inst__call(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 	if (len < 4) {
 		return;
 	}
-	op->jump = (buf[2] << 1) | (buf[3] << 9) | (buf[1] & 0x01) << 23 | (buf[0] & 0x01) << 17 | (buf[0] & 0xf0) << 14;
+	op->jump = ((buf[2] << 1) | (buf[3] << 9) | (buf[1] & 0x01) << 23 |
+		(buf[0] & 0x01) << 17 | (buf[0] & 0xf0) << 14) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + op->size;
 	if (cpu) {
 		op->cycles = cpu->pc <= 16 ? 3 : 4;
@@ -477,7 +521,7 @@ static void _inst__call(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 		r_strbuf_append (&op->esil, "pc,");	// esil is already pointing to
 							// next instruction (@ret)
 		__generic_push (op, CPU_PC_SIZE (cpu)); // push @ret in stack
-		r_strbuf_appendf (&op->esil, "%"PFMT64d",pc,=,", op->jump); // jump!
+		r_strbuf_appendf (&op->esil, "0x%"PFMT64x",pc,:=,", op->jump); // jump!
 	} else {
 		op->cycles = 1;
 	}
@@ -583,7 +627,7 @@ static void _inst__cpse(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 		op->addr + op->size, buf + op->size, len - op->size,
 		cpu);
 	r_strbuf_fini (&next_op.esil);
-	op->jump = op->addr + next_op.size + 2;
+	op->jump = (op->addr + next_op.size + 2) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + 2;
 
 	// cycles
@@ -593,7 +637,7 @@ static void _inst__cpse(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 			// In case of evaluating to true, this instruction
 			// needs 2/3 cycles, elsewhere it needs only 1 cycle.
 	r_strbuf_appendf (&op->esil, "r%d,r%d,^,!,", r, d); // Rr == Rd
-	r_strbuf_appendf (&op->esil, "?{,%"PFMT64d",pc,=,},", op->jump); // ?true => jmp
+	r_strbuf_appendf (&op->esil, "?{,0x%"PFMT64x",pc,:=,},", op->jump); // ?true => jmp
 }
 
 static void _inst__dec(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -614,23 +658,12 @@ static void _inst__des(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, i
 	// DES k
 	op->type = R_ANAL_OP_TYPE_CRYPTO;
 	op->cycles = 1; // redo this
-	r_strbuf_setf (&op->esil, "%d,des", buf[0] >> 4);
+	// <text>,<deskey><encrypt>,<round>,des,<text>,:=
+	r_strbuf_setf (&op->esil, "text,deskey,hf,%d,des,text,:=", buf[0] >> 4);
 }
 
 static void _inst__eijmp(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
-	// EIJMP
-	ut64 z = 0;
-	ut64 eind = 0;
-	// read z and eind for calculating jump address on runtime
-	if (as->arch->esil) {
-		r_esil_reg_read (as->arch->esil, "z", &z, NULL);
-		r_esil_reg_read (as->arch->esil, "eind", &eind, NULL);
-	}
-	// real target address may change during execution, so this value will
-	// be changing all the time
-	op->jump = ((eind << 16) + z) << 1;
-	// jump
-	r_strbuf_append (&op->esil, "1,z,16,eind,<<,+,<<,pc,=,");
+	r_strbuf_appendf (&op->esil, "1,z,16,eind,<<,+,<<,0x%x,&,pc,:=,", CPU_PC_MASK (cpu));
 	// cycles
 	op->cycles = 2;
 }
@@ -638,13 +671,12 @@ static void _inst__eijmp(RArchSession *as, RAnalOp *op, const ut8 *buf, int len,
 static void _inst__eicall(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
 	// EICALL
 	// push pc in stack
-	r_strbuf_append (&op->esil, "pc,"); // esil is already pointing to
-					     // next instruction (@ret)
-	__generic_push (op, CPU_PC_SIZE (cpu)); // push @ret in stack
+	r_strbuf_set (&op->esil, "pc,");
+	__generic_push (op, CPU_PC_SIZE (cpu));	// push @ret in stack
 	// do a standard EIJMP
 	INST_CALL (eijmp);
 	// fix cycles
-	op->cycles = !STR_BEGINS (cpu->model, "ATxmega") ? 3 : 4;
+	op->cycles = !STR_BEGINS (cpu->model, "ATxmega")? 3: 4;
 }
 
 static void _inst__elpm(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -724,23 +756,14 @@ static void _inst__fmulsu(RArchSession *as, RAnalOp *op, const ut8 *buf, int len
 
 static void _inst__ijmp(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
 	// IJMP k
-	ut64 z = 0;
-	// read z for calculating jump address on runtime
-	if (as->arch->esil) {
-		r_esil_reg_read (as->arch->esil, "z", &z, NULL);
-	}
-	// real target address may change during execution, so this value will
-	// be changing all the time
-	op->jump = z << 1;
 	op->cycles = 2;
-	r_strbuf_append (&op->esil, "1,z,<<,pc,=,"); // jump!
+	r_strbuf_appendf (&op->esil, "1,z,<<,0x%x,&,pc,:=,", CPU_PC_MASK (cpu)); // jump!
 }
 
 static void _inst__icall(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
 	// ICALL k
 	// push pc in stack
-	r_strbuf_append (&op->esil, "pc,"); // esil is already pointing to
-					     // next instruction (@ret)
+	r_strbuf_set (&op->esil, "pc,");
 	__generic_push (op, CPU_PC_SIZE (cpu)); // push @ret in stack
 	// do a standard IJMP
 	INST_CALL (ijmp);
@@ -785,9 +808,10 @@ static void _inst__jmp(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, i
 	if (len < 4) {
 		return;
 	}
-	op->jump = (buf[2] << 1) | (buf[3] << 9) | (buf[1] & 0x01) << 23 | (buf[0] & 0x01) << 17 | (buf[0] & 0xf0) << 14;
+	op->jump = ((buf[2] << 1) | (buf[3] << 9) | (buf[1] & 0x01) << 23 |
+		(buf[0] & 0x01) << 17 | (buf[0] & 0xf0) << 14) & CPU_PC_MASK (cpu);
 	op->cycles = 3;
-	r_strbuf_appendf (&op->esil, "%"PFMT64d",pc,=,", op->jump); // jump!
+	r_strbuf_appendf (&op->esil, "0x%"PFMT64x",pc,:=,", op->jump); // jump!
 }
 
 static void _inst__lac(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -1158,19 +1182,20 @@ static void _inst__rcall(RArchSession *as, RAnalOp *op, const ut8 *buf, int len,
 		return;
 	}
 	// target address
-	op->jump = op->addr + ((((((buf[1] & 0xf) << 8) | buf[0]) << 1) | (((buf[1] & 0x8) ? ~((int)0x1fff) : 0))) + 2);
+	op->jump = (op->addr + ((((((buf[1] & 0xf) << 8) | buf[0]) << 1) |
+		(((buf[1] & 0x8)? ~((int)0x1fff): 0))) + 2)) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + op->size;
 	// esil
 	r_strbuf_append (&op->esil, "pc,"); // esil already points to next
 					     // instruction (@ret)
 	__generic_push (op, CPU_PC_SIZE (cpu)); // push @ret addr
-	r_strbuf_appendf (&op->esil, "%"PFMT64d ",pc,=,", op->jump); // jump!
+	r_strbuf_appendf (&op->esil, "0x%"PFMT64x",pc,:=,", op->jump); // jump!
 	// cycles
 	if (!r_str_ncasecmp (cpu->model, "ATtiny", 6)) {
 		op->cycles = 4; // ATtiny is always slow
 	} else {
 		// PC size decides required runtime!
-		op->cycles = cpu->pc <= 16 ? 3 : 4;
+		op->cycles = cpu->pc <= 16? 3: 4;
 		if (!STR_BEGINS (cpu->model, "ATxmega")) {
 			op->cycles--; // ATxmega optimizes one cycle
 		}
@@ -1206,8 +1231,8 @@ static void _inst__reti(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 static void _inst__rjmp(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
 	// RJMP k
 	st32 jump = (((((buf[1] & 0xf) << 9) | (buf[0] << 1))) | (buf[1] & 0x8 ? ~(0x1fff) : 0)) + 2;
-	op->jump = op->addr + jump;
-	r_strbuf_appendf (&op->esil, "%"PFMT64d",pc,=,", op->jump);
+	op->jump = (op->addr + jump) & CPU_PC_MASK (cpu);
+	r_strbuf_appendf (&op->esil, "0x%"PFMT64x",pc,:=,", op->jump);
 }
 
 static void _inst__ror(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -1338,7 +1363,7 @@ static void _inst__sbix(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 		len - op->size,
 		cpu);
 	r_strbuf_fini (&next_op.esil);
-	op->jump = op->addr + next_op.size + 2;
+	op->jump = (op->addr + next_op.size + 2) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + op->size;
 
 	// cycles
@@ -1353,7 +1378,7 @@ static void _inst__sbix(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 	r_strbuf_appendf (&op->esil, "%d,1,<<,%s,&,", b, r_strbuf_get (io_port)); // IO(A,b)
 	r_strbuf_append (&op->esil, (buf[1] & 0xe) == 0xc ? "!," // SBIC => branch if 0
 							   : "!,!,"); // SBIS => branch if 1
-	r_strbuf_appendf (&op->esil, "?{,%"PFMT64d",pc,=,},", op->jump); // ?true => jmp
+	r_strbuf_appendf (&op->esil, "?{,0x%"PFMT64x",pc,:=,},", op->jump); // ?true => jmp
 	r_strbuf_free (io_port);
 }
 
@@ -1390,7 +1415,7 @@ static void _inst__sbrx(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 		op->addr + op->size, buf + op->size, len - op->size,
 		cpu);
 	r_strbuf_fini (&next_op.esil);
-	op->jump = op->addr + next_op.size + 2;
+	op->jump = (op->addr + next_op.size + 2) & CPU_PC_MASK (cpu);
 	op->fail = op->addr + 2;
 
 	// cycles
@@ -1402,7 +1427,7 @@ static void _inst__sbrx(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, 
 	r_strbuf_appendf (&op->esil, "%d,1,<<,r%d,&,", b, r); // Rr(b)
 	r_strbuf_append (&op->esil, (buf[1] & 0xe) == 0xc ? "!," // SBRC => branch if cleared
 							   : "!,!,"); // SBRS => branch if set
-	r_strbuf_appendf (&op->esil, "?{,%"PFMT64d",pc,=,},", op->jump); // ?true => jmp
+	r_strbuf_appendf (&op->esil, "?{,0x%"PFMT64x",pc,:=,},", op->jump); // ?true => jmp
 }
 
 static void _inst__sleep(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
@@ -1412,41 +1437,14 @@ static void _inst__sleep(RArchSession *as, RAnalOp *op, const ut8 *buf, int len,
 
 static void _inst__spm(RArchSession *as, RAnalOp *op, const ut8 *buf, int len, int *fail, CPU_MODEL *cpu) {
 	// SPM Z+
-	ut64 spmcsr = 0;
-
-	// read SPM Control Register (SPMCR)
-	if (as->arch->esil) {
-		r_esil_reg_read (as->arch->esil, "spmcsr", &spmcsr, NULL);
-	}
-
-	// clear SPMCSR
-	r_strbuf_append (&op->esil, "0x7c,spmcsr,&=,");
-
-	// decide action depending on the old value of SPMCSR
-	switch (spmcsr & 0x7f) {
-	case 0x03: // PAGE ERASE
-		// invoke SPM_CLEAR_PAGE (erases target page writing
-		// the 0xff value
-		r_strbuf_append (&op->esil, "16,rampz,<<,z,+,"); // push target address
-		r_strbuf_append (&op->esil, "SPM_PAGE_ERASE,"); // do magic
-		break;
-
-	case 0x01: // FILL TEMPORARY BUFFER
-		r_strbuf_append (&op->esil, "r1,r0,"); // push data
-		r_strbuf_append (&op->esil, "z,"); // push target address
-		r_strbuf_append (&op->esil, "SPM_PAGE_FILL,"); // do magic
-		break;
-
-	case 0x05: // WRITE PAGE
-		r_strbuf_append (&op->esil, "16,rampz,<<,z,+,"); // push target address
-		r_strbuf_append (&op->esil, "SPM_PAGE_WRITE,"); // do magic
-		break;
-
-	default:
-		eprintf ("SPM: I dont know what to do with SPMCSR %02x.\n",
-			(unsigned int)spmcsr);
-	}
-
+	r_strbuf_set (&op->esil, "spmcsr,0x7f,&,"
+		"spmcsr,0x7f,&,"
+		"spmcsr,0x7f,&,"
+		"0x7c,spmcsr,&=,"
+		"0x1,^,!,?{,r1,r0,z,SPM_PAGE_FILL,CLEAR,BREAK,},"
+		"0x3,^,!,?{,16,rampz,<<,z,+,SPM_PAGE_ERASE,CLEAR,BREAK,},"
+		"0x5,^,!,?{,16,rampz,<<,z,+,SPM_PAGE_WRITE,}"
+	);
 	op->cycles = 1; // This is truly false. Datasheets do not publish how
 			// many cycles this instruction uses in all its
 			// operation modes and I am pretty sure that this value
@@ -1752,6 +1750,7 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 	// select cpu info
 	CPU_MODEL *cpu = get_cpu_model (as->data, as->config->cpu);
 
+#if 0
 	// set memory layout registers
 	if (as->arch->esil) {
 		ut64 offset = 0;
@@ -1769,6 +1768,7 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 		offset += const_get_value (const_by_name (cpu, CPU_CONST_PARAM, "eeprom_size"));
 		r_esil_reg_write (as->arch->esil, "_page", offset);
 	}
+#endif
 	// process opcode
 	avr_op_analyze (as, op, addr, buf, len, cpu);
 
@@ -1781,57 +1781,45 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 }
 
 static bool avr_custom_des(REsil *esil) {
-	ut64 key, encrypt, text, des_round;
-	ut32 key_lo, key_hi, buf_lo, buf_hi;
-	PluginData *pd = R_UNWRAP5 (esil, anal, arch, session, data);
-	if (!esil || !pd) {
+	if (!esil) {
+		return false;
+	}
+	ut64 text, key, encrypt, des_round;
+	if (!__esil_pop_argument (esil, &text)) {
+		return false;
+	}
+	if (!__esil_pop_argument (esil, &key)) {
+		return false;
+	}
+	if (!__esil_pop_argument (esil, &encrypt)) {
 		return false;
 	}
 	if (!__esil_pop_argument (esil, &des_round)) {
 		return false;
 	}
-	r_esil_reg_read (esil, "hf", &encrypt, NULL);
-	r_esil_reg_read (esil, "deskey", &key, NULL);
-	r_esil_reg_read (esil, "text", &text, NULL);
 
-	key_lo = key & UT32_MAX;
-	key_hi = key >> 32;
-	buf_lo = text & UT32_MAX;
-	buf_hi = text >> 32;
+	ut32 key_lo = key & UT32_MAX;
+	ut32 key_hi = key >> 32;
+	ut32 buf_lo = text & UT32_MAX;
+	ut32 buf_hi = text >> 32;
 
-	if (des_round != pd->desctx.round) {
-		pd->desctx.round = des_round;
+	des_round &= 0xf;
+	if (!encrypt) {
+		des_round ^= 0xf;
 	}
 
-	if (!pd->desctx.round) {
-		int i;
-		// generating all round keys
-		r_des_permute_key (&key_lo, &key_hi);
-		for (i = 0; i < 16; i++) {
-			r_des_round_key (i, &pd->desctx.round_key_lo[i], &pd->desctx.round_key_hi[i], &key_lo, &key_hi);
-		}
+	ut32 round_key_lo, round_key_hi;
+	r_des_round_key (des_round, &round_key_lo, &round_key_hi, &key_lo, &key_hi);
+
+	if (!des_round) {
 		r_des_permute_block0 (&buf_lo, &buf_hi);
 	}
-
-	if (encrypt) {
-		r_des_round (&buf_lo, &buf_hi,
-			&pd->desctx.round_key_lo[pd->desctx.round],
-			&pd->desctx.round_key_hi[pd->desctx.round]);
-	} else {
-		r_des_round (&buf_lo, &buf_hi,
-			&pd->desctx.round_key_lo[15 - pd->desctx.round],
-			&pd->desctx.round_key_hi[15 - pd->desctx.round]);
-	}
-
-	if (pd->desctx.round == 15) {
+	r_des_round (&buf_lo, &buf_hi, &round_key_lo, &round_key_hi);
+	if (des_round == 0xf) {
 		r_des_permute_block1 (&buf_hi, &buf_lo);
-		pd->desctx.round = 0;
-	} else {
-		pd->desctx.round++;
 	}
 
-	r_esil_reg_write (esil, "text", text);
-	return true;
+	return r_esil_pushnum (esil, (((ut64)buf_hi) << 32) | buf_lo);
 }
 
 // ESIL operation SPM_PAGE_ERASE
@@ -1860,8 +1848,7 @@ static bool avr_custom_spm_page_erase(REsil *esil) {
 	ut8 c = 0xff;
 	ut64 i;
 	for (i = 0; i < (1ULL << page_size_bits); i++) {
-		r_esil_mem_write (
-			esil, (addr + i) & CPU_PC_MASK (cpu), &c, 1);
+		r_esil_mem_write (esil, (addr + i) & CPU_PC_MASK (cpu), &c, 1);
 	}
 
 	return true;
@@ -1945,40 +1932,12 @@ static bool avr_custom_spm_page_write(REsil *esil) {
 	return true;
 }
 
-static bool esil_avr_hook_reg_write(REsil *esil, const char *name, ut64 *val) {
-	RArchSession *as = R_UNWRAP4 (esil, anal, arch, session);
-	if (!as) {
-		return false;
-	}
-
-	// select cpu info
-	CPU_MODEL *cpu = get_cpu_model (as->data, as->config->cpu);
-
-	// crop registers and force certain values
-	if (!strcmp (name, "pc")) {
-		*val &= CPU_PC_MASK (cpu);
-	} else if (!strcmp (name, "pcl")) {
-		if (cpu->pc < 8) {
-			*val &= MASK (8);
-		}
-	} else if (!strcmp (name, "pch")) {
-		*val = cpu->pc > 8
-			? *val & MASK (cpu->pc - 8)
-			: 0;
-	}
-	return false;
-}
-
 static bool esil_avr_init(RArchSession *as, REsil *esil) {
 	R_RETURN_VAL_IF_FAIL (as && as->data && esil, false);
-
-	PluginData *pd = as->data;
-	pd->desctx.round = 0;
-	r_esil_set_op (esil, "des", avr_custom_des, 0, 0, R_ESIL_OP_TYPE_CUSTOM); // better meta info plz
-	r_esil_set_op (esil, "SPM_PAGE_ERASE", avr_custom_spm_page_erase, 0, 0, R_ESIL_OP_TYPE_CUSTOM);
-	r_esil_set_op (esil, "SPM_PAGE_FILL", avr_custom_spm_page_fill, 0, 0, R_ESIL_OP_TYPE_CUSTOM);
-	r_esil_set_op (esil, "SPM_PAGE_WRITE", avr_custom_spm_page_write, 0, 0, R_ESIL_OP_TYPE_CUSTOM);
-	esil->cb.hook_reg_write = esil_avr_hook_reg_write;
+	r_esil_set_op (esil, "des", avr_custom_des, 1, 4, R_ESIL_OP_TYPE_CUSTOM | R_ESIL_OP_TYPE_MATH);
+	r_esil_set_op (esil, "SPM_PAGE_ERASE", avr_custom_spm_page_erase, 0, 1, R_ESIL_OP_TYPE_CUSTOM);
+	r_esil_set_op (esil, "SPM_PAGE_FILL", avr_custom_spm_page_fill, 0, 3, R_ESIL_OP_TYPE_CUSTOM);
+	r_esil_set_op (esil, "SPM_PAGE_WRITE", avr_custom_spm_page_write, 0, 1, R_ESIL_OP_TYPE_CUSTOM);
 	return true;
 }
 
@@ -2432,7 +2391,8 @@ const RArchPlugin r_arch_plugin_avr = {
 	.esilcb = esil_cb,
 	.init = init,
 	.fini = fini,
-	.cpus = "ATmega8," // First one is default
+	.cpus = "ATxmega128a4u,"	// First one is default
+		"ATmega8,"
 		"ATmega1280,"
 		"ATmega1281,"
 		"ATmega168,"
@@ -2442,8 +2402,7 @@ const RArchPlugin r_arch_plugin_avr = {
 		"ATmega32u4,"
 		"ATmega48,"
 		"ATmega640,"
-		"ATmega88,"
-		"ATxmega128a4u"
+		"ATmega88"
 };
 
 #ifndef R2_PLUGIN_INCORE
