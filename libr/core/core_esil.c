@@ -14,6 +14,21 @@ static bool core_esil_op_todo(REsil *esil) {
 	return true;
 }
 
+static bool core_esil_op_interrupt(REsil *esil) {
+	char *str = r_esil_pop (esil);
+	ut64 interrupt;
+	if (!r_esil_get_parm (esil, str, &interrupt)) {
+		free (str);
+		return false;
+	}
+	free (str);
+	RCore *core = esil->user;
+	if (core->esil.cmd_intr) {
+		r_core_cmd0 (core, core->esil.cmd_todo);
+	}
+	return r_esil_fire_interrupt (esil, (ut32)interrupt);
+}
+
 static bool core_esil_is_reg (void *core, const char *name) {
 	RRegItem *ri = r_reg_get (((RCore *)core)->esil.reg, name, -1);
 	if (!ri) {
@@ -154,8 +169,9 @@ R_API bool r_core_esil_init(RCore *core) {
 		&core_esil_reg_if, &core_esil_mem_if)) {
 		goto init_fail;
 	}
-	if (!r_esil_set_op (&core->esil.esil, "TODO", core_esil_op_todo,
-		0, 0, R_ESIL_OP_TYPE_UNKNOWN)) {
+	if (!r_esil_set_op (&core->esil.esil, "TODO", core_esil_op_todo, 0, 0,
+		R_ESIL_OP_TYPE_UNKNOWN) || !r_esil_set_op (&core->esil.esil,
+		"$", core_esil_op_interrupt, 0, 1, R_ESIL_OP_TYPE_UNKNOWN)) {
 		goto op_fail;
 	}
 	r_strbuf_init (&core->esil.trap_revert);
@@ -170,6 +186,40 @@ op_fail:
 init_fail:
 	r_reg_free (core->esil.reg);
 	return false;
+}
+
+R_API void r_core_esil_load_arch(RCore *core) {
+	R_RETURN_IF_FAIL (core && core->anal && core->anal->arch);
+	if (!core->anal->arch->session || !core->anal->arch->session->plugin ||
+		!core->anal->arch->session->plugin->esilcb ||
+		!core->anal->arch->session->plugin->regs) {
+		//This doesn't count as fail
+		return;
+	}
+	//This is awful. TODO: massage r_arch api
+	REsil *arch_esil = core->anal->arch->esil;
+	core->anal->arch->esil = &core->esil.esil;
+	r_arch_esilcb (core->anal->arch, R_ARCH_ESIL_ACTION_INIT);
+	core->anal->arch->esil = arch_esil;
+	char *rp = core->anal->arch->session->plugin->regs (core->anal->arch->session);
+	if (!rp) {
+		R_LOG_WARN ("Couldn't set reg profile");
+		return;
+	}
+	r_reg_set_profile_string (core->esil.reg, rp);
+	free (rp);
+}
+
+R_API void r_core_esil_unload_arch(RCore *core) {
+	R_RETURN_IF_FAIL (core && core->anal && core->anal->arch);
+	if (!core->anal->arch->session || !core->anal->arch->session->plugin ||
+		!core->anal->arch->session->plugin->esilcb) {
+		return;
+	}
+	REsil *arch_esil = core->anal->arch->esil;
+	core->anal->arch->esil = &core->esil.esil;
+	r_arch_esilcb (core->anal->arch, R_ARCH_ESIL_ACTION_FINI);
+	core->anal->arch->esil = arch_esil;
 }
 
 R_API void r_core_esil_fini(RCoreEsil *cesil) {
