@@ -323,7 +323,8 @@ typedef struct r_core_esil_t {
 
 #define	R_CORE_ESIL_RO		0x1
 #define	R_CORE_ESIL_NONULL	0x2
-#define	R_CORE_ESIL_REVERT	0x4
+#define	R_CORE_ESIL_TRAP_REVERT	0x4
+#define	R_CORE_ESIL_TRAP_REVERT_CONFIG	0x8
 
 typedef struct RCorePriv RCorePriv;
 
@@ -782,6 +783,7 @@ R_API bool r_core_esil_init(RCore *core);
 R_API void r_core_esil_fini(RCoreEsil *cesil);
 R_API void r_core_esil_load_arch(RCore *core);
 R_API void r_core_esil_unload_arch(RCore *core);
+R_API void r_core_esil_single_step(RCore *core);
 
 // both do the same, we should get rid of one of them
 R_API bool r_core_bin_raise(RCore *core, ut32 bfid);
