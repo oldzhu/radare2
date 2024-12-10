@@ -78,7 +78,7 @@ On x86 according to Wikipedia
 #define R_ANAL_OP_HINT_MASK 0xf0000000
 
 typedef enum {
-	// R2_590 - DEPRECATE
+	// R2_600 - DEPRECATE
 	R_ANAL_OP_TYPE_COND  = 0x80000000, // TODO must be moved to prefix? // should not be TYPE those are modifiers!
 	R_ANAL_OP_TYPE_REP   = 0x40000000, /* repeats next instruction N times */
 	R_ANAL_OP_TYPE_MEM   = 0x20000000, // TODO must be moved to prefix?
@@ -114,7 +114,8 @@ typedef enum {
 	R_ANAL_OP_TYPE_ILL   = 6, /* illegal instruction // trap */
 	R_ANAL_OP_TYPE_UNK   = 7, /* unknown opcode type */
 	R_ANAL_OP_TYPE_NOP   = 8, /* does nothing */
-	R_ANAL_OP_TYPE_MOV   = 9, /* register move */
+	R_ANAL_OP_TYPE_MOV   = 9, /* move immediate into register */
+	R_ANAL_OP_TYPE_RMOV  = 9 | R_ANAL_OP_TYPE_REG, /* register move */
 	R_ANAL_OP_TYPE_CMOV  = 9 | R_ANAL_OP_TYPE_COND, /* conditional move */
 	R_ANAL_OP_TYPE_TRAP  = 10, /* it's a trap! */
 	R_ANAL_OP_TYPE_SWI   = 11, /* syscall, software interrupt */
