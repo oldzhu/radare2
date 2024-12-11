@@ -1831,9 +1831,12 @@ static bool cmd_onn(RCore *core, const char* input) {
 }
 
 static int cmd_on(RCore *core, int argc, char *argv[]) {
+	if (argc < 1) {
+		return 0;
+	}
 	char *path = NULL;
 	int fd = -1;
-	ut64 vsize, vaddr = 0ULL;
+	ut64 vsize = 0, vaddr = 0ULL;
 	ut32 i, perm = R_PERM_R;
 	const ut32 end = R_MIN (argc, 4);
 	for (i = 0; i < end; i++) {

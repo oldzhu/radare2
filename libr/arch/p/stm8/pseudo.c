@@ -1,8 +1,6 @@
 /* radare - LGPL - Copyright 2024 - pancake */
 
-#include <r_lib.h>
 #include <r_asm.h>
-#include <r_anal.h>
 
 static int replace(int argc, const char *argv[], char *newstr) {
 #define MAXPSEUDOOPS 10
@@ -181,6 +179,7 @@ static char *parse(RAsmPluginSession *aps, const char *data) {
 			}
 			if (!ptr) {
 				R_LOG_ERROR ("Unbalanced bracket");
+				free (str);
 				free (buf);
 				return false;
 			}
@@ -220,8 +219,7 @@ static char *parse(RAsmPluginSession *aps, const char *data) {
 		}
 	}
 	free (buf);
-	r_str_fixspaces (str);
-	return str;
+	return r_str_fixspaces (str);
 }
 
 RAsmPlugin r_asm_plugin_stm8= {
