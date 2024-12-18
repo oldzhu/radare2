@@ -50,6 +50,7 @@ static RCoreHelpMessage help_msg_p8 = {
 	"Usage: p8[*fjx]", " [len]", "8bit hexpair list of bytes (see pcj)",
 	"p8", " ([len])", "print hexpairs string",
 	"p8*", "", "display r2 commands to write this block",
+	"p8b", "", "print hexpairs of basic block",
 	"p8d", "", "space separated list of byte values in decimal",
 	"p8f", "", "print hexpairs of function (linear)",
 	"p8j", "", "print hexpairs in JSON array",
@@ -3504,6 +3505,15 @@ static void _handle_call(RCore *core, char *line, char **str) {
 	R_RETURN_IF_FAIL (core && line && str);
 	if (core->rasm && core->rasm->config && !strcmp (core->rasm->config->arch, "x86")) {
 		*str = strstr (line, "call ");
+		if (!*str) {
+			if (strstr (line, "[reloc.")) {
+				*str = strstr (line, "jmp ");
+				char *bra = strchr (line, ']');
+				if (bra) {
+					*bra = 0;
+				}
+			}
+		}
 	} else if (core->rasm && core->rasm->config && !strcmp (core->rasm->config->arch, "arm")) {
 		*str = strstr (line, " b ");
 		if (*str && strstr (*str, " 0x")) {
@@ -3673,18 +3683,21 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 		} else {
 #define USE_PREFIXES 1
 #if USE_PREFIXES
-			// XXX leak
-			str = strstr (line, " obj.");
+			str = strstr (line, " reloc.");
 			if (!str) {
-				str = strstr (line, " str.");
+			// XXX leak
+				str = strstr (line, " obj.");
 				if (!str) {
-					str = strstr (line, " imp.");
+					str = strstr (line, " str.");
 					if (!str) {
-						str = strstr (line, " fcn.");
+						str = strstr (line, " imp.");
 						if (!str) {
-							str = strstr (line, " hit.");
+							str = strstr (line, " fcn.");
 							if (!str) {
-								str = strstr (line, " sub.");
+								str = strstr (line, " hit.");
+								if (!str) {
+									str = strstr (line, " sub.");
+								}
 							}
 						}
 					}
@@ -3733,7 +3746,10 @@ static void disasm_strings(RCore *core, const char *input, RAnalFunction *fcn) {
 			if (!str) {
 				str = strstr (line, "sym.");
 				if (!str) {
-					str = strstr (line, "fcn.");
+					str = strstr (line, "reloc.");
+					if (!str) {
+						str = strstr (line, "fcn.");
+					}
 				}
 			}
 		}
@@ -8665,6 +8681,8 @@ static int cmd_print(void *data, const char *input) {
 					r_cons_printf ("%d ", block[i]);
 				}
 				r_cons_newline ();
+			} else if (input[1] == 'b') { // "p8b"
+				r_core_cmdf (core, "p8 $BS @ $BB");
 			} else if (input[1] == 'f') { // "p8f"
 				r_core_cmdf (core, "p8 $FS @ $FB");
 			} else {
