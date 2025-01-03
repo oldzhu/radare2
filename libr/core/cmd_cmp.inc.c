@@ -31,6 +31,7 @@ static RCoreHelpMessage help_msg_c = {
 	"cc", " [at]", "compares in two hexdump columns of block size",
 	"ccc", " [at]", "same as above, but only showing different lines",
 	"ccd", " [at]", "compares in two disasm columns of block size",
+	"ccdf", " [at]", "compares function disasm with the other function",
 	"ccdd", " [at]", "compares decompiler output (e cmd.pdc=pdg|pdd)",
 	"cd", " [dir]", "chdir",
 	// "cc", " [offset]", "code bindiff current block against offset"
@@ -622,6 +623,38 @@ static int cmd_cmp_watcher(RCore *core, const char *input) {
 	return ret;
 }
 
+static char *opstr(RCore *core, RAnalOp *op, ut64 addr) {
+	ut8 data[32];
+	char *str;
+	r_io_read_at (core->io, addr, data, sizeof (data));
+	// dis A
+	core->rasm->parse->subrel = r_config_get_b (core->config, "asm.sub.rel");
+	r_asm_set_pc (core->rasm, addr);
+	(void) r_asm_disassemble (core->rasm, op, data, sizeof (data));
+	char *opa = strdup (op->mnemonic);
+	if (r_config_get_b (core->config, "asm.sub.var")) {
+		str = r_asm_parse_subvar (core->rasm, NULL, addr, op->size, opa);
+		if (str) {
+			free (opa);
+			opa = str;
+		}
+	}
+	str = r_asm_parse_filter (core->rasm, addr, core->flags, NULL, opa);
+	if (str) {
+		free (opa);
+		opa = str;
+	}
+	if (r_config_get_b (core->config, "asm.imm.trim")) {
+		str = r_asm_parse_immtrim (core->rasm, opa);
+		if (str) {
+			free (opa);
+			opa = str;
+		}
+	}
+	// R_LOG_INFO (opa);
+	return opa;
+}
+
 static int cmd_cmp_disasm(RCore *core, const char *input, int mode) {
 	RAnalOp op, op2;
 	int i, j;
@@ -657,29 +690,22 @@ static int cmd_cmp_disasm(RCore *core, const char *input, int mode) {
 		break;
 	case 'c': // columns
 		for (i = j = 0; i < core->blocksize && j < core->blocksize;) {
-			// dis A
-			r_asm_set_pc (core->rasm, core->offset + i);
-			(void) r_asm_disassemble (core->rasm, &op,
-				core->block + i, core->blocksize - i);
-
-			// dis B
-			r_asm_set_pc (core->rasm, off + i);
-			(void) r_asm_disassemble (core->rasm, &op2,
-				buf + j, core->blocksize - j);
+			char *opa = opstr (core, &op, core->offset + i);
+			char *opb = opstr (core, &op2, off + i);
 
 			// show output
-			bool iseq = !strcmp (op.mnemonic, op2.mnemonic);
+			bool iseq = !strcmp (opa, opb); // op.mnemonic, op2.mnemonic);
 			memset (colpad, ' ', sizeof (colpad));
 			{
-				int pos = strlen (op.mnemonic);
+				int pos = strlen (opa); // op.mnemonic);
 				pos = (pos > cols)? 0: cols - pos;
 				colpad[pos] = 0;
 			}
 			if (hascolor) {
 				r_cons_print (iseq? pal->graph_true: pal->graph_false);
 			}
-			r_cons_printf (" 0x%08"PFMT64x "  %s %s", core->offset + i, op.mnemonic, colpad);
-			r_cons_printf ("%c 0x%08"PFMT64x "  %s\n", iseq? '=': '!', off + j, op2.mnemonic);
+			r_cons_printf (" 0x%08"PFMT64x "  %s %s", core->offset + i, opa, colpad);
+			r_cons_printf ("%c 0x%08"PFMT64x "  %s\n", iseq? '=': '!', off + j, opb);
 			if (hascolor) {
 				r_cons_print (Color_RESET);
 			}
@@ -1399,19 +1425,36 @@ static int cmd_cmp(void *data, const char *input) {
 		if (input[1] == '?') { // "cc?"
 			r_core_cmd_help_contains (core, help_msg_c, "cc");
 		} else if (input[1] == 'd') { // "ccd"
-			if (input[2] == 'd') { // "ccdd"
+			if (input[2] == '?') {
+				r_core_cmd_help_contains (core, help_msg_c, "ccd");
+			} else if (input[2] == 'd') { // "ccdd"
 				cmd_cmp_disasm (core, input + 3, 'd');
 			} else {
 				cmd_cmp_disasm (core, input + 2, 'c');
 			}
-		} else {
+		} else if (input[1] == 'f') { // "ccdf"
+			RAnalFunction *fcn = r_anal_get_function_at (core->anal, core->offset);
+			if (fcn) {
+				const int obs = core->blocksize;
+				const int fsz = r_anal_function_linear_size (fcn);
+				r_core_block_size (core, fsz);
+				if (input[2] == ' ') {
+					r_core_cmdf (core, "ccd%s", input + 2);
+				} else {
+					R_LOG_ERROR ("Missing argument");
+				}
+				r_core_block_size (core, obs);
+			} else {
+				R_LOG_ERROR ("Cannot find function");
+			}
+		} else if (!input[1] || input[1] == ' ') {
 			ut32 oflags = core->print->flags;
 			ut64 addr = 0; // TOTHINK: Not sure what default address should be
 			if (input[1] == 'c') { // "ccc"
 				core->print->flags |= R_PRINT_FLAGS_DIFFOUT;
 				addr = r_num_math (core->num, input + 2);
 			} else {
-				if (*input && input[1]) {
+				if (input[0] && input[1]) {
 					addr = r_num_math (core->num, input + 2);
 				}
 			}
@@ -1425,6 +1468,8 @@ static int cmd_cmp(void *data, const char *input) {
 				free (b);
 			}
 			core->print->flags = oflags;
+		} else {
+			r_core_return_invalid_command (core, "cc", input[1]);
 		}
 		break;
 	case 'i': // "ci"
