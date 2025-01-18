@@ -1,9 +1,6 @@
-/* radare2 - LGPL - Copyright 2017-2023 - condret, MaskRay */
+/* radare2 - LGPL - Copyright 2017-2024 - condret, MaskRay */
 
 #include <r_io.h>
-#include <stdlib.h>
-#include <r_util.h>
-#include <sdb/sdb.h>
 
 #define END_OF_MAP_IDS UT32_MAX
 R_IPI bool io_bank_has_map(RIO *io, const ut32 bankid, const ut32 mapid);
@@ -756,4 +753,89 @@ R_API void r_io_map_overlay_foreach(RIOMap *map, RIOMapOverlayForeach cb, void *
 		};
 		cb (itv, moc->buf, user);
 	} while ((node = r_rbnode_next (node)), node);
+}
+
+static const char* metatypename[R_IO_MAP_META_TYPE_LAST] = {
+	[R_IO_MAP_META_TYPE_NONE] = "",
+	[R_IO_MAP_META_TYPE_HEAP] = "heap",
+	[R_IO_MAP_META_TYPE_STACK] = "stack",
+	[R_IO_MAP_META_TYPE_MMAP] = "mmap",
+	[R_IO_MAP_META_TYPE_MMIO] = "mmio",
+	[R_IO_MAP_META_TYPE_DMA] = "dma",
+	[R_IO_MAP_META_TYPE_JIT] = "jit",
+	[R_IO_MAP_META_TYPE_BSS] = "bss",
+	[R_IO_MAP_META_TYPE_SHARED] = "shared",
+	[R_IO_MAP_META_TYPE_KERNEL] = "kernel",
+	[R_IO_MAP_META_TYPE_GUARD] = "guard",
+	[R_IO_MAP_META_TYPE_NULL] = "null",
+	[R_IO_MAP_META_TYPE_GPU] = "gpu",
+	[R_IO_MAP_META_TYPE_TLS] = "tls",
+	[R_IO_MAP_META_TYPE_BUFFER] = "buffer",
+	[R_IO_MAP_META_TYPE_COW] = "cow",
+	[R_IO_MAP_META_TYPE_PAGETABLES] = "pagetables"
+};
+
+static const char *metaflagname[16] = {
+	"paged",
+	"private",
+	"persistent",
+	"aslr",
+	"swap",
+	"dep",
+	"enclave",
+	"compressed",
+	"encrypted",
+	"large",
+	0
+};
+
+R_API bool r_io_map_setattr_fromstring(RIOMap *map, const char *s) {
+	int i, maptype;
+	for (maptype = 0; maptype < R_IO_MAP_META_TYPE_LAST; maptype++) {
+		if (strstr (s, metatypename[maptype])) {
+			ut32 mapflag = 0;
+			for (i = 0; i < R_IO_MAP_META_FLAG_LAST; i++) {
+				if (strstr (s, metaflagname[i])) {
+					mapflag |= (1 << i);
+				}
+			}
+			return r_io_map_setattr (map, maptype, mapflag);
+		}
+	}
+	R_LOG_DEBUG ("invalid map type string");
+	return false;
+}
+
+R_API bool r_io_map_setattr(RIOMap *map, ut32 type, ut32 flags) {
+	if (type >= R_IO_MAP_META_TYPE_LAST) {
+		R_LOG_DEBUG ("invalid map type");
+		return false;
+	}
+	if (flags >= R_IO_MAP_META_FLAG_LAST) {
+		R_LOG_DEBUG ("invalid map flags");
+		return false;
+	}
+	map->meta = type | (flags << 16);
+	return true;
+}
+
+R_API char *r_io_map_getattr(RIOMap *map) {
+	RStrBuf *sb = r_strbuf_new ("");
+	ut32 maptype = map->meta & 0xffff;
+	ut32 mapflag = (map->meta > 16) & 0xffff;
+	if (maptype >= R_IO_MAP_META_TYPE_LAST) {
+		return false;
+	}
+	if (mapflag >= R_IO_MAP_META_FLAG_LAST) {
+		return false;
+	}
+	r_strbuf_append (sb, metatypename[maptype]);
+	int i = 0;
+	for (i = 0; i < 16; i++) {
+		if (mapflag & i) {
+			r_strbuf_append (sb, "+");
+			r_strbuf_append (sb, metaflagname[i]);
+		}
+	}
+	return r_strbuf_drain (sb);
 }
