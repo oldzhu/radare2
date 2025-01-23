@@ -675,7 +675,7 @@ R_API bool r_core_yank_file_all(RCore *core, const char *input);
 
 R_API void r_core_loadlibs_init(RCore *core);
 R_API bool r_core_loadlibs(RCore *core, int where, const char *path);
-R_API int r_core_cmd_buffer(RCore *core, const char *buf);
+R_API bool r_core_cmd_buffer(RCore *core, const char *buf);
 R_API int r_core_cmd_foreach(RCore *core, const char *cmd, char *each);
 R_API int r_core_cmd_foreach3(RCore *core, const char *cmd, char *each);
 R_API char *r_core_op_str(RCore *core, ut64 addr);
@@ -808,7 +808,7 @@ R_API int r_core_pseudo_code(RCore *core, const char *input);
 /* gdiff.c */
 R_API bool r_core_zdiff(RCore *c, RCore *c2);
 R_API bool r_core_gdiff(RCore *core1, RCore *core2);
-R_API int r_core_gdiff_fcn(RCore *c, ut64 addr, ut64 addr2);
+R_API bool r_core_gdiff_fcn(RCore *c, ut64 addr, ut64 addr2);
 
 /* project */
 R_API void r_core_project_execute_cmds(RCore *core, const char *prjfile);
