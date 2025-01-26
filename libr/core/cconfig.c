@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2024 - pancake */
+/* radare - LGPL - Copyright 2009-2025 - pancake */
 
 #include <r_core.h>
 #include <r_types_base.h>
@@ -1361,9 +1361,6 @@ static bool cb_cfgdebug(void *user, void *data) {
 	RConfigNode *node = (RConfigNode*) data;
 	if (!core) {
 		return false;
-	}
-	if (core->io) {
-		core->io->va = !node->i_value;
 	}
 	if (core->dbg && node->i_value) {
 		const char *dbgbackend = r_config_get (core->config, "dbg.backend");
@@ -4124,7 +4121,7 @@ R_API int r_core_config_init(RCore *core) {
 	SETCB ("dbg.wrap", "false", &cb_dbg_wrap, "enable the ptrace-wrap abstraction layer (needed for debugging from iaito)");
 	SETCB ("dbg.libs", "", &cb_dbg_libs, "If set stop when loading matching libname");
 	SETBPREF ("dbg.skipover", "false", "make dso perform a dss (same goes for esil and visual/graph");
-#if __APPLE__ && __x86_64__
+#if __APPLE__
 	SETBPREF ("dbg.hwbp", "true", "use hardware breakpoints instead of software ones when enabled");
 #else
 	SETBPREF ("dbg.hwbp", "false", "use hardware breakpoints instead of software ones when enabled");
@@ -4186,8 +4183,6 @@ R_API int r_core_config_init(RCore *core) {
 #endif
 	SETBPREF ("dbg.bpsysign", "false", "ignore system breakpoints");
 	SETICB ("dbg.btdepth", 128, &cb_dbgbtdepth, "depth of backtrace");
-
-
 
 	/* filesystem */
 	n = NODECB ("fs.view", "normal", &cb_fsview);

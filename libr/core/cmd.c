@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2024 - nibble, pancake */
+/* radare - LGPL - Copyright 2009-2025 - nibble, pancake */
 
 #define INTERACTIVE_MAX_REP 1024
 
@@ -1312,7 +1312,6 @@ R_API bool r_core_run_script(RCore *core, const char *file) {
 
 	if (!strcmp (file, "-")) {
 		char *out = r_core_editor (core, NULL, NULL);
-		eprintf ("power %s \n", out);
 		if (out) {
 			ret = r_core_cmd_lines (core, out);
 			free (out);
@@ -1864,8 +1863,9 @@ static int cmd_stdin(void *data, const char *input) {
 				const char *arch = r_config_get (core->config, "asm.arch");
 				r_cons_printf ("%s\n", arch);
 			} else {
-				r_config_set (core->config, "asm.arch", arg);
-				r_config_set (core->config, "anal.arch", arg);
+				if (r_config_set (core->config, "asm.arch", arg)) {
+					r_config_set (core->config, "anal.arch", arg);
+				}
 			}
 			break;
 		case 'i': // "-i"
