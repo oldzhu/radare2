@@ -1,15 +1,21 @@
-/* radare - LGPL - Copyright 2009-2024 - pancake */
+/* radare - LGPL - Copyright 2009-2025 - pancake */
 
 #define R_LOG_ORIGIN "radiff2"
 
 #include <r_core.h>
 #include <r_main.h>
 
+typedef enum {
+	ROF_HEXDUMP, // MODE_COLS
+	ROF_HEXII, // MODE_COLSII
+} RadiffOutputFormat;
+
 enum {
 	MODE_DIFF,
 	MODE_DIFF_STRS,
 	MODE_DIFF_IMPORTS,
 	MODE_DIFF_SYMBOLS,
+	MODE_DIFF_SECTIONS,
 	MODE_DIFF_CLASSES,
 	MODE_DIFF_METHODS,
 	MODE_DIFF_FIELDS,
@@ -40,13 +46,12 @@ typedef struct {
 	const char *file;
 	const char *file2;
 	ut32 count;
-	int showcount;
-	int useva;
+	bool showcount;
+	bool useva;
 	int delta;
-	int showbare;
 	bool json_started;
 	int diffmode;
-	int diffops;
+	bool diffops;
 	int mode;
 	int gmode;
 	bool disasm;
@@ -54,9 +59,9 @@ typedef struct {
 	bool quiet;
 	RCore *core;
 	const char *arch;
-	const char *runcmd;
+	RList *runcmd;
 	int bits;
-	int anal_all;
+	int analysis_level;
 	int threshold;
 	bool verbose;
 	RList *evals;
@@ -100,9 +105,9 @@ static RCore *opencore(RadiffOptions *ro, const char *f) {
 		if (r_list_empty (r_bin_get_sections (c->bin))) {
 			r_config_set_i (c->config, "io.va", false);
 		}
-		if (ro->anal_all) {
+		if (ro->analysis_level) {
 			const char *cmd = "aac";
-			switch (ro->anal_all) {
+			switch (ro->analysis_level) {
 			case 1: cmd = "aa"; break;
 			case 2: cmd = "aaa"; break;
 			case 3: cmd = "aaaa"; break;
@@ -111,7 +116,11 @@ static RCore *opencore(RadiffOptions *ro, const char *f) {
 			r_core_cmd0 (c, cmd);
 		}
 		if (ro->runcmd) {
-			r_core_cmd0 (c, ro->runcmd);
+			const char *cmd;
+			RListIter *iter;
+			r_list_foreach (ro->runcmd, iter, cmd) {
+				r_core_cmd0 (c, cmd);
+			}
 		}
 		// generate zignaturez?
 		if (ro->zignatures) {
@@ -138,7 +147,7 @@ static void readstr(char *s, int sz, const ut8 *buf, int len) {
 
 static int cb(RDiff *d, void *user, RDiffOp *op) {
 	int i;
-	RadiffOptions *ro = user;
+	RadiffOptions *ro = (RadiffOptions*)user;
 	char s[256] = {0};
 	if (ro->showcount) {
 		ro->count++;
@@ -434,25 +443,24 @@ static int bcb(RDiff *d, void *user, RDiffOp *op) {
 }
 
 static int show_help(int v) {
-	printf ("Usage: radiff2 [-1abcCdeGhijnropqsSxuUvVzZ] [-A[A]] [-B #] [-g sym] [-m graph_mode][-t %%] [file] [file]\n");
+	printf ("Usage: radiff2 [-options] [-A[A]] [-B #] [-g sym] [-m graph_mode][-t %%] [file] [file]\n");
 	if (v) {
 		printf (
 			"  -a [arch]  specify architecture plugin to use (x86, arm, ..)\n"
 			"  -A [-A]    run aaa or aaaa after loading each binary (see -C)\n"
 			"  -b [bits]  specify register size for arch (16 (thumb), 32, 64, ..)\n"
 			"  -B [baddr] define the base address to add the offsets when listing\n"
-			"  -1         output in Generic binary DIFF (0xd1ffd1ff magic header)\n"
-			"  -c         count of changes\n"
+			"  -c [cmd]   run given command on every RCore instance\n"
 			"  -C         graphdiff code (columns: off-A, match-ratio, off-B) (see -A)\n"
 			"  -d         use delta diffing\n"
 			"  -D         show disasm instead of hexpairs\n"
 			"  -e [k=v]   set eval config var value for all RCore instances\n"
+			"  -f [help]  select output format (see '-f help' for details)\n"
 			"  -g [arg]   graph diff of [sym] or functions in [off1,off2]\n"
-			"  -G [cmd]   run an r2 command on every RCore instance created\n"
-			"  -i [ifscm] diff imports | fields | symbols | classes | methods\n"
-			"  -j         output in json format\n"
-			"  -n         print bare addresses only (diff.bare=1)\n"
+			"  -i [help]  compare bin information (symbols, strings, classes, ..)\n"
+			"  -j         output in json format (see -f json)\n"
 			"  -m [mode]  choose the graph output mode (aditsjJ)\n"
+			"  -n         count of changes\n"
 			"  -O         code diffing with opcode bytes only\n"
 			"  -p         use physical addressing (io.va=false) (only for radiff2 -AC)\n"
 			"  -q         quiet mode (disable colors, reduce output)\n"
@@ -463,23 +471,11 @@ static int show_help(int v) {
 			"  -t [0-100] set threshold for code diff (default is 70%%)\n"
 			"  -T         analyze files in threads (EXPERIMENTAL, 30%% faster and crashy)\n"
 			"  -x         show two column hexdump diffing\n"
-			"  -X         show two column hexII diffing\n"
 			"  -u         unified output (---+++)\n"
 			"  -U         unified output using system 'diff'\n"
 			"  -v         show version information\n"
 			"  -V         be verbose (current only for -s)\n"
-			"  -z         diff on extracted strings\n"
-			"  -Z         diff code comparing zignatures\n\n"
-			"Graph Output formats: (-m [mode])\n"
-		        "  <blank/a>  ascii art\n"
-	                "  s          r2 commands\n"
-		        "  d          graphviz dot\n"
-	                "  g          graph Modelling Language (gml)\n"
-		        "  j          json\n"
-	                "  J          json with disarm\n"
-		        "  k          sdb key-value\n"
-	                "  t          tiny ascii art\n"
-		        "  i          interactive ascii art\n");
+			);
 	}
 	return 1;
 }
@@ -758,6 +754,26 @@ static int import_cmp(const RBinImport *a, const RBinImport *b) {
 	return strcmp (aname, bname);
 }
 
+static ut8 *get_sections(RCore *c, int *len) {
+	RListIter *iter;
+
+	if (!c || !len) {
+		return NULL;
+	}
+
+	RBinSection *sec;
+	const RList *list = r_bin_get_sections (c->bin);
+	RList *reslist = r_list_newf (free);
+	r_list_foreach (list, iter, sec) {
+		r_list_append (reslist, strdup (sec->name));
+	}
+	r_list_sort (reslist, (RListComparator)strcmp);
+	char *buf = r_str_list_join (reslist, "\n");
+	*len = strlen (buf);
+	r_list_free (reslist);
+	return (ut8*)buf;
+}
+
 static ut8 *get_classes(RCore *c, int *len) {
 	RListIter *iter;
 
@@ -1026,6 +1042,7 @@ static void radiff_options_init(RadiffOptions *ro) {
 }
 
 static void radiff_options_fini(RadiffOptions *ro) {
+	r_list_free (ro->runcmd);
 	r_list_free (ro->evals);
 	r_core_free (ro->core);
 	r_cons_free ();
@@ -1040,6 +1057,229 @@ static void fileobj(RadiffOptions *ro, const char *ro_file, const ut8 *buf, size
 	pj_ks (pj, "sha256", hasha);
 	free (hasha);
 	pj_end (pj);
+}
+
+static inline bool singlechar(const char *arg) {
+	return (arg[0] && !arg[1]);
+}
+
+static const char idhelp[] = \
+	"Usage: radiff2 -i [what]\n"
+	"Available whats:\n"
+	" c code\n"
+	" d data\n"
+	"Binary Information:\n"
+	" c classes\n"
+	" f fields\n"
+	" i imports\n"
+	" m methods\n"
+	" s symbols\n"
+	" S sections\n"
+	" z strings\n"
+	" Z zignatures\n"
+;
+
+static bool select_input_data(RadiffOptions *ro, const char *arg) {
+	char ch0 = *arg;
+	if (!singlechar (arg)) {
+		if (!strcmp (arg, "symbols")) {
+			ch0 = 's';
+		} else if (!strcmp (arg, "imports")) {
+			ch0 = 'i';
+		} else if (!strcmp (arg, "classes")) {
+			ch0 = 'c';
+		} else if (!strcmp (arg, "fields")) {
+			ch0 = 'f';
+		} else if (!strcmp (arg, "methods")) {
+			ch0 = 'm';
+		} else if (!strcmp (arg, "code")) {
+			ch0 = 'k';
+		} else if (!strcmp (arg, "data")) {
+			ch0 = 'd';
+		} else if (!strcmp (arg, "strings")) {
+			ch0 = 'z';
+		} else if (!strcmp (arg, "sections")) {
+			ch0 = 'S';
+		} else if (!strcmp (arg, "help")) {
+			ch0 = 'h';
+		} else if (!strcmp (arg, "zignatures")) {
+			ch0 = 'Z';
+		} else {
+			return false;
+		}
+	}
+	switch (ch0) {
+	case '?':
+	case 'h':
+		printf ("%s\n", idhelp);
+		return false;
+	case 'c':
+		ro->mode = MODE_DIFF_CLASSES;
+		break;
+	case 'd':
+		// diff code instead of bin
+	//	ro->mode = MODE_CODE;
+	//	ro->diffmode = 'U';
+		break;
+	case 'f':
+		ro->mode = MODE_DIFF_FIELDS;
+		break;
+	case 'k':
+		// diff code instead of bin
+		ro->mode = MODE_CODE;
+		ro->diffmode = 'U';
+		break;
+	case 'i':
+		ro->mode = MODE_DIFF_IMPORTS;
+		break;
+	case 's':
+		ro->mode = MODE_DIFF_SYMBOLS;
+		break;
+	case 'S':
+		ro->mode = MODE_DIFF_SECTIONS;
+		break;
+	case 'm':
+		ro->mode = MODE_DIFF_METHODS;
+		break;
+	case 'z':
+		ro->mode = MODE_DIFF_STRS;
+		break;
+	case 'Z':
+		ro->zignatures = true;
+		break;
+	default:
+		return false;
+	}
+	return true;
+}
+
+static const char gfhelp[] = \
+	"Usage: radiff2 -m [graphtype]\n"
+	"Available types:\n"
+	"  <blank/a>  ascii art\n"
+	"  s          r2 commands\n"
+	"  d          graphviz dot\n"
+	"  g          graph Modelling Language (gml)\n"
+	"  j          json\n"
+	"  J          json with disasm\n"
+	"  k          sdb key-value\n"
+	"  t          tiny ascii art\n"
+	"  i          interactive ascii art\n"
+;
+
+static bool select_graph_type(RadiffOptions *ro, const char *arg) {
+	char ch0 = *arg;
+	if (!singlechar (arg)) {
+		if (!strcmp (arg, "sdb")) {
+			ch0 = 'k';
+		} else if (!strcmp (arg, "tui")) {
+			ch0 = 'i';
+		} else if (!strcmp (arg, "json")) {
+			ch0 = 'j';
+		} else if (!strcmp (arg, "r2")) {
+			ch0 = 'r';
+		} else if (!strcmp (arg, "dot")) {
+			ch0 = 'd';
+		} else if (!strcmp (arg, "tiny")) {
+			ch0 = 't';
+		} else if (!strcmp (arg, "jsondis")) {
+			ch0 = 'J';
+		} else if (!strcmp (arg, "mermaid")) {
+			ch0 = 'm';
+		} else if (!strcmp (arg, "gml")) {
+			ch0 = 'g';
+		} else if (!strcmp (arg, "help")) {
+			ch0 = '?';
+		} else {
+			return false;
+		}
+	}
+	switch (ch0) {
+	case '?':
+	case 'h':
+		printf ("%s\n", gfhelp);
+		return false;
+	case 'i': ro->gmode = GRAPH_INTERACTIVE_MODE; break;
+	case 'k': ro->gmode = GRAPH_SDB_MODE; break;
+	case 'j': ro->gmode = GRAPH_JSON_MODE; break;
+	case 'J': ro->gmode = GRAPH_JSON_DIS_MODE; break;
+	case 't': ro->gmode = GRAPH_TINY_MODE; break;
+	case 'd': ro->gmode = GRAPH_DOT_MODE; break;
+	case 'r': ro->gmode = GRAPH_STAR_MODE; break;
+	case 'm': ro->gmode = GRAPH_MERMAID_MODE; break;
+	case 'g': ro->gmode = GRAPH_GML_MODE; break;
+	case 'a':ro->gmode = GRAPH_DEFAULT_MODE; break;
+	default:
+		 return false;
+	}
+	return true;
+}
+static const char ofhelp[] = \
+	"Usage: radiff2 -f [format]\n"
+	"Available formats:\n"
+	" 1 bdiff        generic binary diff format\n"
+	" j json         json format\n"
+	" r radare       output as radare2 script\n"
+	" u unified      unified diffing format\n"
+	" U gdiff        use system's diff program instead\n"
+	" x hex          two column hexdump-style\n"
+	" X hexii        simplified hexdump (hexII format)\n"
+;
+
+static bool select_output_format(RadiffOptions *ro, const char *arg) {
+	char ch0 = *arg;
+	if (!singlechar (arg)) {
+		if (!strcmp (arg, "hexii")) {
+			ch0 = 'X';
+		} else if (r_str_startswith (arg, "hex")) {
+			ch0 = 'x';
+		} else if (!strcmp (arg, "r2") || !strcmp (arg, "radare")) {
+			ch0 = 'r';
+		} else if (!strcmp (arg, "unified")) {
+			ch0 = 'u';
+		} else if (!strcmp (arg, "json")) {
+			ch0 = 'j';
+		} else if (!strcmp (arg, "gdiff")) {
+			ch0 = 'U';
+		} else if (!strcmp (arg, "bdiff")) {
+			ch0 = '1';
+		} else if (!strcmp (arg, "help")) {
+			ch0 = '?';
+		} else {
+			return false;
+		}
+	}
+	switch (ch0) {
+	case '?':
+	case 'h':
+		printf ("%s\n", ofhelp);
+		return false;
+	case 'j':
+		ro->diffmode = 'j';
+		ro->pj = pj_new ();
+		break;
+	case 'u':
+		ro->diffmode = 'u';
+		break;
+	case 'U':
+		ro->diffmode = 'U';
+		break;
+	case 'x':
+		ro->mode = MODE_COLS;
+		break;
+	case 'r':
+		ro->diffmode = 'r';
+		break;
+	case '1':
+		ro->diffmode = 'B';
+		break;
+	case 'X':
+		ro->mode = MODE_COLSII;
+		break;
+	default:
+		return false;
+	}
+	return true;
 }
 
 typedef struct {
@@ -1061,7 +1301,7 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 	const char *addr = NULL;
 	RCore *c = NULL, *c2 = NULL;
 	ut8 *bufa = NULL, *bufb = NULL;
-	int o, /*diffmode = 0,*/ delta = 0;
+	int o, delta = 0;
 	ut64 sza = 0, szb = 0;
 	double sim = 0.0;
 	RDiff *d;
@@ -1069,101 +1309,30 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 
 	radiff_options_init (&ro);
 
-	r_getopt_init (&opt, argc, argv, "1Aa:b:B:CDe:npg:m:G:Oi:jrhcdsS:uUvVxXt:TzqZ");
+	r_getopt_init (&opt, argc, argv, "Aa:b:B:c:CdDe:f:g:hi:jm:nOprst:TxuUqvV");
 	while ((o = r_getopt_next (&opt)) != -1) {
 		switch (o) {
 		case 'a':
 			ro.arch = opt.arg;
 			break;
 		case 'A':
-			ro.anal_all++;
+			ro.analysis_level++;
 			break;
 		case 'b':
 			ro.bits = atoi (opt.arg);
 			break;
-		case '1':
-			// maybe use '-o' to handle binary output to a file instead of screen :?
-			ro.diffmode = 'B';
-			break;
 		case 'B':
 			ro.baddr = r_num_math (NULL, opt.arg);
 			break;
-		case 'e':
-			r_list_append (ro.evals, (void*)opt.arg);
-			break;
-		case 'p':
-			ro.useva = false;
-			break;
-		case 'r':
-			ro.diffmode = 'r';
-			break;
-		case 'g':
-			ro.mode = MODE_GRAPH;
-			// ro.pdc = true;
-			addr = opt.arg;
-			break;
-		case 'm':{
-			const char *tmp = opt.arg;
-			switch (tmp[0]) {
-			case 'i': ro.gmode = GRAPH_INTERACTIVE_MODE; break;
-			case 'k': ro.gmode = GRAPH_SDB_MODE; break;
-			case 'j': ro.gmode = GRAPH_JSON_MODE; break;
-			case 'J': ro.gmode = GRAPH_JSON_DIS_MODE; break;
-			case 't': ro.gmode = GRAPH_TINY_MODE; break;
-			case 'd': ro.gmode = GRAPH_DOT_MODE; break;
-			case 's': ro.gmode = GRAPH_STAR_MODE; break;
-			case 'm': ro.gmode = GRAPH_MERMAID_MODE; break;
-			case 'g': ro.gmode = GRAPH_GML_MODE; break;
-			case 'a':
-			default: ro.gmode = GRAPH_DEFAULT_MODE; break;
-			}
-		}       break;
-		case 'G':
-			ro.runcmd = opt.arg;
-			break;
 		case 'c':
-			ro.showcount = 1;
+			if (!ro.runcmd) {
+				ro.runcmd = r_list_newf (NULL);
+			}
+			r_list_append (ro.runcmd, (void*)opt.arg);
 			break;
 		case 'C':
 			ro.mode = MODE_CODE;
 			ro.diffmode = 'U';
-			break;
-		case 'i':
-			ro.diffmode = 'U';
-			switch (opt.arg[0]) {
-			case 'i':
-				ro.mode = MODE_DIFF_IMPORTS;
-				break;
-			case 's':
-				ro.mode = MODE_DIFF_SYMBOLS;
-				break;
-			case 'f':
-				ro.mode = MODE_DIFF_FIELDS;
-				break;
-			case 'm':
-				ro.mode = MODE_DIFF_METHODS;
-				break;
-			case 'c':
-				ro.mode = MODE_DIFF_CLASSES;
-				break;
-			default:
-				R_LOG_ERROR ("-i expects [s|f|i|c|m] for symbols or imports diffing");
-				return 1;
-			}
-			break;
-		case 'n':
-			ro.showbare = true;
-			break;
-		case 'O':
-			ro.diffops = 1;
-			break;
-		case 'T': // imho `t <=> T`
-			ro.thready = true;
-			// printf ("%s\n", opt.arg);
-			break;
-		case 't':
-			ro.threshold = atoi (opt.arg);
-			// printf ("%s\n", opt.arg);
 			break;
 		case 'd':
 			delta = 1;
@@ -1177,23 +1346,69 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 				ro.disasm = true;
 			}
 			break;
+		case 'e':
+			r_list_append (ro.evals, (void*)opt.arg);
+			break;
+		case 'f':
+			if (!select_output_format (&ro, opt.arg)) {
+				R_LOG_ERROR ("Invalid output format selected");
+				return 1;
+			}
+			break;
+		case 'g':
+			ro.mode = MODE_GRAPH;
+			// ro.pdc = true;
+			addr = opt.arg;
+			break;
 		case 'h':
 			return show_help (1);
-		case 's':
-			if (ro.mode == MODE_DIST_MYERS) {
-				ro.mode = MODE_DIST_LEVENSHTEIN;
-			} else {
-				ro.mode = MODE_DIST_MYERS;
+		case 'i':
+			if (!select_input_data (&ro, opt.arg)) {
+				R_LOG_ERROR ("Invalid input data selected (see -i help)");
+				return 1;
 			}
+			break;
+		case 'j':
+			ro.diffmode = 'j';
+			ro.pj = pj_new ();
+			break;
+		case 'm':
+			if (!select_graph_type (&ro, opt.arg)) {
+				R_LOG_ERROR ("Invalid input data selected (see -i help)");
+				return 1;
+			}
+			break;
+		case 'n':
+			ro.showcount = true;
+			break;
+		case 'O': // move to options
+			ro.diffops = true;
+			break;
+		case 'p':
+			ro.useva = false;
+			break;
+		case 'r':
+			ro.diffmode = 'r';
+			break;
+		case 's':
+			// TODO: maybe use -a to select algorithm?
+			ro.mode = (ro.mode == MODE_DIST_MYERS)
+				? MODE_DIST_LEVENSHTEIN
+				: MODE_DIST_MYERS;
 			break;
 		case 'S':
 			columnSort = opt.arg;
 			break;
+		case 't':
+			ro.threshold = atoi (opt.arg);
+			// printf ("%s\n", opt.arg);
+			break;
+		case 'T': // imho `t <=> T`
+			ro.thready = true;
+			// printf ("%s\n", opt.arg);
+			break;
 		case 'x':
 			ro.mode = MODE_COLS;
-			break;
-		case 'X':
-			ro.mode = MODE_COLSII;
 			break;
 		case 'u':
 			ro.diffmode = 'u';
@@ -1201,23 +1416,13 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 		case 'U':
 			ro.diffmode = 'U';
 			break;
-		case 'v':
-			return r_main_version_print ("radiff2", 0);
 		case 'q':
 			ro.quiet = true;
 			break;
+		case 'v':
+			return r_main_version_print ("radiff2", 0);
 		case 'V':
 			ro.verbose = true;
-			break;
-		case 'j':
-			ro.diffmode = 'j';
-			ro.pj = pj_new ();
-			break;
-		case 'z':
-			ro.mode = MODE_DIFF_STRS;
-			break;
-		case 'Z':
-			ro.zignatures = true;
 			break;
 		default:
 			return show_help (0);
@@ -1286,8 +1491,6 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 			r_config_set (c->config, "diff.sort", columnSort);
 			r_config_set (c2->config, "diff.sort", columnSort);
 		}
-		r_config_set_i (c->config, "diff.bare", ro.showbare);
-		r_config_set_i (c2->config, "diff.bare", ro.showbare);
 		r_anal_diff_setup_i (c->anal, ro.diffops, ro.threshold, ro.threshold);
 		r_anal_diff_setup_i (c2->anal, ro.diffops, ro.threshold, ro.threshold);
 		if (addr) {
@@ -1379,6 +1582,12 @@ R_API int r_main_radiff2(int argc, const char **argv) {
 			bufa = get_classes (c, &sz);
 			sza = sz;
 			bufb = get_classes (c2, &sz);
+			szb = sz;
+		} else if (ro.mode == MODE_DIFF_SECTIONS) {
+			int sz;
+			bufa = get_sections (c, &sz);
+			sza = sz;
+			bufb = get_sections (c2, &sz);
 			szb = sz;
 		} else if (ro.mode == MODE_DIFF_SYMBOLS) {
 			int sz;
