@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2013-2024 - pancake */
+/* radare2 - LGPL - Copyright 2013-2025 - pancake */
 
 #include <r_arch.h>
 #include <r_anal.h>
@@ -2911,6 +2911,12 @@ static void anop(RArchSession *a, RAnalOp *op, ut64 addr, const ut8 *buf, int le
 		break;
 	case X86_INS_HLT:
 		op->type = R_ANAL_OP_TYPE_TRAP;
+		break;
+	case X86_INS_VPINSRQ:
+	case X86_INS_VPINSRD:
+	case X86_INS_VPINSRW:
+	case X86_INS_VPINSRB:
+		op->type = R_ANAL_OP_TYPE_MOV;
 		break;
 	case X86_INS_FBLD:
 	case X86_INS_FBSTP:
