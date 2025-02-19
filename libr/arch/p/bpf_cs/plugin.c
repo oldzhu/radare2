@@ -11,6 +11,9 @@
 #define CSINC BPF
 #define CSINC_MODE get_capstone_mode(as)
 
+// See-also: https://github.com/capstone-engine/capstone/commit/812e654c857348bf95ae4ab2e7db0ccf779a4cb8
+// #define BPF_INS_JA BPF_INS_JMP
+
 static int get_capstone_mode(RArchSession *as) {
 	int mode = R_ARCH_CONFIG_IS_BIG_ENDIAN (as->config)
 		? CS_MODE_BIG_ENDIAN: CS_MODE_LITTLE_ENDIAN;
