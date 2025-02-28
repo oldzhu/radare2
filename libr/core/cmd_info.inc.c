@@ -267,7 +267,7 @@ static void cmd_info_demangle(RCore *core, const char *input, PJ *pj, int mode) 
 
 // XXX i.j ij. is inconsistent maybe move to 'ai'?
 static void cmd_info_here(RCore *core, PJ *pj, int mode) {
-	RCoreItem *item = r_core_item_at (core, core->offset);
+	RCoreItem *item = r_core_item_at (core, core->addr);
 	// fixme: other modes
 	if (!item) {
 		return;
@@ -293,7 +293,7 @@ static void cmd_info_here(RCore *core, PJ *pj, int mode) {
 			pj_ks (pj, "data", item->data);
 		}
 		{
-			RVecAnalRef *refs = r_anal_refs_get (core->anal, core->offset);
+			RVecAnalRef *refs = r_anal_refs_get (core->anal, core->addr);
 			if (refs && !RVecAnalRef_empty (refs)) {
 				pj_k (pj, "refs");
 				pj_a (pj);
@@ -309,7 +309,7 @@ static void cmd_info_here(RCore *core, PJ *pj, int mode) {
 			RVecAnalRef_free (refs);
 		}
 		{
-			RVecAnalRef *refs = r_anal_xrefs_get (core->anal, core->offset);
+			RVecAnalRef *refs = r_anal_xrefs_get (core->anal, core->addr);
 			if (refs && !RVecAnalRef_empty (refs)) {
 				pj_k (pj, "xrefs");
 				pj_a (pj);
@@ -429,9 +429,9 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 			RList *values = r_str_split_list (s, ",", 0);
 			RList *rrrr = NULL;
 			r_list_foreach (values, iter2, value) {
-				RFlagItem *item = get_flag_for_import (core, value);
-				if (item) {
-					RList *refs = uniqrefs_for (core, item->offset);
+				RFlagItem *fi = get_flag_for_import (core, value);
+				if (fi) {
+					RList *refs = uniqrefs_for (core, fi->addr);
 					if (refs && rrrr) {
 						r_list_join (rrrr, refs);
 					} else if (refs && !rrrr) {
@@ -462,9 +462,9 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 			const char *value;
 			RList *values = r_str_split_list (v, ",", 0);
 			r_list_foreach (values, iter2, value) {
-				RFlagItem *item = get_flag_for_import (core, value);
-				if (item) {
-					const ut64 at = item->offset;
+				RFlagItem *fi = get_flag_for_import (core, value);
+				if (fi) {
+					const ut64 at = fi->addr;
 					r_cons_printf ("'@0x%08"PFMT64x"'CC kind(%s)\n", at, k);
 				}
 			}
@@ -491,9 +491,9 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 			RList *values = r_str_split_list (v, ",", 0);
 			r_list_foreach (values, iter2, value) {
 				pj_ka (pj, value);
-				RFlagItem *item = get_flag_for_import (core, value);
-				if (item) {
-					RList *refs = uniqrefs_for (core, item->offset);
+				RFlagItem *fi = get_flag_for_import (core, value);
+				if (fi) {
+					RList *refs = uniqrefs_for (core, fi->addr);
 					RListIter *iter;
 					char *ref;
 					r_list_foreach (refs, iter, ref) {
@@ -525,9 +525,9 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 			RList *values = r_str_split_list (v, ",", 0);
 			r_list_foreach (values, iter2, value) {
 				r_cons_printf ("|  |- %s\n", value);
-				RFlagItem *item = get_flag_for_import (core, value);
-				if (item) {
-					RList *refs = uniqrefs_for (core, item->offset);
+				RFlagItem *fi = get_flag_for_import (core, value);
+				if (fi) {
+					RList *refs = uniqrefs_for (core, fi->addr);
 					RListIter *iter;
 					char *ref;
 					r_list_foreach (refs, iter, ref) {
@@ -937,10 +937,10 @@ void cmd_ic_add(RCore *core, const char *input) {
 		r_list_append (klasses, klass);
 	}
 	if (method_name == NULL) {
-		klass->addr = core->offset;
+		klass->addr = core->addr;
 	} else {
-		ut64 pa = core->offset; // XXX
-		ut64 va = core->offset;
+		ut64 pa = core->addr; // XXX
+		ut64 va = core->addr;
 		RBinSymbol *m;
 		bool found = false;
 		r_list_foreach (klass->methods, iter, m) {
@@ -1291,7 +1291,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 					break;
 				case '.': // "ic."
 					{
-					ut64 addr = core->offset;
+					ut64 addr = core->addr;
 					ut64 min = UT64_MAX;
 					const char *method = NULL;
 					ut64 max = 0LL;
@@ -1372,7 +1372,7 @@ static void cmd_iz(RCore *core, PJ *pj, int mode, int is_array, bool va, const c
 	bool rdump = false;
 	if (input[1] == '-') { // "iz-"
 		char *strpurge = core->bin->strpurge;
-		ut64 addr = core->offset;
+		ut64 addr = core->addr;
 		bool old_tmpseek = core->tmpseek;
 		input++;
 		if (input[1] == ' ') {
@@ -1940,11 +1940,11 @@ static void cmd_ies(RCore *core, const char *input, PJ *pj, int mode, int va) {
 	}
 	RFlagItem *fi = r_flag_get (core->flags, "main");
 	if (fi) {
-		r_cons_printf ("0x%08"PFMT64x"  main\n", fi->offset);
+		r_cons_printf ("0x%08"PFMT64x"  main\n", fi->addr);
 	}
 	fi = r_flag_get (core->flags, "entry0");
 	if (fi) {
-		r_cons_printf ("0x%08"PFMT64x"  entry0\n", fi->offset);
+		r_cons_printf ("0x%08"PFMT64x"  entry0\n", fi->addr);
 	}
 }
 

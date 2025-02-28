@@ -59,7 +59,7 @@ R_API bool r_core_file_reopen(RCore *core, const char *args, int perm, int loadb
 	RBinFile *bf = odesc ? r_bin_file_find_by_fd (core->bin, odesc->fd) : NULL;
 	char *ofilepath = NULL, *obinfilepath = (bf && bf->file)? strdup (bf->file): NULL;
 	bool ret = false;
-	ut64 origoff = core->offset;
+	ut64 origoff = core->addr;
 	if (odesc) {
 		if (odesc->referer) {
 			ofilepath = odesc->referer;
@@ -272,8 +272,13 @@ R_API char *r_core_sysenv_begin(RCore *core, const char *cmd) {
 	}
 	r_sys_setenv ("R2PM_LEGACY", "0");
 	r_sys_setenv ("R2_COLOR", r_config_get (core->config, "scr.color"));
-	r_sys_setenv ("R2_OFFSET", r_strf ("%"PFMT64d, core->offset));
-	r_sys_setenv ("R2_XOFFSET", r_strf ("0x%08"PFMT64x, core->offset));
+
+	r_sys_setenv ("R2_ADDR", r_strf ("%"PFMT64d, core->addr));
+	r_sys_setenv ("R2_XADDR", r_strf ("0x%08"PFMT64x, core->addr));
+#if 0
+	r_sys_setenv ("R2_OFFSET", r_strf ("%"PFMT64d, core->addr));
+	r_sys_setenv ("R2_XOFFSET", r_strf ("0x%08"PFMT64x, core->addr));
+#endif
 	r_sys_setenv ("R2_BADDR", r_strf ("0x%08"PFMT64x, r_config_get_i (core->config, "bin.baddr")));
 	r_sys_setenv ("R2_ENDIAN", R_ARCH_CONFIG_IS_BIG_ENDIAN (core->rasm->config)? "big": "little");	// XXX
 	r_sys_setenv ("R2_BSIZE", r_strf ("%d", core->blocksize));
@@ -360,7 +365,7 @@ static bool setbpint(RCore *r, const char *mode, const char *sym) {
 	if (!fi) {
 		return false;
 	}
-	bp = r_bp_add_sw (r->dbg->bp, fi->offset, 1, R_BP_PROT_EXEC);
+	bp = r_bp_add_sw (r->dbg->bp, fi->addr, 1, R_BP_PROT_EXEC);
 	if (bp) {
 		bp->internal = true;
 #if __linux__
@@ -812,7 +817,7 @@ R_API bool r_core_bin_load(RCore *r, const char *filenameuri, ut64 baddr) {
 				// R_LOG_ERROR ("Cannot find '%s' import in the PLT", imp->name);
 				continue;
 			}
-			ut64 imp_addr = impsym->offset;
+			ut64 imp_addr = impsym->addr;
 			const char *imp_name = r_bin_name_tostring2 (imp->name, 'o');
 			eprintf ("Resolving %s... ", imp_name);
 			RCoreLinkData linkdata = {imp_name, UT64_MAX, r->bin};

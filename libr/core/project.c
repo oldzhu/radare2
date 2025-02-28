@@ -609,7 +609,7 @@ R_API bool r_core_project_save_script(RCore *core, const char *file, int opts) {
 	}
 	r_core_cmd (core, "wc*", 0);
 	if (opts & R_CORE_PRJ_ANAL_SEEK) {
-		r_cons_printf ("# seek\n" "s 0x%08" PFMT64x "\n", core->offset);
+		r_cons_printf ("# seek\n" "s 0x%08" PFMT64x "\n", core->addr);
 		flush (sb);
 	}
 	r_cons_singleton ()->context->is_interactive = true;
@@ -798,7 +798,7 @@ R_API char *r_core_project_notes_file(RCore *core, const char *prj_name) {
 }
 
 R_API bool r_core_project_is_dirty(RCore *core) {
-	return !R_IS_DIRTY (core->config) && !R_IS_DIRTY (core->anal) && !R_IS_DIRTY (core->flags);
+	return !R_DIRTY_CHECK (core->config) && !R_DIRTY_CHECK (core->anal) && !R_DIRTY_CHECK (core->flags);
 }
 
 R_API void r_core_project_undirty(RCore *core) {
