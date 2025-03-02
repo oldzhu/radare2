@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2024 - pancake */
+/* radare - LGPL - Copyright 2009-2025 - pancake */
 
 #if R_INCLUDE_BEGIN
 
@@ -36,7 +36,7 @@ static RCoreHelpMessage help_msg_f = {
 	"f--", "", "delete all flags and flagspaces (deinit)",
 	"f+", "name 12 @ 33", "like above but creates new one if doesnt exist",
 	"f=", " [glob]", "list range bars graphics with flag offsets and sizes",
-	"fa", " [name] [alias]", "alias a flag to evaluate an expression",
+	"fa", "[- ][name] [alias]", "set or unset(-) an alias expression for a flag",
 	"fb", " [addr]", "set base address for new flags",
 	"fb", " [addr] [flag*]", "move flags matching 'flag' to relative addr",
 	"fc", "[?][name] [color]", "set color for given flag",
@@ -1165,17 +1165,57 @@ static int cmd_flag(void *data, const char *input) {
 		case ' ':
 			flagbars (core, input + 2);
 			break;
-		default:
-			r_core_return_invalid_command (core, "f=", input[1]);
-			break;
 		case '?':
 			r_core_cmd_help (core, help_msg_feq);
 			break;
+		default:
+			r_core_return_invalid_command (core, "f=", input[1]);
+			break;
 		}
 		break;
-	case 'a':
-		if (input[1] == ' ') {
-			RFlagItem *fi;
+	case 'a': // "fa"
+		switch (input[1]) {
+		case 0:
+		case '.':
+			{
+				RFlagItem *fi = r_flag_get_at (core->flags, core->addr, false);
+				if (fi) {
+					const char *alias = r_flag_item_set_alias (core->flags, fi, NULL);
+					if (alias) {
+						r_cons_println (alias);
+					} else {
+						R_LOG_ERROR ("No alias set for this flag");
+					}
+				} else {
+					R_LOG_ERROR ("Cannot find flag '%s'", name);
+				}
+			}
+			break;
+		case '-':
+			{
+				const char *name = (char *)r_str_trim_head_ro (input + 2);
+				if (*name) {
+					if (*name == '*') {
+						R_LOG_ERROR ("Not implemented");
+						break;
+					}
+					RFlagItem *fi;
+					if (*name == '.') {
+						fi = r_flag_get_at (core->flags, core->addr, false);
+					} else {
+						fi = r_flag_get (core->flags, name);
+					}
+					if (fi) {
+						r_flag_item_set_alias (core->flags, fi, "");
+					} else {
+						R_LOG_ERROR ("Cannot find flag '%s'", name);
+					}
+				} else {
+					R_LOG_ERROR ("Missing flag name to remove its alias");
+				}
+			}
+			break;
+		case ' ':
 			R_FREE (str);
 			str = strdup (input + 2);
 			ptr = strchr (str, '=');
@@ -1187,18 +1227,22 @@ static int cmd_flag(void *data, const char *input) {
 			}
 			name = (char *)r_str_trim_head_ro (str);
 			ptr = (char *)r_str_trim_head_ro (ptr);
-			fi = r_flag_get (core->flags, name);
+			RFlagItem *fi = r_flag_get (core->flags, name);
 			if (!fi) {
-				fi = r_flag_set (core->flags, name,
-					core->addr, 1);
+				fi = r_flag_set (core->flags, name, core->addr, 1);
 			}
 			if (fi) {
-				r_flag_item_set_alias (fi, ptr);
+				r_flag_item_set_alias (core->flags, fi, ptr);
 			} else {
 				R_LOG_ERROR ("Cannot find flag '%s'", name);
 			}
-		} else {
+			break;
+		case '?':
 			r_core_cmd_help_match (core, help_msg_f, "fa");
+			break;
+		default:
+			r_core_return_invalid_command (core, "fa", input[1]);
+			break;
 		}
 		break;
 	case 'V': // "fV" visual marks
@@ -1544,7 +1588,6 @@ static int cmd_flag(void *data, const char *input) {
 			RListIter *iter;
 			RFlagItem *fi;
 			r_list_foreach (list, iter, fi) {
-#if METAFLAG
 				RFlagItemMeta *fim = r_flag_get_meta (core->flags, fi->id);
 				if (fim && fim->color) {
 					if (input[1] && input[2] == '*') {
@@ -1554,16 +1597,6 @@ static int cmd_flag(void *data, const char *input) {
 						r_cons_printf ("0x%08"PFMT64x"  %s%s%s\n", fi->addr, fi->name, pad, fim->color);
 					}
 				}
-#else
-				if (fi->color) {
-					if (input[1] && input[2] == '*') {
-						r_cons_printf ("fc %s=%s\n", fi->name, fi->color);
-					} else {
-						const char *pad = r_str_pad (' ', 10- strlen (fi->name));
-						r_cons_printf ("0x%08"PFMT64x"  %s%s%s\n", fi->addr, fi->name, pad, fi->color);
-					}
-				}
-#endif
 			}
 			r_list_free (list_to_free);
 		} else if (input[1] == '-') {
@@ -1583,16 +1616,10 @@ static int cmd_flag(void *data, const char *input) {
 			RFlagItem *fi;
 			RList *list = r_flag_all_list (core->flags, false);
 			r_list_foreach (list, iter, fi) {
-#if METAFLAG
 				RFlagItemMeta *fim = r_flag_get_meta (core->flags, fi->id);
 				if (fim && fim->color) {
 					r_cons_printf ("fc %s=%s\n", fi->name, fim->color);
 				}
-#else
-				if (fi->color) {
-					r_cons_printf ("fc %s=%s\n", fi->name, fi->color);
-				}
-#endif
 			}
 			r_list_free (list);
 		} else if (input[1] == ' ') {
