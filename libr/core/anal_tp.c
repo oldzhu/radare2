@@ -12,10 +12,9 @@ R_VEC_TYPE (RVecBuf, ut8);
 
 typedef struct {
 	RCore *core;
+	RAnal *anal;
 	REsilTrace *et;
-	RDebugTrace *dt;
 	REsilTrace *_et;
-	RDebugTrace *_dt;
 	RConfigHold *hc;
 	char *cfg_spec;
 	bool cfg_breakoninvalid;
@@ -322,13 +321,7 @@ static bool parse_format(TPState *tps, const char *fmt, RVecString *vec) {
 			tmp++;
 		}
 		*tmp = '\0';
-#if 1
-		/// slowpath
-		const char *spec = r_config_get (tps->core->config, "anal.types.spec");
-		r_strf_var (query, 128, "spec.%s.%s", spec, arr);
-#else
 		r_strf_var (query, 128, "spec.%s.%s", tps->cfg_spec, arr);
-#endif
 		const char *type = sdb_const_get (s, query, 0); // maybe better to return an owned pointer here?
 		if (type) {
 			RVecString_push_back (vec, &type);
@@ -582,13 +575,12 @@ static int bb_cmpaddr(const void *_a, const void *_b) {
 }
 
 static void tps_fini(TPState *tps) {
+	R_RETURN_IF_FAIL (tps);
 	free (tps->cfg_spec);
 	r_config_hold_restore (tps->hc);
 	r_config_hold_free (tps->hc);
-	r_debug_trace_free (tps->dt);
 	r_esil_trace_free (tps->et);
 	tps->core->anal->esil->trace = tps->_et;
-	tps->core->dbg->trace = tps->_dt;
 	free (tps);
 }
 
@@ -598,18 +590,17 @@ static TPState *tps_init(RCore *core) {
 	RConfig *cfg = core->config;
 	tps->core = core;
 	tps->hc = r_config_hold_new (cfg);
-	tps->_dt = core->dbg->trace;
+	// tps->_dt = core->dbg->trace;
 	tps->_et = core->anal->esil->trace;
 	tps->cfg_spec = strdup (r_config_get (cfg, "anal.types.spec"));
 	tps->cfg_breakoninvalid = r_config_get_b (cfg, "esil.breakoninvalid");
 	tps->cfg_chk_constraint = r_config_get_b (cfg, "anal.types.constraint");
 	tps->et = r_esil_trace_new (core->anal->esil);
-	tps->dt = r_debug_trace_new ();
+	// tps->dt = r_debug_trace_new ();
 	core->anal->esil->trace = tps->et;
-	core->dbg->trace = tps->dt;
-	r_config_hold (tps->hc, "esil.romem", "dbg.trace", "esil.nonull", "dbg.follow", NULL);
+	// core->dbg->trace = tps->dt;
+	r_config_hold (tps->hc, "esil.romem", "esil.nonull", "dbg.follow", NULL);
 	r_config_set_b (cfg, "esil.romem", true);
-	r_config_set_b (cfg, "dbg.trace", true);
 	r_config_set_b (cfg, "esil.nonull", true);
 	r_config_set_i (cfg, "dbg.follow", 0);
 	RReg *reg = core->anal->reg;
@@ -637,7 +628,6 @@ R_API void r_core_anal_type_match(RCore *core, RAnalFunction *fcn) {
 	int cur_idx, prev_idx = 0;
 	TPState *tps = tps_init (core);
 	if (!tps) {
-		tps_fini (tps);
 		return;
 	}
 	// TODO: maybe move into tps
@@ -647,8 +637,7 @@ R_API void r_core_anal_type_match(RCore *core, RAnalFunction *fcn) {
 	dtrace->ht = ht_pp_new_size (fcn->ninstr, opt.dupvalue, opt.freefn, opt.calcsizeV);
 	dtrace->ht->opt = opt;
 
-	// tps->et->cur_idx = 0;
-	anal->esil->trace->cur_idx = 0;
+	tps->et->cur_idx = 0;
 	const bool be = R_ARCH_CONFIG_IS_BIG_ENDIAN (core->rasm->config);
 	char *fcn_name = NULL;
 	char *ret_type = NULL;
@@ -680,8 +669,7 @@ repeat:
 	int i, j;
 	r_config_set_b (core->config, "dbg.trace.eval", false);
 	for (j = 0; j < bblist_size; j++) {
-		// REsilTrace *etrace = tps->et; // core->anal->esil->trace;
-		REsilTrace *etrace = core->anal->esil->trace;
+		REsilTrace *etrace = tps->et;
 		{
 			const ut64 addr = *RVecUT64_at (&bblist, j);
 			DD eprintf ("BB 0x%"PFMT64x"\n", addr);
