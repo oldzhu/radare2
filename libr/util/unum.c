@@ -446,6 +446,9 @@ R_API ut64 r_num_get(R_NULLABLE RNum *num, const char *str) {
 		default:
 			errno = 0;
 			ret = strtoull (str, &endptr, 10);
+			if (errno == EINVAL) {
+				error (num, "invalid symbol");
+			}
 			if (errno == ERANGE) {
 				error (num, "number won't fit into 64 bits");
 			}
@@ -457,18 +460,6 @@ R_API ut64 r_num_get(R_NULLABLE RNum *num, const char *str) {
 	}
 	if (num) {
 		num->value = ret;
-	}
-	return ret;
-}
-
-R_API ut64 r_num_math(RNum *num, const char *str) {
-	const char *err = NULL;
-	if (R_STR_ISEMPTY (str)) {
-		return 0LL;
-	}
-	ut64 ret = r_num_calc (num, str, &err); // TODO: R2_600 - rename r_num_calc to r_num_math_err()
-	if (err) {
-		R_LOG_DEBUG ("(%s) in (%s)", err, str);
 	}
 	return ret;
 }
