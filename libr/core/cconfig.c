@@ -1133,14 +1133,14 @@ static bool cb_binfilter(void *user, void *data) {
 static bool cb_bdc(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	core->bin->demangle_usecmd = node->i_value;
+	core->bin->options.demangle_usecmd = node->i_value;
 	return true;
 }
 
 static bool cb_useldr(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	core->bin->use_ldr = node->i_value;
+	core->bin->options.use_ldr = node->i_value;
 	return true;
 }
 
@@ -1161,14 +1161,14 @@ static bool cb_binat(void *user, void *data) {
 static bool cb_usextr(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	core->bin->use_xtr = node->i_value;
+	core->bin->options.use_xtr = node->i_value;
 	return true;
 }
 
 static bool cb_binlimit(void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
-	core->bin->limit = node->i_value;
+	core->bin->options.limit = node->i_value;
 	return true;
 }
 
@@ -2856,7 +2856,7 @@ static bool cb_analverbose(void *user, void *data) {
 static bool cb_binverbose(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->bin->verbose = node->i_value;
+	core->bin->options.verbose = node->i_value;
 	return true;
 }
 
@@ -2896,7 +2896,7 @@ static bool cb_prjname(void *user, void *data) {
 static bool cb_rawstr(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->bin->rawstr = node->i_value;
+	core->bin->options.rawstr = node->i_value;
 	return true;
 }
 static bool cb_bin_classes(void *user, void *data) {
@@ -2914,7 +2914,7 @@ static bool cb_bin_classes(void *user, void *data) {
 static bool cb_debase64(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
-	core->bin->debase64 = node->i_value;
+	core->bin->options.debase64 = node->i_value;
 	return true;
 }
 
@@ -2936,7 +2936,7 @@ static bool cb_demangle_trylib(void *user, void *data) {
 	if (!core || !core->bin) {
 		return false;
 	}
-	core->bin->demangle_trylib = node->i_value;
+	core->bin->options.demangle_trylib = node->i_value;
 	return true;
 }
 
@@ -2980,11 +2980,11 @@ static bool cb_binmaxstrbuf(void *user, void *data) {
 	RConfigNode *node = (RConfigNode *) data;
 	if (core->bin) {
 		int v = node->i_value;
-		ut64 old_v = core->bin->maxstrbuf;
+		ut64 old_v = core->bin->options.maxstrbuf;
 		if (v < 1) {
 			v = 4; // HACK
 		}
-		core->bin->maxstrbuf = v;
+		core->bin->options.maxstrbuf = v;
 		if (v>old_v) {
 			r_bin_reset_strings (core->bin);
 		}
@@ -2997,7 +2997,7 @@ static bool cb_binmaxsymlen(void *user, void *data) {
 	RCore *core = (RCore *) user;
 	RConfigNode *node = (RConfigNode *) data;
 	if (core->bin) {
-		core->bin->maxsymlen = node->i_value;
+		core->bin->options.maxsymlen = node->i_value;
 		return true;
 	}
 	return true;
@@ -3011,7 +3011,7 @@ static bool cb_binmaxstr(void *user, void *data) {
 		if (v < 1) {
 			v = 0; // HACK
 		}
-		core->bin->maxstrlen = v;
+		core->bin->options.maxstrlen = v;
 		r_bin_reset_strings (core->bin);
 		return true;
 	}
@@ -3026,7 +3026,7 @@ static bool cb_binminstr(void *user, void *data) {
 		if (v < 1) {
 			v = 4; // HACK
 		}
-		core->bin->minstrlen = v;
+		core->bin->options.minstrlen = v;
 		r_bin_reset_strings (core->bin);
 		return true;
 	}
@@ -3382,22 +3382,23 @@ static bool cb_malloc(void *user, void *data) {
 static bool cb_config_log_level(void *coreptr, void *nodeptr) {
 	RConfigNode *node = (RConfigNode *)nodeptr;
 	if (!strcmp (node->value, "?")) {
-		r_cons_printf ("0 - fatal\n");
-		r_cons_printf ("1 - error\n");
-		r_cons_printf ("2 - info\n");
-		r_cons_printf ("3 - warn\n");
-		r_cons_printf ("4 - todo\n");
-		r_cons_printf ("5 - debug\n");
+		int i;
+		for (i = 0; ; i++) {
+			const char *lm = r_log_level_tostring (i);
+			if (!strcmp (lm, "UNKN")) {
+				break;
+			}
+			char *llm = strdup (lm);
+			r_str_case (llm, false);
+			r_cons_printf ("%d  %s\n", i, llm);
+			free (llm);
+		}
 		return false;
 	}
-	int i;
-	const char *uvalue = node->value;
-	for (i = 0; i < R_LOG_LEVEL_LAST; i++) {
-		const char *m = r_log_level_tostring (i);
-		if (r_str_casecmp (m, uvalue) == 0) {
-			r_log_set_level (i);
-			return true;
-		}
+	int ll = r_log_level_fromstring (node->value);
+	if (ll != -1) {
+		r_log_set_level (ll);
+		return true;
 	}
 	r_log_set_level (node->i_value);
 	return true;
@@ -3658,7 +3659,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETDESC (n, "set arch endianness");
 	SETOPTIONS (n, "big", "little", "bigswap", "littleswap", NULL);
 	// SETCB ("arch.autoselect", "false", &cb_archautoselect, "automagically select matching decoder on arch related config changes (has no effect atm)");
-	SETICB ("asm.lines.maxref", 0, &cb_analmaxrefs, "maximum number of reflines to be analyzed and displayed in asm.lines with pd");
 
 	SETCB ("anal.jmp.tbl", "true", &cb_anal_jmptbl, "analyze jump tables in switch statements");
 
@@ -3786,7 +3786,6 @@ R_API int r_core_config_init(RCore *core) {
 	SETBPREF ("asm.sub.names", "true", "replace numeric values by flags (e.g. 0x4003e0 -> sym.imp.printf)");
 	SETPREF ("asm.strip", "", "strip all instructions given comma separated types");
 	SETBPREF ("asm.optype", "false", "show opcode type next to the instruction bytes");
-	SETBPREF ("asm.lines.fcn", "true", "show function boundary lines");
 	SETBPREF ("asm.flags", "true", "show flags");
 	SETBPREF ("asm.flags.prefix", "true", "show ;-- before the flags");
 	SETICB ("asm.flags.maxname", 0, &cb_maxname, "maximum length of flag name with smart chopping");
@@ -3804,8 +3803,11 @@ R_API int r_core_config_init(RCore *core) {
 	       "show flags' unfiltered realnames instead of names, except realnames from demangling");
 	SETBPREF ("asm.lbytes", "true", "align disasm bytes to left");
 	SETBPREF ("asm.lines", "true", "show ASCII-art lines at disassembly");
+	SETBPREF ("asm.lines.fcn", "true", "show function boundary lines");
+	SETICB ("asm.lines.maxref", 0, &cb_analmaxrefs, "maximum number of reflines to be analyzed and displayed in asm.lines with pd");
 	SETBPREF ("asm.lines.jmp", "true", "show flow lines at jumps");
 	SETI ("asm.lines.limit", 4096*4, "dont show control flow lines if function is larger than X bytes");
+	SETBPREF ("asm.lines.split", "false", "show up/down lines splitted form");
 	SETBPREF ("asm.lines.bb", "false", "show empty line after every basic block");
 	SETBPREF ("asm.lines.call", "false", "enable call lines");
 	SETBPREF ("asm.lines.ret", "false", "show separator lines after ret");

@@ -391,7 +391,6 @@ typedef struct r_bin_file_options_t {
 	const char *filename;
 } RBinFileOptions;
 
-// typedef void (*r_bin_addr2line_add)(RBin *bin, ut64 addr, const char *file, int line, int column);
 typedef struct r_bin_addrline_store_t RBinAddrLineStore;
 typedef bool (*RBinAddrLineAdd)(RBinAddrLineStore *bin, RBinAddrline item); // ut64 addr, const char *file, int line, int column);
 typedef RBinAddrline* (*RBinAddrLineGet)(RBinAddrLineStore *bin, ut64 addr);
@@ -458,8 +457,21 @@ typedef struct r_bin_create_options_t {
 	int bits;
 } RBinCreateOptions;
 
+// R2_600 - move all the options from rbin into this struct
 typedef struct r_bin_options_t {
 	bool fake_aslr;
+	bool demangle_usecmd;
+	bool demangle_trylib;
+	bool verbose;
+	bool use_xtr; // use extract plugins when loading a file?
+	bool use_ldr; // use loader plugins when loading a file?
+	bool debase64;
+	int minstrlen;
+	int maxstrlen;
+	int maxsymlen;
+	ut64 maxstrbuf;
+	int limit; // max symbols
+	int rawstr;
 } RBinOptions;
 
 struct r_bin_t {
@@ -468,13 +480,6 @@ struct r_bin_t {
 	int narch;
 	void *user;
 	/* preconfigured values */
-	bool debase64;
-	int minstrlen;
-	int maxstrlen;
-	int maxsymlen;
-	int limit; // max symbols
-	ut64 maxstrbuf;
-	int rawstr;
 	bool strings_nofp; // move to options struct passed instead of min, dump raw on every getstrings call
 	Sdb *sdb;
 	RIDStorage *ids;
@@ -496,13 +501,8 @@ struct r_bin_t {
 	char *prefix; // bin.prefix
 	char *strenc;
 	ut64 filter_rules;
-	bool demangle_usecmd;
-	bool demangle_trylib;
-	bool verbose;
-	bool use_xtr; // use extract plugins when loading a file?
-	bool use_ldr; // use loader plugins when loading a file?
 	RStrConstPool constpool;
-	RBinOptions options; // R2_600 - move all the options from rbin into this struct
+	RBinOptions options;
 };
 
 typedef struct r_bin_xtr_metadata_t {
@@ -607,7 +607,6 @@ typedef struct r_bin_plugin_t {
 	void (*header)(RBinFile *bf);
 	char* (*signature)(RBinFile *bf, bool json);
 	int (*demangle_type)(const char *str);
-	struct r_bin_dbginfo_t *dbginfo;
 	struct r_bin_write_t *write;
 	ut64 (*get_offset) (RBinFile *bf, int type, int idx);
 	const char* (*get_name)(RBinFile *bf, int type, int idx, bool simplified);
@@ -629,7 +628,7 @@ typedef void (*RBinSymbollCallback)(RBinObject *obj, void *symbol);
 typedef struct r_bin_class_t {
 	RBinName *name;
 	RList *super; // list of RBinName
-	char *visibility_str; // XXX R2_590 - only used by dex+java should be ut32 or bitfield.. should be usable for swift too
+	char *visibility_str; // XXX R2_600 - only used by dex+java should be ut32 or bitfield.. should be usable for swift too
 	int index; // should be unsigned?
 	ut64 addr;
 	char *ns; // namespace // maybe RBinName?
@@ -694,15 +693,13 @@ typedef struct r_bin_field_t {
 	ut64 paddr;
 	ut64 value;
 	int size;
-	int offset; // R2_600 -rename to addr
-	// ut32 visibility; // R2_590 - deprecate we have attr!
+	int offset;
 	RBinName *name;
 	RBinName *type;
 	RBinFieldKind kind;
 	char *comment;
 	char *format;
 	bool format_named; // whether format is the name of a format or a raw pf format string
-	// ut64 flags; // rename to attr and use R_BIN_ATTR_
 	RBinAttribute attr;
 } RBinField;
 
@@ -726,10 +723,6 @@ typedef struct r_bin_map_t {
 	char *file;
 } RBinMap;
 
-typedef struct r_bin_dbginfo_t {
-	bool (*get_line)(RBinFile *arch, ut64 addr, char *file, int len, int *line, int *column);
-} RBinDbgInfo;
-
 typedef bool (*RBinWriteAddLib)(RBinFile *bf, const char *lib);
 typedef ut64 (*RBinWriteScnResize)(RBinFile *bf, const char *name, ut64 newsize);
 typedef bool (*RBinWriteScnPerms)(RBinFile *bf, const char *name, int perms);
@@ -748,8 +741,7 @@ typedef const char *(*RBinGetName)(RBin *bin, int type, int idx, bool sd);
 typedef RList *(*RBinGetSections)(RBin *bin);
 typedef RBinSection *(*RBinGetSectionAt)(RBin *bin, ut64 addr);
 typedef char *(*RBinDemangle)(RBinFile *bf, const char *def, const char *str, ut64 vaddr, bool libs);
-// R2_600 typedef ut64 (*RBinBaddr)(RBinFile *bf, ut64 addr);
-
+typedef ut64 (*RBinBaddr)(RBinFile *bf, ut64 addr);
 
 typedef struct r_bin_bind_t {
 	RBin *bin;
@@ -758,9 +750,9 @@ typedef struct r_bin_bind_t {
 	RBinGetSections get_sections;
 	RBinGetSectionAt get_vsect_at;
 	RBinDemangle demangle;
-//	RBinAddrLineAdd addrline_add;
-//	RBinAddrLineGet addrline_get;
-	// RBinBaddr baddr;
+	RBinAddrLineAdd addrline_add;
+	RBinAddrLineGet addrline_get;
+	RBinBaddr baddr;
 	ut32 visibility;
 } RBinBind;
 
@@ -914,18 +906,14 @@ R_API const char *r_bin_get_meth_flag_string(ut64 flag, bool compact);
 R_API RBinSection *r_bin_get_section_at(RBinObject *o, ut64 off, int va);
 
 /* dbginfo.c */
-// R2_600 - refactor, rename and optimize storage
 R_API void r_bin_addrline_reset(RBin *bin);
 R_API void r_bin_addrline_reset_at(RBin *bin, ut64 addr);
 R_API bool r_bin_addrline_foreach(RBin *bin, RBinDbgInfoCallback item, void *user);
 R_API RList *r_bin_addrline_files(RBin *bin);
 R_API RBinAddrline *r_bin_addrline_at(RBin *bin, ut64 addr);
 R_API void r_bin_addrline_free(RBinAddrline *di);
-R_API bool r_bin_addr2line(RBin *bin, ut64 addr, char *file, int len, int *line, int *column); // R2_600 - must be deprecated
+R_API RBinAddrline *r_bin_addrline_get(RBin *bin, ut64 addr);
 R_API char *r_bin_addrline_tostring(RBin *bin, ut64 addr, int origin);
-
-R_API void r_bin_addr2line_add(RBin *bin, ut64 addr, RBinAddrline item);
-R_API RBinAddrline *r_bin_addr2line_get(RBin *bin, ut64 addr);
 
 /* bin_write.c */
 R_API bool r_bin_wr_addlib(RBin *bin, const char *lib);
