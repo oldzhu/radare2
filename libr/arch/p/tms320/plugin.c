@@ -329,7 +329,7 @@ static int tms320_c54x_op(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *b
 
 static int tms320_c55x_op(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *buf, int len, RAnalOpMask mask) {
 	tms320_dasm_t *engine = tms320_engine_for_session (as);
-	const char * str = engine->syntax;
+	const char *str = engine->syntax;
 
 	op->delay = 0;
 	op->size = tms320_dasm (engine, buf, len);
@@ -339,7 +339,7 @@ static int tms320_c55x_op(RArchSession *as, RAnalOp *op, ut64 addr, const ut8 *b
 		op->mnemonic = strdup (str);
 	}
 
-	str = strstr(str, "||") ? str + 3 : str;
+	str = strstr (str, "||") ? str + 3 : str;
 	if (match (str, "B ")) {
 		op->type = R_ANAL_OP_TYPE_JMP;
 		if (match (str, "B AC")) {
@@ -388,14 +388,19 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 	const ut64 addr = op->addr;
 	const ut8 *buf = op->bytes;
 	const int len = op->size;
-	op->size = 1;
+	op->size = 2;
 	const char *cpu = as->config->cpu;
+#ifdef CAPSTONE_TMS320C64X_H
+	// default to c64x if available
+	TMS_ANAL_OP_FN aop = tms320c64x_analop;
+#else
 	TMS_ANAL_OP_FN aop = tms320_c55x_op;
+#endif
 	if (R_STR_ISNOTEMPTY (cpu)) {
 		tms320_dasm_t *engine = tms320_engine_for_session (as);
 		if (!r_str_casecmp (cpu, "c64x")) {
 #ifdef CAPSTONE_TMS320C64X_H
-			return tms320c64x_analop (as, op, addr, buf, len, mask) > 0;
+			aop = tms320c64x_analop;
 #else
 			return false;
 #endif
@@ -410,7 +415,16 @@ static bool decode(RArchSession *as, RAnalOp *op, RAnalOpMask mask) {
 			aop = tms320_c55x_plus_op;
 		}
 	}
-	return aop (as, op, addr, buf, len, mask) > 0;
+	ut8 mbuf[4];
+	const ut8 *lbuf = buf;
+	if (len > 3 && as->config->big_endian & R_SYS_ENDIAN_BIG) {
+		mbuf[0] = buf[3];
+		mbuf[1] = buf[2];
+		mbuf[2] = buf[1];
+		mbuf[3] = buf[0];
+		lbuf = mbuf;
+	}
+	return aop (as, op, addr, lbuf, len, mask) > 0;
 }
 
 static bool tms320_init(RArchSession *as) {
@@ -457,16 +471,18 @@ static char *mnemonics(RArchSession *s, int id, bool json) {
 
 static int archinfo(RArchSession *as, ut32 q) {
 	switch (q) {
+	case R_ARCH_INFO_DATA_ALIGN:
+		return 2;
 	case R_ARCH_INFO_CODE_ALIGN:
-		return 0;
+		return 2;
 	case R_ARCH_INFO_MAXOP_SIZE:
 		return 8;
 	case R_ARCH_INFO_INVOP_SIZE:
-		return 1;
+		return 2;
 	case R_ARCH_INFO_MINOP_SIZE:
-		return 1;
+		return 2;
 	}
-	return -1;
+	return 4;
 }
 
 const RArchPlugin r_arch_plugin_tms320 = {
