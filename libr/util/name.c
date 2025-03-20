@@ -5,7 +5,7 @@
 /* Validate if char is printable , why not use ISPRINTABLE() ?? */
 R_API bool r_name_validate_print(const char ch) {
 	// TODO: support utf8
-	if (isalpha (ch) || isdigit (ch)) {
+	if (isalpha (ch & 0xff) || isdigit (ch & 0xff)) {
 		return true;
 	}
 	const char chars[] = "()[]<>+-$%@ .,:_";
@@ -22,7 +22,7 @@ R_API bool r_name_validate_dash(const char ch) {
 }
 
 R_API bool r_name_validate_char(const char ch) {
-	if (isalpha (ch) || isdigit (ch)) {
+	if (isalpha (ch & 0xff) || isdigit (ch & 0xff)) {
 		return true;
 	}
 	return (ch == '.' || ch == ':' || ch == '_');
@@ -66,7 +66,7 @@ R_API const char *r_name_filter_ro(const char *a) {
 
 // filter string for printing purposes
 R_API bool r_name_filter_print(char *s) {
-	R_RETURN_VAL_IF_FAIL (s, NULL);
+	R_RETURN_VAL_IF_FAIL (s, false);
 	char *es = s + strlen (s);
 	bool valid = true;
 	while (*s && s < es) {
@@ -85,7 +85,7 @@ R_API bool r_name_filter_print(char *s) {
 }
 
 R_API bool r_name_filter(char *s, int maxlen) {
-	R_RETURN_VAL_IF_FAIL (s, NULL);
+	R_RETURN_VAL_IF_FAIL (s, false);
 	if (R_STR_ISEMPTY (s)) {
 		return false;
 	}
