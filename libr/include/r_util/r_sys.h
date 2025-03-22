@@ -109,13 +109,13 @@ R_API bool r_sys_tts(const char *txt, bool bg);
 #if R2__WINDOWS__
 #  define r_sys_breakpoint() { __debugbreak  (); }
 #else
-#if __GNUC__ && !defined(__TINYC__)
-#  define r_sys_breakpoint() __builtin_trap()
-#elif __i386__ || __x86_64__
+#if __i386__ || __x86_64__
 #   define r_sys_breakpoint() __asm__ volatile ("int3");
 #elif __arm64__ || __aarch64__ || __arm64e__
 #  define r_sys_breakpoint() __asm__ volatile ("brk 0");
 // #define r_sys_breakpoint() __asm__ volatile ("brk #1");
+#elif __GNUC__ && !defined(__TINYC__)
+#  define r_sys_breakpoint() __builtin_trap()
 #elif (__arm__ || __thumb__)
 #  if __ARM_ARCH > 5
 #    define r_sys_breakpoint() __asm__ volatile ("bkpt $0");
