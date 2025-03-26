@@ -677,7 +677,7 @@ static RDisasmState *ds_init(RCore *core) {
 	ds->color_flow2 = P(flow2): Color_BLUE;
 	ds->color_flag = P(flag): Color_CYAN;
 	ds->color_label = P(label): Color_CYAN;
-	ds->color_offset = P(offset): Color_GREEN;
+	ds->color_offset = P(addr): Color_GREEN;
 	ds->color_other = P(other): Color_WHITE;
 	ds->color_nop = P(nop): Color_BLUE;
 	ds->color_bin = P(bin): Color_YELLOW;
@@ -2903,7 +2903,7 @@ static void ds_update_ref_lines(RDisasmState *ds) {
 				r_str_reverse (ds->lineup);
 				r_str_replace_char (ds->lineup, ':', '|');
 				r_str_replace_char (ds->lineup, '=', '-');
-				ds->lineup_col = line2->cols;
+				ds->lineup_col = strdup (line2->cols);
 			} else {
 				ds->lineup = NULL;
 			}

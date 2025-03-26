@@ -196,7 +196,7 @@ typedef struct r_cons_palette_t {
 	RColor mov;
 	RColor nop;
 	RColor num;
-	RColor offset;
+	RColor addr;
 	RColor other;
 	RColor pop;
 	RColor prompt;
@@ -273,7 +273,7 @@ typedef struct r_cons_printable_palette_t {
 	char *mov;
 	char *nop;
 	char *num;
-	char *offset;
+	char *addr;
 	char *other;
 	char *pop;
 	char *prompt;
@@ -613,6 +613,8 @@ typedef struct r_cons_t {
 #define Color_BGMAGENTA  "\x1b[45m"
 #define Color_YELLOW     "\x1b[33m"
 #define Color_BGYELLOW   "\x1b[43m"
+#define Color_ORANGE     "\x1b[31m"
+#define Color_BGORANGE   "\x1b[41m"
 #define Color_CYAN       "\x1b[36m"
 #define Color_BGCYAN     "\x1b[46m"
 #define Color_BLUE       "\x1b[34m"
@@ -656,6 +658,8 @@ typedef struct r_cons_t {
 #define RColor_BGMAGENTA  RCOLOR(ALPHA_BG, 0x80, 0x00, 0x80, 0x00, 0x00, 0x00,  5)
 #define RColor_YELLOW     RCOLOR(ALPHA_FG, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00,  3)
 #define RColor_BGYELLOW   RCOLOR(ALPHA_BG, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00,  3)
+#define RColor_ORANGE     RCOLOR(ALPHA_FG, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00,  3)
+#define RColor_BGORANGE   RCOLOR(ALPHA_BG, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00,  3)
 #define RColor_CYAN       RCOLOR(ALPHA_FG, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00,  6)
 #define RColor_BGCYAN     RCOLOR(ALPHA_BG, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00,  6)
 #define RColor_BLUE       RCOLOR(ALPHA_FG, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,  4)
@@ -692,6 +696,7 @@ typedef struct r_cons_t {
 #define RColor_BGMAGENTA  RCOLOR(ALPHA_BG, 136,  23, 152, 0x00, 0x00, 0x00,  5)
 #define RColor_YELLOW     RCOLOR(ALPHA_FG, 193, 156,   0, 0x00, 0x00, 0x00,  3)
 #define RColor_BGYELLOW   RCOLOR(ALPHA_BG, 193, 156,   0, 0x00, 0x00, 0x00,  3)
+#define RColor_ORANGE     RCOLOR(ALPHA_FG, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00,  3)
 #define RColor_CYAN       RCOLOR(ALPHA_FG,  58, 150, 221, 0x00, 0x00, 0x00,  6)
 #define RColor_BGCYAN     RCOLOR(ALPHA_BG,  58, 150, 221, 0x00, 0x00, 0x00,  6)
 #define RColor_BLUE       RCOLOR(ALPHA_FG,   0,  55, 218, 0x00, 0x00, 0x00,  4)
@@ -981,7 +986,7 @@ R_API RColor r_cons_pal_get(const char *key);
 R_API RColor r_cons_pal_get_i(int index);
 R_API const char *r_cons_pal_get_name(int index);
 R_API int r_cons_pal_len(void);
-R_API int r_cons_rgb_parse(const char *p, ut8 *r, ut8 *g, ut8 *b, ut8 *a);
+R_API bool r_cons_rgb_parse(const char *p, ut8 *r, ut8 *g, ut8 *b, ut8 *a);
 R_API char *r_cons_rgb_tostring(ut8 r, ut8 g, ut8 b);
 R_API void r_cons_pal_list(int rad, const char *arg);
 R_API void r_cons_pal_show(void);
