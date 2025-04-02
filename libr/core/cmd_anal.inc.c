@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2024 - pancake, maijin */
+/* radare - LGPL - Copyright 2009-2025 - pancake, maijin */
 
 #if R_INCLUDE_BEGIN
 
@@ -6237,7 +6237,7 @@ static int cmd_af(RCore *core, const char *input) {
 				r_core_cmd_help_match (core, help_msg_afn, "afn");
 			} else {
 				if (r_str_startswith (name, "base64:")) {
-					char *res = (char *)r_base64_decode_dyn (name + 7, -1);
+					char *res = (char *)r_base64_decode_dyn (name + 7, -1, NULL);
 					if (res) {
 						free (name);
 						name = res;
@@ -11615,7 +11615,7 @@ static void agraph_print_node(RANode *n, void *user) {
 	if (len > 0 && n->body[len - 1] == '\n') {
 		len--;
 	}
-	char *encbody = r_base64_encode_dyn (n->body, len);
+	char *encbody = r_base64_encode_dyn ((const ut8*)n->body, len);
 	char *cmd = r_str_newf ("agn \"%s\" base64:%s\n", n->title, encbody);
 	r_cons_print (cmd);
 	free (cmd);
@@ -11724,7 +11724,6 @@ static void agraph_print_edge(RANode *from, RANode *to, void *user) {
 static void cmd_agraph_node(RCore *core, const char *input) {
 	switch (*input) {
 	case ' ': { // "agn"
-		char *newbody = NULL;
 		char *body;
 		int n_args, B_LEN = strlen ("base64:");
 		char *color = NULL;
@@ -11741,7 +11740,7 @@ static void cmd_agraph_node(RCore *core, const char *input) {
 			if (strncmp (body, "base64:", B_LEN) == 0) {
 				if (body[B_LEN]) {
 					body = r_str_replace (body, "\\n", "", true);
-					newbody = (char *)r_base64_decode_dyn (body + B_LEN, -1);
+					char *newbody = (char *)r_base64_decode_dyn (body + B_LEN, -1, NULL);
 					if (!newbody) {
 						R_LOG_ERROR ("Invalid base64 string in agn (%s)", body+B_LEN);
 						r_str_argv_free (args);
@@ -12285,16 +12284,14 @@ static void print_graph_agg(RGraph /*RGraphNodeInfo*/ *graph) {
 	RGraphNode *node, *target;
 	RListIter *it, *edge_it;
 	r_list_foreach (graph->nodes, it, node) {
-		char *encbody;
-		int len;
 		print_node = node->data;
 		if (R_STR_ISNOTEMPTY (print_node->body)) {
-			len = strlen (print_node->body);
+			int len = strlen (print_node->body);
 
 			if (len > 0 && print_node->body[len - 1] == '\n') {
 				len--;
 			}
-			encbody = r_base64_encode_dyn (print_node->body, len);
+			char *encbody = r_base64_encode_dyn ((const ut8*)print_node->body, len);
 			r_cons_printf ("agn \"%s\" base64:%s\n", print_node->title, encbody);
 			free (encbody);
 		} else {
@@ -13889,6 +13886,30 @@ static bool isSkippable(RBinSymbol *s) {
 	return false;
 }
 
+static int cmpfn_fw(const void *a, const void *b) {
+	RBinSymbol *sa = (RBinSymbol*) a;
+	RBinSymbol *sb = (RBinSymbol*) b;
+	if (sa->vaddr > sb->vaddr) {
+		return 1;
+	}
+	if (sa->vaddr < sb->vaddr) {
+		return -1;
+	}
+	return 0;
+}
+
+static int cmpfn_bw(const void *a, const void *b) {
+	RBinSymbol *sa = (RBinSymbol*) a;
+	RBinSymbol *sb = (RBinSymbol*) b;
+	if (sa->vaddr > sb->vaddr) {
+		return 1;
+	}
+	if (sa->vaddr < sb->vaddr) {
+		return -1;
+	}
+	return 0;
+}
+
 static bool cmd_aa(RCore *core, bool aaa) {
 	const RList *list;
 	RListIter *iter;
@@ -13898,6 +13919,7 @@ static bool cmd_aa(RCore *core, bool aaa) {
 	RBinSymbol *symbol;
 	const bool anal_vars = r_config_get_b (core->config, "anal.vars");
 	const bool anal_calls = r_config_get_b (core->config, "anal.calls");
+	const bool anal_back = r_config_get_b (core->config, "anal.back");
 
 	// required for noreturn
 	if (r_config_get_b (core->config, "anal.imports")) {
@@ -13927,15 +13949,27 @@ static bool cmd_aa(RCore *core, bool aaa) {
 	logline (core, 18, "Analyze symbols (af@@@s)");
 	RVecRBinSymbol *v = r_bin_get_symbols_vec (core->bin);
 	if (v) {
-		R_VEC_FOREACH (v, symbol) {
-			if (r_cons_is_breaked ()) {
-				break;
+		if (anal_back) {
+			RSkipList *symbols = r_skiplist_new (NULL, anal_back? cmpfn_fw: cmpfn_bw);
+			R_VEC_FOREACH (v, symbol) {
+				if (isSkippable (symbol) || !isValidSymbol (symbol)) {
+					continue;
+				}
+				r_skiplist_insert (symbols, symbol);
 			}
-			// Stop analyzing PE imports further
-			if (isSkippable (symbol)) {
-				continue;
+			RSkipListNode *it;
+			r_skiplist_foreach (symbols, it, symbol) {
+				ut64 addr = r_bin_get_vaddr (core->bin, symbol->paddr, symbol->vaddr);
+				// TODO: uncomment to: fcn.name = symbol.name, problematic for imports
+				// r_core_af (core, addr, symbol->name, anal_calls);
+				r_core_af (core, addr, NULL, anal_calls);
 			}
-			if (isValidSymbol (symbol)) {
+			r_skiplist_free (symbols);
+		} else {
+			R_VEC_FOREACH (v, symbol) {
+				if (isSkippable (symbol) || !isValidSymbol (symbol)) {
+					continue;
+				}
 				ut64 addr = r_bin_get_vaddr (core->bin, symbol->paddr, symbol->vaddr);
 				// TODO: uncomment to: fcn.name = symbol.name, problematic for imports
 				// r_core_af (core, addr, symbol->name, anal_calls);
@@ -13981,6 +14015,7 @@ static bool cmd_aa(RCore *core, bool aaa) {
 				if (r_str_startswith (fname, "dbg.")
 				||  r_str_startswith (fname, "rsym.")
 				||  r_str_startswith (fname, "sym.")
+				||  r_str_startswith (fname, "func.")
 				||  r_str_startswith (fname, "main")) {
 					fcni->type = R_ANAL_FCN_TYPE_SYM;
 				}
@@ -15269,7 +15304,7 @@ static void cmd_anal_aC(RCore *core, const char *input) {
 	r_anal_op_free (op);
 	char *s = r_strbuf_drain (sb);
 	if (is_aCer) {
-		char *u = r_base64_encode_dyn (s, -1);
+		char *u = (char *)r_base64_encode_dyn ((const ut8 *)s, -1);
 		if (u) {
 			r_cons_printf ("'CCu base64:%s\n", u);
 			free (u);
