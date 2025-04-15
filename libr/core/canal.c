@@ -3088,6 +3088,7 @@ static int fcn_print_makestyle(RCore *core, RList *fcns, char mode, bool unique,
 				char *s = r_str_list_join (sortbycount, "\n");
 				r_cons_println (s);
 				free (s);
+				r_list_free (sortbycount);
 			}
 			sdb_free (uniq);
 			if (pj) {
@@ -3867,6 +3868,9 @@ R_API int r_core_anal_fcn_list(RCore *core, const char *input, const char *rad) 
 			char mode = 0;
 			int i;
 			for (i = 0; i < 2; i++) {
+				if (!rad[1 + i]) {
+					break;
+				}
 				switch (rad[1 + i]) {
 				case 'u': uniq = true; break;
 				case '.': here = true; break;
