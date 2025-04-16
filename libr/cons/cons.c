@@ -254,7 +254,6 @@ R_API void r_cons_color(int fg, int r, int g, int b) {
 }
 
 R_API void r_cons_println(const char* str) {
-	// this is not thread safe!
 	r_cons_print (str);
 	r_cons_newline ();
 }
@@ -301,47 +300,6 @@ R_API void r_cons_print_justify(const char *str, int j, char c) {
 	}
 }
 
-
-#if 0
-// TODO: review and remove
-R_API void r_cons_print_at(char *s, int x, int y, int w, int h) {
-	if (w < 0) {
-		w = 0;
-	}
-	if (h < 0) {
-		h = 0;
-	}
-	while (s) {
-		int pos = 0;
-		int ochar = s[pos];
-		char *n = strchr (s, '\n');
-		if (n) {
-			*n = 0;
-			if (w && r_str_ansi_len (s) > w) {
-				const char *p = r_str_ansi_chrn (s, w);
-				if (p) {
-					pos = p - s;
-					ochar = s[pos];
-					s[pos] = 0;
-				}
-			}
-		}
-		r_cons_gotoxy (x, y);
-		r_cons_printf ("%s", s);
-		if (n) {
-			s[pos] = ochar;
-			*n = '\n';
-			s = n + 1;
-		} else {
-			break;
-		}
-		if (h && y > h) {
-			break;
-		}
-		y++;
-	}
-}
-#endif
 R_API void r_cons_print_at(const char *_str, int x, char y, int w, int h) {
 	int i, o, len;
 	int cols = 0;
@@ -669,9 +627,6 @@ R_API bool r_cons_enable_mouse(const bool enable) {
 		const char *click = enable
 			? "\x1b[?1000;1006;1015h"
 			: "\x1b[?1000;1006;1015l";
-			// : "\x1b[?1001r\x1b[?1000l";
-		// : "\x1b[?1000;1006;1015l";
-		// const char *old = enable ? "\x1b[?1001s" "\x1b[?1000h" : "\x1b[?1001r" "\x1b[?1000l";
 		const size_t click_len = strlen (click);
 		if (write (2, click, click_len) != click_len) {
 			enabled = false;
@@ -791,33 +746,38 @@ R_API RCons *r_cons_free(void) {
 }
 
 #define MOAR (4096 * 8)
-static bool palloc(int moar) {
-	if (moar <= 0) {
+static bool palloc(size_t moar) {
+	if (moar == 0 || moar > INT_MAX) {
 		return false;
 	}
 	if (!C->buffer) {
-		if ((INT_MAX - MOAR) < moar) {
+		if (moar > SIZE_MAX - MOAR) {
 			return false;
 		}
 		size_t new_sz = moar + MOAR;
 		void *temp = calloc (1, new_sz);
 		if (temp) {
-			C->buffer_sz = new_sz;
+			C->buffer_sz = new_sz; // Maintain int for C->buffer_sz
 			C->buffer = temp;
 			C->buffer[0] = '\0';
-		}
-	} else if (moar + C->buffer_len > C->buffer_sz) {
-		char *new_buffer;
-		int old_buffer_sz = C->buffer_sz;
-		if ((INT_MAX - MOAR - moar) < C->buffer_sz) {
+		} else {
 			return false;
 		}
-		C->buffer_sz += moar + MOAR;
-		new_buffer = realloc (C->buffer, C->buffer_sz);
+	} else if (moar + C->buffer_len > C->buffer_sz) {
+		size_t old_buffer_sz = C->buffer_sz;
+		size_t new_sz = old_buffer_sz * 2; // Exponential growth
+		if (new_sz < old_buffer_sz || new_sz < moar + C->buffer_len) {
+			new_sz = moar + C->buffer_len + MOAR; // Ensure enough space
+		}
+		if (new_sz < old_buffer_sz) { // Check for overflow
+			return false;
+		}
+		void *new_buffer = realloc (C->buffer, new_sz);
 		if (new_buffer) {
 			C->buffer = new_buffer;
+			C->buffer_sz = (int)new_sz; // Maintain int for C->buffer_sz
 		} else {
-			C->buffer_sz = old_buffer_sz;
+			C->buffer_sz = (int)old_buffer_sz; // Restore on failure
 			return false;
 		}
 	}
@@ -1434,32 +1394,30 @@ R_API void r_cons_printf_list(const char *format, va_list ap) {
 		return;
 	}
 	if (strchr (format, '%')) {
-		int left = 0;
 		if (palloc (MOAR + strlen (format) * 20)) {
 			RConsContext *ctx = getctx ();
-// club:
-			left = ctx->buffer_sz - ctx->buffer_len; /* remaining space in C->buffer */
-			int nleft = chop (left);
-			if (nleft > 0) {
+			bool need_retry = true;
+			while (need_retry) {
+				need_retry = false;
+				size_t left = ctx->buffer_sz - ctx->buffer_len;
 				size_t written = vsnprintf (ctx->buffer + ctx->buffer_len, left, format, ap3);
-				if (written >= left) { /* not all bytes were written */
-					if (palloc (written + 1)) {  /* + 1 byte for \0 termination */
-						(void) vsnprintf (ctx->buffer + ctx->buffer_len, nleft, format, ap3);
-						if (nleft < left) {
-							C->breaked = true;
-						}
-#if 0
+				if (written >= left) {
+					if (palloc (written + 1)) {
 						va_end (ap3);
 						va_copy (ap3, ap2);
-						return;
-						goto club;
-#endif
+						need_retry = true; // Retry with larger buffer
+					} else {
+						// Allocation failed, use available space
+						size_t added = (left > 0) ? left - 1 : 0;
+						ctx->buffer_len += added;
+						C->breaked = true; // Indicate truncation
 					}
+				} else {
+					ctx->buffer_len += written;
 				}
-				ctx->buffer_len += written;
-			} else {
-				C->breaked = true;
 			}
+		} else {
+			C->breaked = true; // Initial allocation failed
 		}
 	} else {
 		r_cons_print (format);
