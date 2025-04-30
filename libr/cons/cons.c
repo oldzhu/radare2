@@ -183,6 +183,13 @@ R_API RConsContext *r_cons_context(void) {
 	return C;
 }
 
+R_API RCons *r_cons_global(RCons *c) {
+	if (c) {
+		I = c;
+	}
+	return I;
+}
+
 R_API RCons *r_cons_singleton(void) {
 	if (!I) {
 		r_cons_new ();
@@ -422,9 +429,11 @@ R_API RCons *r_cons_new(void) {
 	return cons;
 }
 
-R_API RCons *r_cons_free(void) {
-	r_kons_free (I);
-	return NULL;
+R_API void r_cons_free(RCons *cons) {
+	r_kons_free (cons);
+	if (cons == I) {
+		I = NULL; // hack for globals
+	}
 }
 
 R_API void r_cons_gotoxy(int x, int y) {
@@ -473,7 +482,7 @@ R_API int r_cons_get_buffer_len(void) {
 }
 
 R_API void r_cons_filter(void) {
-	r_kons_filter (I);
+	r_kons_filter (r_cons_singleton ());
 }
 
 R_API void r_cons_push(void) {
@@ -484,27 +493,8 @@ R_API void r_cons_pop(void) {
 	r_kons_pop (I);
 }
 
-R_DEPRECATE R_API RConsContext *r_cons_context_new(R_NULLABLE RConsContext *parent) {
-	RConsContext *context = R_NEW0 (RConsContext);
-	// eprintf ("init\n");
-	init_cons_context (context, parent);
-	return context;
-}
-
-#if 0
-R_API void r_cons_context_free(RConsContext *ctx) {
-	// eprintf ("ctx.fri\n");
-	return;
-	if (R_LIKELY (ctx)) {
-		cons_context_deinit (ctx);
-		free (ctx);
-	}
-}
-#endif
-
 R_API void r_cons_context_load(RConsContext *context) {
 	// eprintf ("ctx.loa\n");
-	return;
 	if (!I) {
 		I = &s_cons_global;
 	}
@@ -512,7 +502,6 @@ R_API void r_cons_context_load(RConsContext *context) {
 }
 
 R_API void r_cons_context_reset(void) {
-	eprintf ("wtf\n");
 #if 0
 	while (r_kons_pop (I)) {
 		// you cant stop

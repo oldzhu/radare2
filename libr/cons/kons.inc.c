@@ -328,13 +328,12 @@ R_API void r_kons_printf_list(RCons *cons, const char *format, va_list ap) {
 		return;
 	}
 	if (strchr (format, '%')) {
-		RConsContext *ctx = cons->context;
 		if (kons_palloc (cons, MOAR + strlen (format) * 20)) {
 			bool need_retry = true;
 			while (need_retry) {
 				need_retry = false;
-				size_t left = ctx->buffer_sz - ctx->buffer_len;
-				size_t written = vsnprintf (ctx->buffer + ctx->buffer_len, left, format, ap3);
+				size_t left = cons->context->buffer_sz - cons->context->buffer_len;
+				size_t written = vsnprintf (cons->context->buffer + cons->context->buffer_len, left, format, ap3);
 				if (written >= left) {
 					if (kons_palloc (cons, written + 1)) {
 						va_end (ap3);
@@ -343,15 +342,15 @@ R_API void r_kons_printf_list(RCons *cons, const char *format, va_list ap) {
 					} else {
 						// Allocation failed, use available space
 						size_t added = (left > 0) ? left - 1 : 0;
-						ctx->buffer_len += added;
-						ctx->breaked = true; // Indicate truncation
+						cons->context->buffer_len += added;
+						cons->context->breaked = true; // Indicate truncation
 					}
 				} else {
-					ctx->buffer_len += written;
+					cons->context->buffer_len += written;
 				}
 			}
 		} else {
-			ctx->breaked = true; // Initial allocation failed
+			cons->context->breaked = true; // Initial allocation failed
 		}
 	} else {
 		r_kons_print (cons, format);
@@ -456,7 +455,7 @@ R_API void r_kons_flush(RCons *cons) {
 		return;
 	}
 	if (cons->null) {
-		r_cons_reset ();
+		r_kons_reset (cons);
 		return;
 	}
 	if (!r_list_empty (ctx->marks)) {
@@ -476,7 +475,7 @@ R_API void r_kons_flush(RCons *cons) {
 	}
 	r_kons_filter (cons);
 	if (!ctx->buffer || ctx->buffer_len < 1) {
-		r_cons_reset ();
+		r_kons_reset (cons);
 		return;
 	}
 	if (r_kons_is_interactive (cons) && cons->fdout == 1) {
@@ -486,7 +485,7 @@ R_API void r_kons_flush(RCons *cons) {
 			if (!strcmp (cons->pager, "..")) {
 				char *str = r_str_ndup (ctx->buffer, ctx->buffer_len);
 				ctx->pageable = false;
-				r_cons_less_str (str, NULL);
+				r_cons_less_str (cons, str, NULL);
 				r_kons_reset (cons);
 				free (str);
 				return;
@@ -503,14 +502,14 @@ R_API void r_kons_flush(RCons *cons) {
 				}
 			}
 			if (lines > 0 && !r_cons_yesno ('n',"Do you want to print %d lines? (y/N)", lines)) {
-				r_cons_reset ();
+				r_kons_reset (cons);
 				return;
 			}
 #else
 			char buf[8];
 			r_num_units (buf, sizeof (buf), ctx->buffer_len);
 			if (!r_cons_yesno ('n', "Do you want to print %s chars? (y/N)", buf)) {
-				r_cons_reset ();
+				r_kons_reset (cons);
 				return;
 			}
 #endif
@@ -522,7 +521,7 @@ R_API void r_kons_flush(RCons *cons) {
 		FILE *d = r_sandbox_fopen (tee, "a+");
 		if (d) {
 			if (ctx->buffer_len != fwrite (ctx->buffer, 1, ctx->buffer_len, d)) {
-				R_LOG_ERROR ("r_cons_flush: fwrite: error (%s)", tee);
+				R_LOG_ERROR ("r_kons_flush: fwrite: error (%s)", tee);
 			}
 			fclose (d);
 		} else {
@@ -558,7 +557,7 @@ R_API void r_kons_flush(RCons *cons) {
 		__cons_write (cons, ctx->buffer, ctx->buffer_len);
 	}
 
-	r_cons_reset ();
+	r_kons_reset (cons);
 	if (cons->newline) {
 		eprintf ("\n");
 		cons->newline = false;
@@ -609,10 +608,13 @@ static void grep_word_free(RConsGrepWord *gw) {
 
 static void cons_grep_reset(RConsGrep *grep) {
 	if (grep) {
-		R_FREE (grep->str);
+		free (grep->str);
+		grep->str = NULL;
+		if (grep->strings) {
+			r_list_free (grep->strings);
+			grep->strings = r_list_newf ((RListFree)grep_word_free);
+		}
 		ZERO_FILL (*grep);
-		r_list_free (grep->strings);
-		grep->strings = r_list_newf ((RListFree)grep_word_free);
 		grep->line = -1;
 		grep->sort = -1;
 		grep->sort_invert = false;
@@ -690,31 +692,32 @@ static void cons_context_deinit(RConsContext *ctx) {
 }
 #endif
 
-static void init_cons_context(RConsContext *context, R_NULLABLE RConsContext *parent) {
-	context->marks = r_list_newf ((RListFree)r_cons_mark_free);
-	context->breaked = false;
-	// context->cmd_depth = R_CONS_CMD_DEPTH + 1;
-	context->buffer_sz = 0;
-	context->lastEnabled = true;
-	context->buffer_len = 0;
-	context->is_interactive = false;
-	// context->cons_stack = r_stack_newf (6, cons_stack_free);
-	context->break_stack = r_stack_newf (6, break_stack_free);
-	context->event_interrupt = NULL;
-	context->event_interrupt_data = NULL;
-	context->pageable = true;
-	context->log_callback = NULL;
-	context->cmd_str_depth = 0;
-	context->noflush = false;
+static void init_cons_context(RCons *cons, R_NULLABLE RConsContext *parent) {
+	RConsContext *ctx = cons->context;
+	ctx->marks = r_list_newf ((RListFree)r_cons_mark_free);
+	ctx->breaked = false;
+	// ctx->cmd_depth = R_CONS_CMD_DEPTH + 1;
+	ctx->buffer_sz = 0;
+	ctx->lastEnabled = true;
+	ctx->buffer_len = 0;
+	ctx->is_interactive = false;
+	// ctx->cons_stack = r_stack_newf (6, cons_stack_free);
+	ctx->break_stack = r_stack_newf (6, break_stack_free);
+	ctx->event_interrupt = NULL;
+	ctx->event_interrupt_data = NULL;
+	ctx->pageable = true;
+	ctx->log_callback = NULL;
+	ctx->cmd_str_depth = 0;
+	ctx->noflush = false;
 
 	if (parent) {
-		context->color_mode = parent->color_mode;
-		r_cons_pal_copy (context, parent);
+		ctx->color_mode = parent->color_mode;
+		r_cons_pal_copy (cons, parent);
 	} else {
-		context->color_mode = COLOR_MODE_DISABLED;
-		r_cons_pal_init (context);
+		ctx->color_mode = COLOR_MODE_DISABLED;
+		r_cons_pal_init (cons);
 	}
-	cons_grep_reset (&context->grep);
+	cons_grep_reset (&ctx->grep);
 }
 #if R2__WINDOWS__
 static HANDLE h;
@@ -756,7 +759,7 @@ R_API RCons *r_kons_new(void) {
 	// r_cons_context_reset (cons->context);
 	cons->context = R_NEW0 (RConsContext);
 	cons->ctx_stack = r_list_newf ((RListFree)r_cons_context_free);
-	init_cons_context (cons->context, NULL);
+	init_cons_context (cons, NULL);
 	// eprintf ("CTX %p %p\n", cons, cons->context);
 	init_cons_input (&cons->input_state);
 	cons->lock = r_th_lock_new (false);
@@ -1003,18 +1006,33 @@ R_API RConsContext *r_cons_context_clone(RConsContext *ctx) {
 		c->unsorted_lines = r_list_clone (ctx->unsorted_lines, (RListClone)strdup);
 	}
 	c->marks = r_list_clone (ctx->marks, (RListClone)strdup);
+	r_kons_pal_clone (c);
+	// rainbow_clone (c);
+	memset (&c->grep, 0, sizeof (c->grep));
+	c->grep.strings = r_list_newf ((RListFree)grep_word_free);
+	c->grep.line = -1;
+	c->grep.sort = -1;
+	c->grep.sort_invert = false;
 	return c;
 }
 
 R_API void r_kons_push(RCons *cons) {
+	// eprintf ("push\n");
 	r_list_push (cons->ctx_stack, cons->context);
 	RConsContext *nc = r_cons_context_clone (cons->context);
 #if 1
+	// maybe this is done by kons_reset too
 	nc->buffer = NULL;
 	nc->buffer_sz = 0;
 	nc->buffer_len = 0;
 #endif
 	cons->context = nc;
+	// global hacks
+	RCons *Gcons = r_cons_singleton ();
+	if (cons == Gcons) {
+		Gcons->context = nc;
+	}
+	r_kons_reset (cons);
 	// r_cons_context_reset (cons->context);
 #if 0
 	// memcpy (&tc, cons->context, sizeof (tc));
@@ -1037,9 +1055,14 @@ R_API bool r_kons_pop(RCons *cons) {
 	if (ctx) {
 		r_cons_context_free (cons->context);
 		cons->context = ctx;
+		// global hacks
+		RCons *Gcons = r_cons_singleton ();
+		if (cons == Gcons) {
+			Gcons->context = ctx;
+		}
 		return true;
 	}
-	// R_LOG_INFO ("Nothing to pop");
+	R_LOG_INFO ("Nothing to pop");
 	return false;
 #if 0
 	if (ctx->cons_stack) {
@@ -1214,7 +1237,7 @@ R_API void r_kons_visual_flush(RCons *cons) {
 		r_kons_visual_write (cons, ctx->buffer);
 #endif
 	}
-	r_cons_reset ();
+	r_kons_reset (cons);
 	if (cons->fps) {
 		r_kons_print_fps (cons, 0);
 	}
@@ -1732,4 +1755,69 @@ R_API void r_kons_break_clear(RCons *cons) {
 	RConsContext *ctx = cons->context;
 	ctx->was_breaked = false;
 	ctx->breaked = false;
+}
+
+R_API void r_kons_cmd_help(RCons *cons, RCoreHelpMessage help, bool use_color) {
+	const char *pal_input_color = use_color ? cons->context->pal.input : "";
+	const char *pal_args_color = use_color ? cons->context->pal.args : "";
+	const char *pal_help_color = use_color ? cons->context->pal.help : "";
+	const char *pal_reset = use_color ? cons->context->pal.reset : "";
+	int i, max_length = 0, padding = 0;
+	const char *usage_str = "Usage:";
+	const char *help_cmd = NULL, *help_args = NULL, *help_desc = NULL;
+	if (!pal_input_color) {
+		pal_input_color = "";
+	}
+	if (!pal_args_color) {
+		pal_args_color = "";
+	}
+	if (!pal_help_color) {
+		pal_help_color = "";
+	}
+	if (!pal_reset) {
+		pal_reset = Color_RESET;
+	}
+
+	// calculate padding for description text in advance
+	for (i = 0; help[i]; i += 3) {
+		help_cmd = help[i + 0];
+		help_args = help[i + 1];
+
+		int len_cmd = strlen (help_cmd);
+		int len_args = strlen (help_args);
+		if (i) {
+			max_length = R_MAX (max_length, len_cmd + len_args);
+		}
+	}
+
+	for (i = 0; help[i]; i += 3) {
+		help_cmd  = help[i + 0];
+		help_args = help[i + 1];
+		help_desc = help[i + 2];
+
+		if (r_str_startswith (help_cmd, usage_str)) {
+			/* Usage header */
+			const char *afterusage = help_cmd + strlen (usage_str);
+			r_cons_printf ("Usage:%s%s", pal_args_color, afterusage);
+			if (help_args[0]) {
+				r_cons_printf (" %s", help_args);
+			}
+			if (help_desc[0]) {
+				r_cons_printf ("  %s", help_desc);
+			}
+			r_cons_printf ("%s\n", pal_reset);
+		} else if (!help_args[0] && !help_desc[0]) {
+			/* Section header, no need to indent it */
+			r_cons_printf ("%s%s%s\n", pal_help_color, help_cmd, pal_reset);
+		} else {
+			/* Body of help text, indented */
+			int str_length = strlen (help_cmd) + strlen (help_args);
+			padding = R_MAX ((max_length - str_length), 0);
+			r_cons_printf ("| %s%s%s%s%*s  %s%s%s\n",
+				pal_input_color, help_cmd,
+				pal_args_color, help_args,
+				padding, "",
+				pal_help_color, help_desc, pal_reset);
+		}
+	}
 }

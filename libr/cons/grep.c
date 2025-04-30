@@ -85,11 +85,18 @@ static RCoreHelpMessage help_detail_tilde = {
 	NULL
 };
 
-R_API void r_cons_grep_help(void) {
-	r_cons_cmd_help (help_detail_tilde, true);
+static void grep_word_free(RConsGrepWord *gw) {
+	if (gw) {
+		free (gw->str);
+		free (gw);
+	}
 }
 
-R_API void r_kons_grep_expression(RCons *cons, const char *str) {
+R_API void r_cons_grep_help(RCons *cons) {
+	r_kons_cmd_help (cons, help_detail_tilde, true);
+}
+
+R_API void r_cons_grep_expression(RCons *cons, const char *str) {
 	if (R_STR_ISEMPTY(str)) {
 		return;
 	}
@@ -134,6 +141,9 @@ R_API void r_kons_grep_expression(RCons *cons, const char *str) {
 	bool first = true;
 	ctx->sorted_column = 0;
 	size_t i;
+	if (!grep->strings) {
+		grep->strings = r_list_newf ((RListFree)grep_word_free);
+	}
 	for (i = 0; i < ptrs_length; i++) {
 		bool gw_begin = false;
 		bool gw_neg = false;
@@ -264,7 +274,7 @@ R_API void r_kons_grep_expression(RCons *cons, const char *str) {
 					grep->ascart = true;
 				} else if (*ptr == '?') {
 					cons->context->filter = true;
-					r_cons_grep_help ();
+					r_cons_grep_help (cons);
 					goto cleanup;
 				}
 				break;
@@ -398,11 +408,6 @@ cleanup:
 	free (buf);
 }
 
-R_API void r_cons_grep_expression(const char *str) {
-	r_kons_grep_expression (r_cons_singleton (), str);
-}
-
-
 // Finds and returns next intgrep expression, unescapes escaped twiddles
 static char *find_next_intgrep(char *cmd, const char *quotes) {
 	do {
@@ -459,12 +464,12 @@ static char *preprocess_filter_expr(char *cmd, const char *quotes) {
 	return r_str_append (ns, p1 + 1);
 }
 
-R_API void r_cons_grep_parsecmd(char *cmd, const char *quotestr) {
+R_API void r_cons_grep_parsecmd(RCons *cons, char *cmd, const char *quotestr) {
 	R_RETURN_IF_FAIL (cmd && quotestr);
 	char *ptr = preprocess_filter_expr (cmd, quotestr);
 	if (ptr) {
 		r_str_trim (cmd);
-		r_cons_grep_expression (ptr);
+		r_cons_grep_expression (cons, ptr);
 		free (ptr);
 	}
 }
@@ -872,12 +877,12 @@ R_API void r_kons_grepbuf(RCons *cons) {
 			r_cons_grep_word_free (gw);
 			if (grep->hud) {
 				grep->hud = false;
-				r_cons_hud_string (cons->context->buffer);
+				r_cons_hud_string (cons, cons->context->buffer);
 				return;
 			}
 			if (grep->less) {
 				grep->less = 0;
-				r_cons_less_str (cons->context->buffer, NULL);
+				r_cons_less_str (cons, cons->context->buffer, NULL);
 				return;
 			}
 		}
@@ -894,19 +899,19 @@ R_API void r_kons_grepbuf(RCons *cons) {
 		int less = grep->less;
 		grep->less = 0;
 		if (less == 3) {
-			char *res = r_cons_hud_line_string (buf);
+			char *res = r_cons_hud_line_string (cons, buf);
 			if (res) {
 				r_cons_println (res);
 				free (res);
 			}
 		} else if (less == 2) {
-			char *res = r_cons_hud_string (buf);
+			char *res = r_cons_hud_string (cons, buf);
 			if (res) {
 				r_cons_println (res);
 				free (res);
 			}
 		} else {
-			r_cons_less_str (buf, NULL);
+			r_cons_less_str (cons, buf, NULL);
 			cons->context->buffer_len = 0;
 			cons->context->buffer_sz = 0;
 			R_FREE (cons->context->buffer);
@@ -1254,7 +1259,7 @@ R_API int r_cons_grep_line(char *buf, int len) {
 
 R_API void r_kons_grep(RCons *cons, const char *grep) {
 	R_RETURN_IF_FAIL (grep);
-	r_kons_grep_expression (cons, grep);
+	r_cons_grep_expression (cons, grep);
 	r_kons_grepbuf (cons);
 }
 
