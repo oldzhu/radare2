@@ -361,7 +361,7 @@ R_API int r_core_pseudo_code(RCore *core, const char *input) {
 		pj_o (pj);
 		pj_ka (pj, "annotations");
 	}
-	const char *cc = fcn->cc ? fcn->cc: "default";
+	const char *cc = fcn->callconv ? fcn->callconv: "default";
 	const char *cc_a0 = r_anal_cc_arg (core->anal, cc, 0, -1);
 	const char *cc_a1 = r_anal_cc_arg (core->anal, cc, 1, -1);
 	const char *a0 = cc_a0? cc_a0: r_reg_alias_getname (core->anal->reg, R_REG_ALIAS_A0);
@@ -423,12 +423,22 @@ R_API int r_core_pseudo_code(RCore *core, const char *input) {
 			R_LOG_ERROR ("No code here");
 			break;
 		}
+		if (!*code) {
+			free (code);
+			R_LOG_ERROR ("Empty code here");
+			break;
+		}
 		// SET_INDENT (indent);
 		// PRINTF ("\n---\n");
 		code = r_str_replace (code, "\n\n", "\n", true);
 		code = r_str_replace (code, ";", "//", true);
 		code = cleancomments (code);
 		size_t len = strlen (code);
+		if (len < 1) {
+			free (code);
+			R_LOG_ERROR ("Empty code here");
+			break;
+		}
 		code[len - 1] = 0; // chop last newline
 		find_and_change (code, len);
 		if (!sdb_const_get (db, K_MARK (bb->addr), 0)) {

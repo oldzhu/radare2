@@ -279,6 +279,7 @@ static RCoreHelpMessage help_msg_ab = {
 	"abj", " [addr]", "display basic block information in JSON",
 	"abl", "[?] [.-cqj]", "list all basic blocks",
 	"abo", "", "list opcode offsets of current basic block",
+	"abm", "", "list instruction bytes and mask for the current basic block",
 	"abp", "[?] [addr]", "follow basic blocks paths from $$ to `addr`",
 	"abt", "[tag] ([color])", "no args = show current trace tag, otherwise set the color",
 	"abx", " [hexpair-bytes]", "analyze N bytes",
@@ -658,6 +659,37 @@ static RCoreHelpMessage help_msg_afC = {
 	"afC", "", "function cycles cost",
 	"afCc", "", "cyclomatic complexity",
 	"afCl", "", "loop count (backward jumps)",
+	NULL
+};
+
+static RCoreHelpMessage help_msg_afi_fields = {
+	"Fields:", "", "afi",
+	"offset", "", "absolute address of the function entrypoint", // rename to addr
+	"name", "", "name of the function",
+	"size", "", "size of the function", // rename to bbsize
+	"realsz", "", "linear size ((maxbb+maxxbsz) - minbb)", // rename to linearsize
+	"stackframe", "", "stack frame size",
+	"callconv", "", "calling convention (ms, cdecl, ... see afcl)",
+	"cyclo-cost", "", "sum cpu cycles cost of all the instructions in the basic blocks",
+	"cyclo-complexity", "", "CC = edges - nodes + (2 * end nodes)",
+	"bits", "", "arch.bits value",
+	"type", "", "related to diffing",
+	"num-bbs", "", "basic blocks count",
+	"num-instrs", "", "how many instructions",
+	"edges", "", "how many relationships between basic blocks",
+	"minbound", "", "minumum address",
+	"maxbound", "", "maximum address",
+	"islineal", "", "are the basic blocks linearly allocated in memory",
+	"end-bbs", "", "how many basic blocks return",
+	"maxbbins", "", "max instructions in any one basic block ",
+	"midbbins", "", "average instructions per basic block",
+	"ratbbins", "", "ratio between basic blocks and instructions",
+	"noreturn", "", "true if it ends up calling a noreturn function like exit or assert",
+	"recursive", "", "true if the function calls itself",
+	"in-degree", "", "number of functions that call this one (xrefs or incoming edges in call graph)",
+	"out-degree", "", "number of functions this one calls (0 = it doesn’t call others)",
+	"locals", "", "how many local variables",
+	"args", "", "function arguments",
 	NULL
 };
 
@@ -2871,18 +2903,18 @@ static void core_anal_bytes(RCore *core, const ut8 *buf, int len, int nops, int 
 			{
 				const int left = len - idx;
 				const int instlen = R_MIN (op.size, left);
-				ut8 *mask = r_anal_mask (core->anal, instlen, buf + idx, core->addr + idx);
 				if (smart_mask) {
 					char *maskstr = r_core_cmd_strf (core, "aobm@0x%08"PFMT64x, op.addr);
 					r_str_trim (maskstr);
 					printline ("mask", "%s\n", maskstr);
 					free (maskstr);
 				} else {
+					ut8 *mask = r_anal_mask (core->anal, instlen, buf + idx, core->addr + idx);
 					char *maskstr = r_hex_bin2strdup (mask, size);
 					printline ("mask", "%s\n", maskstr);
 					free (maskstr);
+					free (mask);
 				}
-				free (mask);
 			}
 			if (hint) {
 				if (hint->opcode) {
@@ -4218,6 +4250,35 @@ static void _abo(RAnalBlock *bb) {
 	}
 }
 
+static void abm(RCore *core) {
+	RAnalBlock *bb = r_anal_get_block_at (core->anal, core->addr);
+	if (bb) {
+		int i;
+		const bool smart_mask = true; // r_config_get_b (core->config, "anal.mask");
+		RStrBuf *sb0 = r_strbuf_new ("");
+		RStrBuf *sb1 = r_strbuf_new ("");
+		for (i = 0; i < bb->ninstr; i++) {
+			ut64 at = r_anal_block_ninstr (bb, i);
+			RAnalOp *aop = r_core_anal_op (core, at, 0);
+			char *bytes = r_hex_bin2strdup (aop->bytes_buf, aop->size);
+			r_strbuf_append (sb0, bytes);
+			free (bytes);
+			if (smart_mask) {
+				char *maskstr = r_core_cmd_strf (core, "'@0x%08"PFMT64x"'aobm", aop->addr);
+				r_str_trim (maskstr);
+				r_strbuf_append (sb1, maskstr);
+				free (maskstr);
+			}
+			r_anal_op_free (aop);
+		}
+		char *s0 = r_strbuf_drain (sb0);
+		char *s1 = r_strbuf_drain (sb1);
+		r_kons_printf (core->cons, "%s:%s\n", s0, s1);
+		free (s0);
+		free (s1);
+	}
+}
+
 static void abo(RCore *core) {
 	RAnalBlock *bb = r_anal_get_block_at (core->anal, core->addr);
 	if (bb) {
@@ -4388,8 +4449,8 @@ R_API char *fcnshowr(RAnalFunction *function) {
 	if (no_return) {
 		r_strbuf_appendf (sb, "tn %s\n", function->name);
 	}
-	if (function->cc) {
-		r_strbuf_appendf (sb, "afc %s\n", function->cc);
+	if (function->callconv) {
+		r_strbuf_appendf (sb, "afc %s\n", function->callconv);
 	}
 	int i;
 	for (i = 0; i < argc; i++) {
@@ -4818,7 +4879,7 @@ static void cmd_aflxj(RCore *core) {
 }
 
 static void cmd_afci(RCore *core, RAnalFunction *fcn) {
-	const char *cc = (fcn && fcn->cc)? fcn->cc: "reg";
+	const char *cc = (fcn && fcn->callconv)? fcn->callconv: "reg";
 	r_core_cmdf (core, "afcll~%s (", cc);
 }
 
@@ -5557,7 +5618,11 @@ static int cmd_af(RCore *core, const char *input) {
 	case 'i': // "afi"
 		switch (input[2]) {
 		case '?':
-			r_core_cmd_help (core, help_msg_afi);
+			if (input[3] == '?') {
+				r_core_cmd_help (core, help_msg_afi_fields);
+			} else {
+				r_core_cmd_help (core, help_msg_afi);
+			}
 			break;
 		case 'x': // "afix"
 			cmd_afix (core, input);
@@ -5964,7 +6029,7 @@ static int cmd_af(RCore *core, const char *input) {
 		}
 		switch (input[2]) {
 		case '\0': // "afc"
-			r_cons_println (fcn->cc);
+			r_cons_println (fcn->callconv);
 			break;
 		case ' ': { // "afc "
 				  char *cc = r_str_trim_dup (input + 3);
@@ -5972,7 +6037,7 @@ static int cmd_af(RCore *core, const char *input) {
 					  const char *asmOs = r_config_get (core->config, "asm.os");
 					  R_LOG_ERROR ("afc: Unknown calling convention '%s' for '%s'. See afcl for available types", cc, asmOs);
 				  } else {
-					  fcn->cc = r_str_constpool_get (&core->anal->constpool, cc);
+					  fcn->callconv = r_str_constpool_get (&core->anal->constpool, cc);
 				  }
 				  free (cc);
 			  }
@@ -6032,7 +6097,7 @@ static int cmd_af(RCore *core, const char *input) {
 				}
 				pj_o (pj);
 			}
-			char *cmd = r_str_newf ("cc.%s.ret", fcn->cc);
+			char *cmd = r_str_newf ("cc.%s.ret", fcn->callconv);
 			const char *regname = sdb_const_get (core->anal->sdb_cc, cmd, 0);
 			if (regname) {
 				if (json) {
@@ -6046,7 +6111,7 @@ static int cmd_af(RCore *core, const char *input) {
 				pj_ka (pj, "args");
 			}
 			for (i = 0; i < R_ANAL_CC_MAXARG; i++) {
-				cmd = r_str_newf ("cc.%s.arg%d", fcn->cc, i);
+				cmd = r_str_newf ("cc.%s.arg%d", fcn->callconv, i);
 				regname = sdb_const_get (core->anal->sdb_cc, cmd, 0);
 				if (regname) {
 					if (json) {
@@ -6060,7 +6125,7 @@ static int cmd_af(RCore *core, const char *input) {
 			if (json) {
 				pj_end (pj);
 			}
-			cmd = r_str_newf ("cc.%s.self", fcn->cc);
+			cmd = r_str_newf ("cc.%s.self", fcn->callconv);
 			regname = sdb_const_get (core->anal->sdb_cc, cmd, 0);
 			if (regname) {
 				if (json) {
@@ -6070,7 +6135,7 @@ static int cmd_af(RCore *core, const char *input) {
 				}
 			}
 			free (cmd);
-			cmd = r_str_newf ("cc.%s.error", fcn->cc);
+			cmd = r_str_newf ("cc.%s.error", fcn->callconv);
 			regname = sdb_const_get (core->anal->sdb_cc, cmd, 0);
 			if (regname) {
 				if (json) {
@@ -15493,6 +15558,9 @@ static void cmd_ab(RCore *core, const char *input) {
 	case 'c': // "abc"
 		cmd_afbc (core, r_str_trim_head_ro (input + 1));
 		break;
+	case 'm': // "abm"
+		abm (core);
+		break;
 	case 'o': // "abo"
 		abo (core);
 		break;
@@ -16023,7 +16091,7 @@ static int cmd_anal(void *data, const char *input) {
 		break;
 	case '?':
 		if (input[1] == 'j') {
-			r_cons_cmd_help_json (help_msg_a);
+			r_core_cmd_help_json (core, help_msg_a);
 		} else {
 			r_core_cmd_help (core, help_msg_a);
 		}
