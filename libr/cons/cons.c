@@ -453,8 +453,9 @@ R_API void r_cons_clear_line(int std_err) {
 }
 
 R_API void r_cons_clear00(void) {
-	r_cons_clear ();
-	r_cons_gotoxy (0, 0);
+	RCons *cons = r_cons_singleton ();
+	r_kons_clear (cons);
+	r_kons_gotoxy (cons, 0, 0);
 }
 
 R_API void r_cons_reset_colors(void) {
@@ -838,7 +839,7 @@ R_API const char* r_cons_get_rune(const ut8 ch) {
 	return NULL;
 }
 
-R_API void r_cons_breakword(R_NULLABLE const char *s) {
+R_API void r_cons_breakword(const char * R_NULLABLE s) {
 	r_kons_breakword (I, s);
 }
 

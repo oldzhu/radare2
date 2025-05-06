@@ -5720,7 +5720,7 @@ static int cmd_af(RCore *core, const char *input) {
 				RAnalFunction *fcn = r_anal_get_fcn_in (core->anal, core->addr, R_ANAL_FCN_TYPE_NULL);
 				if (fcn) {
 					// TODO: add info about xrefs and call counts
-					int nargs = r_type_func_args_count (core->anal->sdb_types, 0);
+					int nargs = r_type_func_args_count (core->anal->sdb_types, fcn->name);
 					int nvars = r_anal_var_count_locals (fcn);
 					int nins = r_anal_function_instrcount (fcn);
 					int ebbs = 0;
@@ -11998,8 +11998,8 @@ R_API void cmd_agfb3(RCore *core, const char *s, int x, int y) {
 	int h, w = r_str_size (s, &h);
 	RConsPixel *p = r_cons_pixel_new (w, h);
 	r_cons_pixel_sets (p, 0, 0, s);
-	r_cons_pixel_flush (p, x, y);
-	R_FREE (p);
+	r_cons_pixel_flush (core->cons, p, x, y);
+	r_cons_pixel_free (p);
 }
 
 R_API void cmd_agfb2(RCore *core, const char *s) {
