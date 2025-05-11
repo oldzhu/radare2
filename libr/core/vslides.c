@@ -86,7 +86,7 @@ static void render(SlidesState *state, RCore *core, RList *list, int mode, int p
 			} else if (r_str_startswith (s, "--color=")) {
 				char *kv = strdup (s + strlen ("--color="));
 				if (*kv) {
-					char *k = r_cons_pal_parse (kv, NULL);
+					char *k = r_cons_pal_parse (core->cons, kv, NULL);
 					r_strbuf_append (sb, k);
 					free (k);
 				} else {
@@ -240,7 +240,7 @@ R_API void r_core_visual_slides(RCore *core, const char *file) {
 			eprintf (" e    = open vim to edit the current slide\n");
 			eprintf (" 12   = show 1 or two pages\n");
 			eprintf (" :    = enter command\n");
-			r_cons_any_key (NULL);
+			r_cons_any_key (core->cons, NULL);
 			break;
 		case 'e':
 		case '!':
@@ -279,7 +279,7 @@ R_API void r_core_visual_slides(RCore *core, const char *file) {
 			while (1) {
 				char cmd[1024];
 				*cmd = 0;
-				r_line_set_prompt (core->cons, ":> ");
+				r_line_set_prompt (core->cons->line, ":> ");
 				if (r_cons_fgets (core->cons, cmd, sizeof (cmd), 0, NULL) < 0) {
 					cmd[0] = '\0';
 				}

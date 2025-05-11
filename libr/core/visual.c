@@ -512,7 +512,7 @@ R_API bool r_core_visual_hud(RCore *core) {
 		res = r_cons_hud_file (core->cons, f);
 	}
 	if (!res) {
-		r_cons_message ("Cannot find hud file");
+		r_cons_message (core->cons, "Cannot find hud file");
 	}
 	r_cons_clear ();
 	if (res) {
@@ -714,7 +714,7 @@ static bool prompt_read(RCore *core, const char *p, char *buf, int buflen) {
 		return false;
 	}
 	*buf = 0;
-	r_line_set_prompt (core->cons, p);
+	r_line_set_prompt (core->cons->line, p);
 	r_core_visual_showcursor (core, true);
 	r_cons_fgets (core->cons, buf, buflen, 0, NULL);
 	r_core_visual_showcursor (core, false);
@@ -811,14 +811,14 @@ R_API int r_core_visual_prompt(RCore *core) {
 	if (PIDX != 2) {
 		core->seltab = 0;
 	}
-	r_line_set_prompt (core->cons, "> ");
+	r_line_set_prompt (core->cons->line, "> ");
 	r_core_visual_showcursor (core, true);
 	r_cons_fgets (core->cons, buf, sizeof (buf), 0, NULL);
 	if (!strcmp (buf, "q")) {
 		return 0;
 	}
 	if (*buf) {
-		r_line_hist_add (buf);
+		r_line_hist_add (core->cons->line, buf);
 		r_core_cmd (core, buf, 0);
 		r_cons_echo (NULL);
 		r_cons_flush ();
@@ -1098,7 +1098,7 @@ static void visual_search(RCore *core) {
 	int len, d = core->print->cur;
 	char str[128], buf[sizeof (str) * 2 + 1];
 
-	r_line_set_prompt (core->cons, "search byte/string in block: ");
+	r_line_set_prompt (core->cons->line, "search byte/string in block: ");
 	r_cons_fgets (core->cons, str, sizeof (str), 0, NULL);
 	len = r_hex_str2bin (str, (ut8 *) buf);
 	if (*str == '"') {
@@ -1124,10 +1124,10 @@ static void visual_search(RCore *core) {
 		}
 		r_core_visual_showcursor (core, true);
 		R_LOG_INFO ("Found in offset 0x%08"PFMT64x" + %d", core->addr, core->print->cur);
-		r_cons_any_key (NULL);
+		r_cons_any_key (core->cons, NULL);
 	} else {
 		R_LOG_ERROR ("Cannot find bytes");
-		r_cons_any_key (NULL);
+		r_cons_any_key (core->cons, NULL);
 		r_cons_clear00 ();
 	}
 }
@@ -1346,7 +1346,7 @@ R_API void r_core_visual_offset(RCore *core) {
 	r_line_set_hist_callback (core->cons->line,
 		&r_line_hist_offset_up,
 		&r_line_hist_offset_down);
-	r_line_set_prompt (core->cons, "[offset]> ");
+	r_line_set_prompt (core->cons->line, "[offset]> ");
 	strncpy (buf, "s ", sizeof (buf));
 	if (r_cons_fgets (core->cons, buf + 2, sizeof (buf) - 2, 0, NULL) > 0) {
 		if (!strcmp (buf + 2, "g") || !strcmp (buf + 2, "G")) {
@@ -1373,7 +1373,7 @@ static void addComment(RCore *core, ut64 addr) {
 	r_core_visual_showcursor (core, true);
 	r_kons_flush (core->cons);
 	r_kons_set_raw (core->cons, false);
-	r_line_set_prompt (core->cons, "> ");
+	r_line_set_prompt (core->cons->line, "> ");
 	r_kons_enable_mouse (core->cons, false);
 	char buf[1024];
 	if (r_cons_fgets (core->cons, buf, sizeof (buf), 0, NULL) < 0) {
@@ -1919,7 +1919,7 @@ static void visual_textlogs(RCore *core) {
 				const char *buf = NULL;
 				#define I core->cons
 				const char *cmd = r_config_get (core->config, "cmd.vprompt");
-				r_line_set_prompt (core->cons, "cmd.vprompt> ");
+				r_line_set_prompt (core->cons->line, "cmd.vprompt> ");
 				I->line->contents = strdup (cmd);
 				buf = r_line_readline (core->cons);
 				I->line->contents = NULL;
@@ -2847,9 +2847,9 @@ static void handle_space_key(RCore *core, int force) {
 	if (force == 'V') {
 		RAnalFunction *fun = r_anal_get_fcn_in (core->anal, core->addr, R_ANAL_FCN_TYPE_NULL);
 		if (!fun) {
-			r_cons_message ("Not in a function. Type 'df' to define it here");
+			r_cons_message (core->cons, "Not in a function. Type 'df' to define it here");
 		} else if (r_list_empty (fun->bbs)) {
-			r_cons_message ("No basic blocks in this function. You may want to use 'afb+'.");
+			r_cons_message (core->cons, "No basic blocks in this function. You may want to use 'afb+'.");
 		} else {
 			const int ocolor = r_config_get_i (core->config, "scr.color");
 			reset_print_cur (core->print);
@@ -3044,7 +3044,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				}
 				if (!canWrite (core, addr)) {
 					r_cons_printf ("\nFile has been opened in read-only mode. Use -w flag, oo+ or e io.cache=true\n");
-					r_cons_any_key (NULL);
+					r_cons_any_key (core->cons, NULL);
 					return true;
 				}
 			}
@@ -3053,7 +3053,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			r_cons_flush ();
 			r_cons_set_raw (false);
 			strcpy (buf, "\"wa ");
-			r_line_set_prompt (core->cons, "> ");
+			r_line_set_prompt (core->cons->line, "> ");
 			r_kons_enable_mouse (core->cons, false);
 			if (r_cons_fgets (core->cons, buf + 4, sizeof (buf) - 4, 0, NULL) < 0) {
 				buf[0] = '\0';
@@ -3084,7 +3084,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			const char *buf = NULL;
 			#define I core->cons
 			const char *cmd = r_config_get (core->config, "cmd.vprompt");
-			r_line_set_prompt (core->cons, "cmd.vprompt> ");
+			r_line_set_prompt (core->cons->line, "cmd.vprompt> ");
 			core->cons->line->contents = strdup (cmd);
 			buf = r_line_readline (core->cons);
 			core->cons->line->contents = NULL;
@@ -3097,7 +3097,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			r_core_visual_showcursor (core, true);
 			#define I core->cons
 			const char *cmd = r_config_get (core->config, "cmd.cprompt");
-			r_line_set_prompt (core->cons, "cmd.cprompt> ");
+			r_line_set_prompt (core->cons->line, "cmd.cprompt> ");
 			I->line->contents = strdup (cmd);
 			const char *buf = r_line_readline (core->cons);
 			if (buf && !strcmp (buf, "|")) {
@@ -3191,7 +3191,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			bool mouse_state = __holdMouseState (core);
 			int range, min, max;
 			char name[256], *n;
-			r_line_set_prompt (core->cons, "flag name: ");
+			r_line_set_prompt (core->cons->line, "flag name: ");
 			r_core_visual_showcursor (core, true);
 			if (r_cons_fgets (core->cons, name, sizeof (name), 0, NULL) >= 0 && *name) {
 				n = name;
@@ -3301,7 +3301,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			*buf = 0;
 			if (!canWrite (core, addr)) {
 				R_LOG_ERROR ("File is read-only. Use `r2 -w` or run `oo+` or `e io.cache=true`");
-				r_cons_any_key (NULL);
+				r_cons_any_key (core->cons, NULL);
 				return true;
 			}
 			if (PIDX == 0) {
@@ -3335,7 +3335,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			r_cons_set_raw (0);
 			if (ch == 'I') {
 				strcpy (buf, "wow ");
-				r_line_set_prompt (core->cons, "insert hexpair block: ");
+				r_line_set_prompt (core->cons->line, "insert hexpair block: ");
 				if (r_cons_fgets (core->cons, buf + 4, sizeof (buf) - 4, 0, NULL) < 0) {
 					buf[0] = '\0';
 				}
@@ -3352,13 +3352,13 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			}
 			if (core->print->col == 2) {
 				strcpy (buf, "\"w ");
-				r_line_set_prompt (core->cons, "insert string: ");
+				r_line_set_prompt (core->cons->line, "insert string: ");
 				if (r_cons_fgets (core->cons, buf + 3, sizeof (buf) - 3, 0, NULL) < 0) {
 					buf[0] = '\0';
 				}
 				strcat (buf, "\"");
 			} else if (PIDX != 4) {
-				r_line_set_prompt (core->cons, "insert hex: ");
+				r_line_set_prompt (core->cons->line, "insert hex: ");
 				if (core->print->ocur != -1) {
 					int bs = R_ABS (core->print->cur - core->print->ocur) + 1;
 					core->blocksize = bs;
@@ -3809,7 +3809,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			if (!core->yank_buf) {
 				r_cons_print ("Cannot paste, clipboard is empty.\n");
 				r_cons_flush ();
-				r_cons_any_key (NULL);
+				r_cons_any_key (core->cons, NULL);
 				r_cons_clear00 ();
 			} else {
 				r_core_yank_paste (core, core->addr + core->print->cur, 0);
@@ -3837,7 +3837,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				} else {
 					if (!canWrite (core, core->addr)) {
 						r_cons_printf ("\nFile has been opened in read-only mode. Use -w flag, oo+ or e io.cache=true\n");
-						r_cons_any_key (NULL);
+						r_cons_any_key (core->cons, NULL);
 						return true;
 					}
 					if (core->print->ocur == -1) {
@@ -3871,7 +3871,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 				} else {
 					if (!canWrite (core, core->addr)) {
 						r_cons_printf ("\nFile has been opened in read-only mode. Use -w flag, oo+ or e io.cache=true\n");
-						r_cons_any_key (NULL);
+						r_cons_any_key (core->cons, NULL);
 						return true;
 					}
 					if (core->print->ocur == -1) {
@@ -3957,7 +3957,7 @@ R_API int r_core_visual_cmd(RCore *core, const char *arg) {
 			if (core->print->cur_enabled) {
 				if (core->print->ocur == -1) {
 					R_LOG_ERROR ("No range selected. Use HJKL");
-					r_cons_any_key (NULL);
+					r_cons_any_key (core->cons, NULL);
 					break;
 				}
 				char buf[128];

@@ -24,26 +24,26 @@ static bool rtr_visual(RCore *core, TextLog T, const char *cmd) {
 		free (rtrcmd (T, "e scr.color=true"));
 		free (rtrcmd (T, "e scr.html=false"));
 		for (;;) {
-			r_cons_clear00 ();
+			r_kons_clear00 (core->cons);
 			ret = rtrcmd (T, cmds[cmdidx]);
 			if (ret) {
-				r_cons_println (ret);
+				r_kons_println (core->cons, ret);
 				free (ret);
 			}
-			r_cons_flush ();
+			r_kons_flush (core->cons);
 			if (autorefresh) {
-				r_cons_printf ("(auto-refresh)\n");
-				r_cons_flush ();
+				r_kons_printf (core->cons, "(auto-refresh)\n");
+				r_kons_flush (core->cons);
 				r_cons_break_push (NULL, NULL);
 				r_sys_sleep (1);
 				if (r_cons_is_breaked ())  {
 					autorefresh = false;
 					ch = r_cons_readchar (core->cons);
 				} else {
-					r_cons_break_pop ();
+					r_kons_break_pop (core->cons);
 					continue;
 				}
-				r_cons_break_pop ();
+				r_kons_break_pop (core->cons);
 			} else {
 				ch = r_cons_readchar (core->cons);
 			}
@@ -54,8 +54,8 @@ TODO:
 #endif
 			switch (ch) {
 			case '?':
-				r_cons_clear00 ();
-				r_cons_printf ("Remote Visual keys:\n"
+				r_kons_clear00 (core->cons);
+				r_kons_printf (core->cons, "Remote Visual keys:\n"
 				" hjkl : move\n"
 				" HJKL : move faster\n"
 				" +-*/ : change block size\n"
@@ -66,8 +66,8 @@ TODO:
 				" q    : quit this mode and go back to the shell\n"
 				" sS   : step / step over\n"
 				" .    : seek entry or pc\n");
-				r_cons_flush ();
-				r_cons_any_key (NULL);
+				r_kons_flush (core->cons);
+				r_cons_any_key (core->cons, NULL);
 				break;
 			case 'i':
 				{
@@ -78,9 +78,9 @@ TODO:
 #endif
 					char buf[1024];
 					if (COLORFLAGS) {
-						r_line_set_prompt (core->cons, Color_RESET":> ");
+						r_line_set_prompt (core->cons->line, Color_RESET":> ");
 					} else {
-						r_line_set_prompt (core->cons, ":> ");
+						r_line_set_prompt (core->cons->line, ":> ");
 					}
 					showcursor (core, true);
 					r_cons_fgets (core->cons, buf + 3, sizeof (buf) - 3, 0, NULL);
@@ -112,20 +112,20 @@ TODO:
 					do {
 						char buf[1024];
 #if R2__UNIX__
-						r_line_set_prompt (core->cons, Color_RESET":> ");
+						r_line_set_prompt (core->cons->line, Color_RESET":> ");
 #else
-						r_line_set_prompt (core->cons, ":> ");
+						r_line_set_prompt (core->cons->line, ":> ");
 #endif
 						showcursor (core, true);
 						r_cons_fgets (core->cons, buf, sizeof (buf), 0, NULL);
 						if (*buf) {
-							r_line_hist_add (buf);
+							r_line_hist_add (core->cons->line, buf);
 							char *res = rtrcmd (T, buf);
 							if (res) {
-								r_cons_println (res);
+								r_kons_println (core->cons, res);
 								free (res);
 							}
-							r_cons_flush ();
+							r_kons_flush (core->cons);
 							ret = true;
 						} else {
 							ret = false;
@@ -213,7 +213,7 @@ static void __rtr_shell(RCore *core, int nth) {
 	snprintf (prompt, sizeof (prompt), "[%s://%s:%s/%s]> ", proto, host, port, file);
 	snprintf (prompt2, sizeof (prompt2), "[%s:%s]$ ", host, port);
 	for (;;) {
-		r_line_set_prompt (core->cons, prompt);
+		r_line_set_prompt (core->cons->line, prompt);
 		res = r_line_readline (core->cons);
 		if (R_STR_ISEMPTY (res)) {
 			break;
@@ -223,7 +223,7 @@ static void __rtr_shell(RCore *core, int nth) {
 		}
 		if (!strcmp (res, "!sh")) {
 			for (;;) {
-				r_line_set_prompt (core->cons, prompt2);
+				r_line_set_prompt (core->cons->line, prompt2);
 				res = r_line_readline (core->cons);
 				if (!res || !*res || !strcmp (res, "exit")) {
 					break;
@@ -240,7 +240,7 @@ static void __rtr_shell(RCore *core, int nth) {
 					res = res? res + 2: str;
 					const char *tail = (res[strlen (res) - 1] == '\n')? "": "\n";
 					printf ("%s%s", res, tail);
-					r_line_hist_add (str);
+					r_line_hist_add (core->cons->line, str);
 					free (str);
 				}
 				free (ptr);
@@ -257,8 +257,8 @@ static void __rtr_shell(RCore *core, int nth) {
 		} else {
 			char *cmdline = r_str_newf ("%d %s", nth, res);
 			r_core_rtr_cmd (core, cmdline);
-			r_cons_flush ();
-			r_line_hist_add (res);
+			r_kons_flush (core->cons);
+			r_line_hist_add (core->cons->line, res);
 		}
 	}
 	r_socket_free (s);

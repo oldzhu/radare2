@@ -7,7 +7,7 @@
 R_API int r_cons_controlz(RCons *cons, int ch) {
 #if R2__UNIX__
 	if (ch == 0x1a) {
-		r_cons_show_cursor (true);
+		r_kons_show_cursor (cons, true);
 		r_kons_enable_mouse (cons, false);
 		r_sys_stop ();
 		return 0;
@@ -361,12 +361,12 @@ R_API int r_cons_fgets(RCons *cons, char *buf, int len, int argc, const char **a
 #define RETURN(x) { ret=x; goto beach; }
 	int ret = 0, color = cons->context->pal.input && *cons->context->pal.input;
 	if (cons->echo) {
-		r_cons_set_raw (false);
-		r_cons_show_cursor (true);
+		r_kons_set_raw (cons, false);
+		r_kons_show_cursor (cons, true);
 	}
 	errno = 0;
 	if (cons->user_fgets) {
-		RETURN (cons->user_fgets (buf, len));
+		RETURN (cons->user_fgets (cons, buf, len));
 	}
 	const char *prompt = cons->line->prompt;
 	P (prompt);
@@ -398,22 +398,23 @@ beach:
 	return ret;
 }
 
-R_API int r_cons_any_key(const char *msg) {
+R_API int r_cons_any_key(RCons *cons, const char *msg) {
 	if (R_STR_ISNOTEMPTY (msg)) {
-		r_cons_printf ("\n-- %s --\n", msg);
+		r_kons_printf (cons, "\n-- %s --\n", msg);
 	} else {
-		r_cons_print ("\n--press any key--\n");
+		r_kons_print (cons, "\n--press any key--\n");
 	}
-	RCons *cons = r_cons_singleton ();
 	r_kons_flush (cons);
 	return r_cons_readchar (cons);
 }
 
+#if !__wasi__
 static inline void resizeWin(RCons *cons) {
 	if (cons->event_resize) {
 		cons->event_resize (cons->event_data);
 	}
 }
+#endif
 
 #if R2__WINDOWS__
 static int readchar_w32(RCons *cons, ut32 usec) {
@@ -632,13 +633,15 @@ R_API int r_cons_readchar(RCons *cons) {
 #if R2__WINDOWS__
 	return readchar_w32 (cons, 0);
 #elif __wasi__
-	void *bed = r_cons_sleep_begin ();
+	void *bed = r_kons_sleep_begin (cons);
 	int ret = read (STDIN_FILENO, buf, 1);
-	r_cons_sleep_end (bed);
+	r_kons_sleep_end (cons, bed);
 	if (ret < 1) {
+	///	eprintf ("read minus wan\n");
 		return -1;
 	}
-	return r_cons_controlz (cons, buf[0]);
+	// eprintf ("READ %d = %d\n", ret, buf[0]);
+	return buf[0];
 #else
 	void *bed = r_cons_sleep_begin ();
 
@@ -748,17 +751,18 @@ R_API char *r_cons_password(const char *msg) {
 }
 
 R_API char *r_cons_input(RCons *cons, const char *msg) {
-	char *oprompt = r_line_get_prompt ();
+	RLine *line = cons->line;
+	char *oprompt = r_line_get_prompt (line);
 	if (!oprompt) {
 		return NULL;
 	}
-	r_line_set_prompt (cons, msg? msg: "");
+	r_line_set_prompt (cons->line, msg? msg: "");
 	size_t buf_size = 1024;
 	char *buf = malloc (buf_size);
 	if (buf) {
 		*buf = 0;
 		r_cons_fgets (cons, buf, buf_size, 0, NULL);
-		r_line_set_prompt (cons, oprompt);
+		r_line_set_prompt (cons->line, oprompt);
 	}
 	free (oprompt);
 	return buf;

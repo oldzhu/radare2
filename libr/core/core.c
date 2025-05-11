@@ -1632,14 +1632,16 @@ R_API void r_core_autocomplete(RCore * R_NULLABLE core, RLineCompletion *complet
 }
 
 static int autocomplete(RLineCompletion *completion, RLineBuffer *buf, RLinePromptType prompt_type, void *user) {
-	RCore *core = user;
+	RCore *core = (RCore *)user;
+	if (core == NULL) {
+		R_LOG_WARN ("core->cons->line->user is nul, but should be equals to core");
+	}
 	r_core_autocomplete (core, completion, buf, prompt_type);
 	return true;
 }
 
-R_API int r_core_fgets(char *buf, int len) {
+R_API int r_core_fgets(RCons *cons, char *buf, int len) {
 	R_RETURN_VAL_IF_FAIL (buf, -1);
-	RCons *cons = r_cons_singleton (); // XXX no globals pls
 	RLine *rli = cons->line;
 #if R2_590
 	cons->maxlength = len; /// R2_590
@@ -2107,7 +2109,7 @@ R_API const char *r_core_anal_optype_colorfor(RCore *core, ut64 addr, ut8 ch, bo
 			const char *ficolor = r_flag_item_set_color (core->flags, fi, NULL);
 			if (ficolor) {
 				free (const_color);
-				const_color = r_cons_pal_parse (ficolor, NULL);
+				const_color = r_cons_pal_parse (core->cons, ficolor, NULL);
 				return const_color;
 			}
 		}
@@ -2617,6 +2619,7 @@ R_API bool r_core_init(RCore *core) {
 	core->theme = strdup ("default");
 	/* initialize libraries */
 	core->cons = r_cons_new ();
+	core->cons->line->user = core;
 #if 0
 	if (true || core->cons->refcnt == 1) {
 		core->cons = r_cons_singleton ();
@@ -2703,7 +2706,8 @@ R_API bool r_core_init(RCore *core) {
 	core->fs = r_fs_new ();
 	core->flags = r_flag_new ();
 	core->flags->cb_printf = r_cons_printf;
-	core->graph = r_agraph_new (r_cons_canvas_new (1, 1));
+	int flags = r_cons_canvas_flags (core->cons);
+	core->graph = r_agraph_new (r_cons_canvas_new (1, 1, flags));
 	core->graph->need_reload_nodes = false;
 	core->asmqjmps_size = R_CORE_ASMQJMPS_NUM;
 	if (sizeof (ut64) * core->asmqjmps_size < core->asmqjmps_size) {
@@ -2878,7 +2882,6 @@ R_API void r_core_fini(RCore *c) {
 	should probably need to add a r_config_free_payload callback */
 	r_cons_free (c->cons);
 	c->cons = NULL;
-	//r_cons_singleton ()->teefile = NULL; // HACK
 	free (c->theme);
 	free (c->themepath);
 	r_search_free (c->search);
@@ -2909,7 +2912,7 @@ R_IPI int Gload_index = 0;
 
 R_API bool r_core_prompt_loop(RCore *r) {
 #if !R2_USE_NEW_ABI
-	Gload_index = r_cons_singleton()->line->history.index;
+	Gload_index = r->cons->line->history.index;
 #endif
 	int ret = 0;
 	do {
@@ -2979,7 +2982,7 @@ static void chop_prompt(RCore *core, const char *filename, char *tmp, size_t max
 
 static void set_prompt(RCore *core) {
 	if (core->incomment) {
-		r_line_set_prompt (core->cons, " * ");
+		r_line_set_prompt (core->cons->line, " * ");
 		return;
 	}
 	char tmp[128];
@@ -3053,7 +3056,7 @@ static void set_prompt(RCore *core) {
 	} else {
 		prompt = r_str_newf ("%s%s[%s%s]> %s", filename, BEGIN, remote, tmp, END);
 	}
-	r_line_set_prompt (core->cons, r_str_get (prompt));
+	r_line_set_prompt (core->cons->line, r_str_get (prompt));
 
 	R_FREE (filename);
 	R_FREE (prompt);
@@ -3535,7 +3538,7 @@ reaccept:
 		r_socket_free (c);
 	}
 out_of_function:
-	r_cons_break_pop ();
+	r_kons_break_pop (core->cons);
 	return false;
 }
 
@@ -3615,7 +3618,7 @@ R_API char *r_core_editor(const RCore *core, const char *file, const char *str) 
 	close (fd);
 
 	if (name && (R_STR_ISEMPTY (editor) || !strcmp (editor, "-"))) {
-		RCons *cons = r_cons_singleton ();
+		RCons *cons = core->cons;
 		void *tmp = cons->cb_editor;
 		cons->cb_editor = NULL;
 		r_cons_editor (cons, name, NULL);
@@ -3738,9 +3741,6 @@ R_API RCoreAutocomplete *r_core_autocomplete_add(RCoreAutocomplete *parent, cons
 		return NULL;
 	}
 	RCoreAutocomplete *autocmpl = R_NEW0 (RCoreAutocomplete);
-	if (!autocmpl) {
-		return NULL;
-	}
 	// TODO: use rlist or so
 	RCoreAutocomplete **updated = realloc (parent->subcmds, (parent->n_subcmds + 1) * sizeof (RCoreAutocomplete*));
 	if (!updated) {
