@@ -1888,7 +1888,7 @@ static void ds_print_show_cursor(RDisasmState *ds) {
 		res[1] = '~';
 	}
 	if (q) {
-		r_cons_mark (UT64_MAX, "cursor");
+		r_cons_mark (ds->core->cons, UT64_MAX, "cursor");
 		if (cursor_addr == ds->at) {
 			res[2] = '*';
 		} else {
@@ -2586,7 +2586,7 @@ static void ds_show_comments_right(RDisasmState *ds) {
 		}
 		R_FREE (ds->comment);
 		ds_newline (ds);
-		/* flag one */
+		/* flag comments */
 		if (item) {
 			const char *item_comment = r_flag_item_set_comment (core->flags, item, NULL);
 			if (item_comment && ds->ocomment != item_comment) {
@@ -3601,7 +3601,7 @@ static bool ds_print_data_type(RDisasmState *ds, const ut8 *obuf, int ib, int si
 				int diff = ds->cursor - ds->index;
 				r_kons_printf (cons, "%d  ", diff);
 			} else if (ds->cursor == ds->index) {
-				r_cons_mark (ds->at, "cursor");
+				r_cons_mark (cons, ds->at, "cursor");
 				r_kons_printf (cons, "*  ");
 			} else {
 				r_kons_printf (cons, "   ");
@@ -6817,6 +6817,9 @@ toro:
 					size_t clen = strlen (c);
 					r_str_trim (c);
 					if (clen > 1) {
+						if (ds->show_color) {
+							r_kons_print (cons, ds->color_usrcmt);
+						}
 						r_cons_printf ("%s%s\n", off? "; ": "", c);
 						off += clen;
 					} else {
