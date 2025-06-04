@@ -1486,7 +1486,7 @@ R_API void r_core_autocomplete(RCore * R_NULLABLE core, RLineCompletion *complet
 			ADDARG ("btext");
 			ADDARG ("push");
 			ADDARG ("pop");
-			ADDARG ("crypto");
+			ADDARG ("muta");
 			ADDARG ("jmp");
 			ADDARG ("cjmp");
 			ADDARG ("call");
@@ -2598,7 +2598,7 @@ R_API bool r_core_init(RCore *core) {
 	core->cmdqueue = r_list_newf (free);
 	core->cmdrepeat = true;
 	core->yank_buf = r_buf_new ();
-	core->crypto = r_crypto_new ();
+	core->muta = r_muta_new ();
 	core->egg = r_egg_new ();
 // 	core->egg->rasm = core->rasm;
 
@@ -2695,7 +2695,7 @@ R_API bool r_core_init(RCore *core) {
 	core->flags = r_flag_new ();
 	core->flags->cb_printf = r_cons_printf;
 	int flags = r_cons_canvas_flags (core->cons);
-	core->graph = r_agraph_new (r_cons_canvas_new (1, 1, flags));
+	core->graph = r_agraph_new (r_cons_canvas_new (core->cons, 1, 1, flags));
 	core->graph->need_reload_nodes = false;
 	core->asmqjmps_size = R_CORE_ASMQJMPS_NUM;
 	if (sizeof (ut64) * core->asmqjmps_size < core->asmqjmps_size) {
@@ -2813,7 +2813,7 @@ R_API void r_core_fini(RCore *c) {
 	Gcore = NULL;
 #endif
 	r_log_add_callback (cbcore, NULL);
-	r_crypto_free (c->crypto);
+	r_muta_free (c->muta);
 	r_th_lock_free (c->lock);
 	r_core_task_break_all (&c->tasks);
 	r_core_task_join (&c->tasks, NULL, -1);
