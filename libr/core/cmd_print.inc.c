@@ -49,12 +49,14 @@ static RCoreHelpMessage help_msg_psp = {
 static RCoreHelpMessage help_msg_p8 = {
 	"Usage: p8[*fjx]", " [len]", "8bit hexpair list of bytes (see pcj)",
 	"p8", " ([len])", "print hexpairs string",
+	"p8,", "", "comma separated 0xhexadecimal bytes",
 	"p8*", "", "display r2 commands to write this block",
 	"p8b", "", "print hexpairs of basic block",
 	"p8d", "", "space separated list of byte values in decimal",
 	"p8f", "[j]", "print hexpairs of function (linear)",
 	"p8fm", "[j]", "print linear function byte:mask pattern (zero-filled bbgaps)",
 	"p8j", "", "print hexpairs in JSON array",
+	"p8s", "", "space separated hex bytes",
 	"p8x", "", "print hexpairs honoring hex.cols",
 	NULL
 };
@@ -192,7 +194,7 @@ static RCoreHelpMessage help_msg_p = {
 	"p2", " [len]", "8x8 2bpp-tiles",
 	"p3", " [file]", "print 3D stereogram image of current block",
 	"p6", "[de] [len]", "base64 decode/encode",
-	"p8", "[?][dfjx] [len]", "8bit hexpair list of bytes",
+	"p8", "[?][bdfsjx] [len]", "8bit hexpair list of bytes",
 	"p=", "[?][bep] [N] [L] [b]", "show entropy/printable chars/chars bars",
 	"pa", "[?][edD] [arg]", "pa:assemble  pa[dD]:disasm or pae: esil from hex",
 	"pA", "[n_ops]", "show n_ops address and type",
@@ -3406,7 +3408,7 @@ static void print_encrypted_block(RCore *core, const char *algo, const char *key
 			int result_size = 0;
 			ut8 *result = r_muta_session_get_output (cj, &result_size);
 			if (result) {
-				r_print_bytes (core->print, result, result_size, "%02x");
+				r_print_bytes (core->print, result, result_size, "%02x", 0);
 				free (result);
 			}
 		}
@@ -3482,7 +3484,7 @@ static void cmd_print_op(RCore *core, const char *input) {
 			int result_size = 0;
 			ut8 *result = r_muta_session_get_output (cj, &result_size);
 			if (result) {
-				r_print_bytes (core->print, result, result_size, "%02x");
+				r_print_bytes (core->print, result, result_size, "%02x", 0);
 				free (result);
 			}
 		} else {
@@ -6507,6 +6509,132 @@ static void print_pascal_string(RCore *core, const char *input, int len) {
 	}
 }
 
+static ut64 find_nextop(RCore *core, ut64 addr) {
+	RAnalOp *op = r_core_anal_op (core, addr, R_ARCH_OP_MASK_BASIC | R_ARCH_OP_MASK_HINT);
+	if (op && (int)op->size > 0) {
+		return addr + op->size;
+	}
+	const int minopsz = r_anal_archinfo (core->anal, R_ARCH_INFO_MINOP_SIZE);
+	return addr + minopsz;
+}
+
+// problematic for non-linear functions
+// TODO: resort all lines from the decompiler by offset and then use that as guide
+static ut64 find_endfunc(RCore *core, ut64 addr) {
+	ut64 res = UT64_MAX;
+	RList *funcs = r_anal_get_functions_in (core->anal, addr);
+	if (funcs) {
+		RAnalFunction *f = (RAnalFunction *)r_list_get_n (funcs, 0);
+		if (f) {
+			res = r_anal_function_max_addr (f);
+		}
+		r_list_free (funcs);
+	}
+	return res;
+}
+static ut64 find_nextfunc(RCore *core, ut64 addr, int range) {
+	while (range-- > 0) {
+#if 0
+		RList *funcs = r_anal_get_functions_in (core->anal, addr);
+		if (funcs) {
+			RAnalFunction *f = r_list_get_n (funcs, 0);
+			if (f) {
+				return addr;
+			}
+		}
+#else
+		RAnalFunction *f = r_anal_get_function_at (core->anal, addr);
+		if (f) {
+			return addr;
+		}
+#endif
+		addr = find_nextop (core, addr);
+	}
+	return UT64_MAX;
+}
+
+static void linear_pseudo(RCore *core, const char *arg) {
+	int rows = (int)r_num_math (core->num, arg);
+	int h;
+	r_kons_get_size (core->cons, &h);
+	if (rows < 1) {
+		rows = h;
+	}
+	char *offpos = NULL;
+	int lines = 0;
+	RStrBuf *sb = r_strbuf_new ("");
+	ut64 nextaddr = UT64_MAX;
+	ut64 initial_addr = core->addr;
+	ut64 addr = initial_addr;
+repeat:;
+	offpos = NULL;
+	char *cur = r_core_cmd_str (core, "pdco");
+	if (cur) {
+		// we have a function, but we need to find the
+		// current offset inside the output of the decompiler
+		int retries = 10;
+repeat_inside:;
+		char *off = r_str_newf ("0x%08"PFMT64x, addr);
+		offpos = strstr (cur, off);
+		if (!offpos) {
+			addr = find_nextop (core, addr);
+			if (retries > 0) {
+				retries--;
+				free (off);
+				off = r_str_newf ("0x%08"PFMT64x, addr);
+				goto repeat_inside;
+			} else {
+				free (cur);
+				cur = NULL;
+			}
+		}
+	}
+	if (offpos) {
+		while (offpos > cur) {
+			if (*offpos == '\n') {
+				offpos++;
+				break;
+			}
+			offpos--;
+		}
+		r_strbuf_append (sb, offpos);
+		lines += r_str_char_count (offpos, '\n');
+#if 0
+		char *lastoff = r_str_rstr (offpos, "0x");
+		nextaddr = r_num_get (core->num, lastoff);
+#else
+		ut64 eof = find_endfunc (core, addr);
+		if (eof != UT64_MAX) {
+			nextaddr = find_nextop (core, eof);
+		}
+#endif
+	} else {
+		nextaddr = addr;
+	}
+				free (cur);
+				cur = NULL;
+	ut64 nextfunc = find_nextfunc (core, nextaddr, 128);
+	if (lines < rows) {
+		if (nextfunc == UT64_MAX) {
+			char *res = r_core_cmd_strf (core, "pd %d @0x%08"PFMT64x"@e:asm.lines=0@e:asm.pseudo=true@e:asm.bytes=0@e:emu.str=true", rows-lines, addr);
+			r_strbuf_append (sb, res);
+			free (res);
+		} else {
+			char *res = r_core_cmd_strf (core, "pD %"PFMT64d" @0x%08"PFMT64x"@e:asm.lines=0@e:asm.pseudo=true@e:asm.bytes=0@e:emu.str=true", nextfunc - addr, addr);
+			r_strbuf_append (sb, res);
+			lines += r_str_char_count (res, '\n');
+			free (res);
+			addr = nextfunc;
+			r_core_seek (core, nextfunc, true);
+			goto repeat;
+		}
+	}
+	char *s = r_strbuf_drain (sb);
+	r_kons_print (core->cons, s);
+	free (s);
+	r_core_seek (core, initial_addr, true);
+}
+
 static void p8fm(RCore *core, ut64 addr, int mode) {
 	if (mode == '?') {
 		r_core_cmd_help_contains (core, help_msg_p8, "p8fm");
@@ -7117,7 +7245,11 @@ static int cmd_print(void *data, const char *input) {
 			processed_cmd = true;
 			break;
 		case 'c': // "pdc" // "pDc"
-			r_core_pseudo_code (core, input + 2);
+			if (input[2] == 'l') {
+				linear_pseudo (core, input + 3);
+			} else {
+				r_core_pseudo_code (core, input + 2);
+			}
 			pd_result = false;
 			processed_cmd = true;
 			break;
@@ -8043,7 +8175,7 @@ static int cmd_print(void *data, const char *input) {
 							for (i = 0; i < olen; i += 32) {
 								int left = R_MIN (olen - i, 32);
 								r_cons_printf ("wx+");
-								r_print_bytes (core->print, obuf + i, left, "%02x");
+								r_print_bytes (core->print, obuf + i, left, "%02x", 0);
 							}
 						} else {
 							R_LOG_ERROR ("Invalid input size %d", olen);
@@ -8237,7 +8369,7 @@ static int cmd_print(void *data, const char *input) {
 		case '0': // "px0"
 			if (l) {
 				int len = r_str_nlen ((const char *)core->block, core->blocksize);
-				r_print_bytes (core->print, core->block, len, "%02x");
+				r_print_bytes (core->print, core->block, len, "%02x", 0);
 			}
 			break;
 		case 'a': // "pxa"
@@ -8848,6 +8980,14 @@ static int cmd_print(void *data, const char *input) {
 			}
 			if (input[1] == 'j') { // "p8j"
 				r_core_cmdf (core, "pcj %s", input + 2);
+			} else if (input[1] == 's') { // "p8s"
+				r_core_block_read (core);
+				block = core->block;
+				r_print_bytes (core->print, block, l, "%02x", ' ');
+			} else if (input[1] == ',') { // "p8,"
+				r_core_block_read (core);
+				block = core->block;
+				r_print_bytes (core->print, block, l, "%02x", ',');
 			} else if (input[1] == 'x') { // "p8x"
 				r_core_block_read (core);
 				block = core->block;
@@ -8860,7 +9000,7 @@ static int cmd_print(void *data, const char *input) {
 					if (rad) {
 						r_kons_printf (core->cons, "wx+ ");
 					}
-					r_print_bytes (core->print, block + i, R_MIN (cols, len - cols), "%02x");
+					r_print_bytes (core->print, block + i, R_MIN (cols, len - cols), "%02x", 0);
 				}
 			} else if (input[1] == 'd') { // "p8d"
 				int i;
@@ -8897,7 +9037,7 @@ static int cmd_print(void *data, const char *input) {
 				if (rad) {
 					r_kons_printf (core->cons, "wx+ ");
 				}
-				r_print_bytes (core->print, block, len, "%02x");
+				r_print_bytes (core->print, block, len, "%02x", 0);
 			}
 		}
 		break;
