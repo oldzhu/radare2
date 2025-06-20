@@ -908,11 +908,11 @@ R_API void r_cons_pop(void);
 R_DEPRECATE R_API RConsContext *r_cons_context_new(RConsContext * R_NULLABLE parent);
 R_API void r_cons_context_free(RConsContext *context);
 R_API void r_cons_context_load(RConsContext *context);
-R_API void r_cons_context_reset(void);
-R_API bool r_cons_context_is_main(void);
+R_API void r_cons_context_reset(RConsContext *context);
+R_API bool r_cons_context_is_main(RCons *cons, RConsContext *context);
 R_API void r_cons_context_break(RConsContext *context);
-R_API void r_cons_context_break_push(RConsContext *context, RConsBreak cb, void *user, bool sig);
-R_API void r_cons_context_break_pop(RConsContext *context, bool sig);
+R_API void r_cons_context_break_push(RCons *cons, RConsContext *context, RConsBreak cb, void *user, bool sig);
+R_API void r_cons_context_break_pop(RCons *cons, RConsContext *context, bool sig);
 
 /* control */
 R_API char *r_cons_editor(RCons *cons, const char *file, const char *str);
@@ -959,10 +959,10 @@ R_API void r_cons_2048(bool color);
 R_API void r_cons_visual_write(char *buffer);
 R_API bool r_cons_is_utf8(void);
 R_API bool r_cons_is_windows(void);
-R_API void r_cons_cmd_help(RCoreHelpMessage help, bool use_color);
+R_API void r_cons_cmd_help(RCons *cons, RCoreHelpMessage help, bool use_color);
 R_API void r_kons_cmd_help(RCons *cons, RCoreHelpMessage help, bool use_color);
 R_API void r_cons_cmd_help_json(RCons *cons, const char * const help[]);
-R_API void r_cons_cmd_help_match(RCoreHelpMessage help, bool use_color, char * R_BORROW R_NONNULL cmd, char spec, bool exact);
+R_API void r_cons_cmd_help_match(RCons *cons, RCoreHelpMessage help, bool use_color, char * R_BORROW R_NONNULL cmd, char spec, bool exact);
 R_API void r_cons_log_stub(const char *output, const char *funcname, const char *filename,
  unsigned int lineno, unsigned int level, const char *tag, const char *fmtstr, ...) R_PRINTF_CHECK(7, 8);
 
