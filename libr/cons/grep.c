@@ -92,7 +92,7 @@ static void grep_word_free(RConsGrepWord *gw) {
 }
 
 R_API void r_cons_grep_help(RCons *cons) {
-	r_kons_cmd_help (cons, help_detail_tilde, true);
+	r_cons_cmd_help (cons, help_detail_tilde, true);
 }
 
 R_API void r_cons_grep_expression(RCons *cons, const char *str) {
@@ -684,7 +684,7 @@ R_API void r_kons_grepbuf(RCons *cons) {
 		R_FREE (cons->context->buffer);
 		cons->context->buffer_len = 0;
 		cons->context->buffer_sz = 0;
-		r_cons_print (s);
+		r_cons_print (cons, s);
 		in = buf = cons->context->buffer;
 		len = cons->context->buffer_len;
 		r_json_free (node);
@@ -710,7 +710,7 @@ R_API void r_kons_grepbuf(RCons *cons) {
 				cons->context->buffer_len = strlen (u);
 				cons->context->buffer_sz = cons->context->buffer_len + 1;
 				grep->json = false;
-				r_kons_newline (cons);
+				r_cons_newline (cons);
 			}
 			R_FREE (grep->json_path);
 		} else {
@@ -770,13 +770,13 @@ R_API void r_kons_grepbuf(RCons *cons) {
 		if (less == 3) {
 			char *res = r_cons_hud_line_string (cons, buf);
 			if (res) {
-				r_cons_println (res);
+				r_cons_println (cons, res);
 				free (res);
 			}
 		} else if (less == 2) {
 			char *res = r_cons_hud_string (cons, buf);
 			if (res) {
-				r_cons_println (res);
+				r_cons_println (cons, res);
 				free (res);
 			}
 		} else {

@@ -150,9 +150,8 @@ static inline void cons_pixel_paint(RCons *cons, RConsPixel *p, int sx, int sy, 
 		int py = sy + (y / 4);
 		if (px >= 0 && px < cols) {
 			if (py >= 0 && py < rows) {
-				r_cons_gotoxy (sx + (x / 2), sy + (y / 4));
-				// r_cons_print (Color_RESET);
-				r_cons_print (b.str);
+				r_cons_gotoxy (cons, sx + (x / 2), sy + (y / 4));
+				r_kons_print (cons, b.str);
 			}
 		}
 	}
@@ -160,7 +159,7 @@ static inline void cons_pixel_paint(RCons *cons, RConsPixel *p, int sx, int sy, 
 
 R_API void r_cons_pixel_flush(RCons *cons, RConsPixel *p, int sx, int sy) {
 	R_RETURN_IF_FAIL (p);
-	int rows, cols = r_kons_get_size (cons, &rows);
+	int rows, cols = r_cons_get_size (cons, &rows);
 	size_t x, y;
 	for (y = 0; y + 4 < p->h; y += 4) {
 		for (x = 0; x + 2 < p->w; x += 2) {

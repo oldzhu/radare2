@@ -22,7 +22,7 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt);
 // the lines starting with # )
 R_API char *r_cons_hud_line_string(RCons *cons, const char *s) {
 	R_RETURN_VAL_IF_FAIL (cons && s, NULL);
-	if (!r_kons_is_interactive (cons)) {
+	if (!r_cons_is_interactive (cons)) {
 		R_LOG_ERROR ("Hud mode requires scr.interactive=true");
 		return NULL;
 	}
@@ -63,7 +63,7 @@ R_API char *r_cons_hud_line_string(RCons *cons, const char *s) {
 // the lines starting with # )
 R_API char *r_cons_hud_string(RCons *cons, const char *s) {
 	R_RETURN_VAL_IF_FAIL (cons && s, NULL);
-	if (!r_kons_is_interactive (cons)) {
+	if (!r_cons_is_interactive (cons)) {
 		R_LOG_ERROR ("Hud mode requires scr.interactive=true");
 		return NULL;
 	}
@@ -159,7 +159,7 @@ static RList *hud_filter(RCons *cons, RList *list, char *user_input, int top_ent
 	char mask[HUD_BUF_SIZE];
 	char *p, *x;
 	int j, rows;
-	(void) r_cons_get_size (&rows);
+	(void) r_cons_get_size (cons, &rows);
 	int counter = 0;
 	bool first_line = true;
 	RList *res = r_list_newf (free);
@@ -266,14 +266,14 @@ R_API char *r_cons_hud(RCons *cons, RList *list, const char *prompt) {
 	user_input [0] = 0;
 	user_input[HUD_BUF_SIZE] = 0;
 	hud->top_entry_n = 0;
-	r_cons_show_cursor (false);
-	r_kons_enable_mouse (cons, false);
-	r_kons_set_raw (cons, true);
+	r_cons_show_cursor (cons, false);
+	r_cons_enable_mouse (cons, false);
+	r_cons_set_raw (cons, true);
 	r_kons_clear (cons);
 
 	// Repeat until the user exits the hud
 	for (;;) {
-		r_cons_gotoxy (0, 0);
+		r_cons_gotoxy (cons, 0, 0);
 		hud->current_entry_n = 0;
 
 		if (hud->top_entry_n < 0) {
@@ -291,7 +291,7 @@ R_API char *r_cons_hud(RCons *cons, RList *list, const char *prompt) {
 				free (p);
 				p = q;
 			}
-			r_cons_printf ("%s", p);
+			r_kons_printf (cons, "%s", p);
 			free (p);
 		}
 		char *row;
@@ -307,7 +307,7 @@ R_API char *r_cons_hud(RCons *cons, RList *list, const char *prompt) {
 #endif
 		}
 		r_list_foreach (filtered_list, iter, row) {
-			r_cons_printf ("%s\n", row);
+			r_kons_printf (cons, "%s\n", row);
 		}
 		if (!filtered_list->length) {				// hack to remove garbage value when list is empty
 			printf ("%s", R_CONS_CLEAR_LINE);
@@ -325,9 +325,9 @@ R_API char *r_cons_hud(RCons *cons, RList *list, const char *prompt) {
 				if (selected_entry) {
 					R_FREE (cons->line->hud);
 					cons->line->echo = true;
-					r_kons_enable_mouse (cons, false);
-					r_kons_show_cursor (cons, true);
-					r_kons_set_raw (cons, false);
+					r_cons_enable_mouse (cons, false);
+					r_cons_show_cursor (cons, true);
+					r_cons_set_raw (cons, false);
 					return strdup (selected_entry);
 				}
 			} else {
@@ -338,9 +338,9 @@ R_API char *r_cons_hud(RCons *cons, RList *list, const char *prompt) {
 _beach:
 	R_FREE (cons->line->hud);
 	cons->line->echo = true;
-	r_kons_show_cursor (cons, true);
-	r_kons_enable_mouse (cons, false);
-	r_kons_set_raw (cons, false);
+	r_cons_show_cursor (cons, true);
+	r_cons_enable_mouse (cons, false);
+	r_cons_set_raw (cons, false);
 	ht_pp_free (ht);
 	return NULL;
 }
@@ -359,11 +359,11 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt) {
 	user_input [0] = 0;
 	user_input[HUD_BUF_SIZE] = 0;
 	hud->top_entry_n = 0;
-	r_cons_show_cursor (false);
-	r_kons_enable_mouse (cons, false);
-	r_cons_set_raw (true);
+	r_cons_show_cursor (cons, false);
+	r_cons_enable_mouse (cons, false);
+	r_cons_set_raw (cons, true);
 
-	r_kons_reset (cons);
+	r_cons_reset (cons);
 	// Repeat until the user exits the hud
 	for (;;) {
 		hud->current_entry_n = 0;
@@ -372,9 +372,9 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt) {
 			hud->top_entry_n = 0;
 		}
 		selected_entry = NULL;
-		r_cons_printf ("\r%s", R_CONS_CLEAR_LINE);
-		if (prompt && *prompt) {
-			r_cons_printf (">> %s [ ", prompt);
+		r_kons_printf (cons, "\r%s", R_CONS_CLEAR_LINE);
+		if (R_STR_ISNOTEMPTY (prompt)) {
+			r_kons_printf (cons, ">> %s [ ", prompt);
 		}
 		char *row;
 
@@ -387,21 +387,21 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt) {
 			ht_pp_insert (ht, user_input, filtered_list);
 #endif
 		}
-		r_cons_printf ("(%d)> %s [", r_list_length (filtered_list), user_input);
+		r_kons_printf (cons, "(%d)> %s [", r_list_length (filtered_list), user_input);
 		int slen = 0;
-		int w = r_cons_get_size (NULL);
+		int w = r_cons_get_size (cons, NULL);
 		r_list_foreach (filtered_list, iter, row) {
 			slen += strlen (row);
 			if (slen >= w) {
 				break;
 			}
-			r_cons_printf (" %s,", row);
+			r_kons_printf (cons, " %s,", row);
 		}
 #if !HUD_CACHE
 		r_list_free (filtered_list);
 #endif
-		r_cons_printf ("]");
-		r_kons_flush (cons);
+		r_kons_printf (cons, "]");
+		r_cons_flush (cons);
 		(void) r_line_readline (cons);
 		r_str_ncpy (user_input, cons->line->buffer.data, HUD_BUF_SIZE);
 
@@ -411,9 +411,9 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt) {
 				if (selected_entry) {
 					R_FREE (cons->line->hud);
 					cons->line->echo = true;
-					r_kons_enable_mouse (cons, false);
-					r_cons_show_cursor (true);
-					r_kons_set_raw (cons, false);
+					r_cons_enable_mouse (cons, false);
+					r_cons_show_cursor (cons, true);
+					r_cons_set_raw (cons, false);
 					return strdup (selected_entry);
 				}
 			} else {
@@ -424,9 +424,9 @@ static char *r_cons_hud_line(RCons *cons, RList *list, const char *prompt) {
 _beach:
 	R_FREE (cons->line->hud);
 	cons->line->echo = true;
-	r_cons_show_cursor (true);
-	r_kons_enable_mouse (cons, false);
-	r_kons_set_raw (cons, false);
+	r_cons_show_cursor (cons, true);
+	r_cons_enable_mouse (cons, false);
+	r_cons_set_raw (cons, false);
 	ht_pp_free (ht);
 	return NULL;
 }
@@ -481,14 +481,14 @@ static char *r_cons_message_multiline(RCons *cons, const char *msg) {
 			longest = linelen;
 		}
 	}
-	int rows, cols = r_cons_get_size (&rows);
+	int rows, cols = r_cons_get_size (cons, &rows);
 	const char *pad = r_str_pad (' ', (cols-longest) / 2);
 	char *newmsg = r_str_prefix_all (msg, pad);
 	r_kons_clear (cons);
-	r_kons_gotoxy (cons, 0, (rows / 2) - (r_list_length (lines) / 2));
-	r_kons_println (cons, newmsg);
-	r_kons_flush (cons);
-	r_kons_gotoxy (cons, 0, rows - 2);
+	r_cons_gotoxy (cons, 0, (rows / 2) - (r_list_length (lines) / 2));
+	r_cons_println (cons, newmsg);
+	r_cons_flush (cons);
+	r_cons_gotoxy (cons, 0, rows - 2);
 	r_cons_any_key (cons, NULL);
 	r_list_free (lines);
 	free (s);
@@ -502,12 +502,12 @@ R_API char *r_cons_message(RCons *cons, const char *msg) {
 		return r_cons_message_multiline (cons, msg);
 	}
 	int len = strlen (msg);
-	int rows, cols = r_cons_get_size (&rows);
+	int rows, cols = r_cons_get_size (cons, &rows);
 	r_kons_clear (cons);
-	r_kons_gotoxy (cons, (cols - len) / 2, rows / 2);
-	r_kons_println (cons, msg);
-	r_kons_flush (cons);
-	r_kons_gotoxy (cons, 0, rows - 2);
+	r_cons_gotoxy (cons, (cols - len) / 2, rows / 2);
+	r_cons_println (cons, msg);
+	r_cons_flush (cons);
+	r_cons_gotoxy (cons, 0, rows - 2);
 	r_cons_any_key (cons, NULL);
 	return NULL;
 }

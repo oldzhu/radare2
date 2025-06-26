@@ -80,23 +80,23 @@ static void screenlock(RCore *core) {
 		return;
 	}
 	bool running = true;
-	r_kons_clear_buffer (core->cons);
+	r_cons_clear_buffer (core->cons); // clear terminal backlog
 	ut64 begin = r_time_now ();
 	ut64 last = UT64_MAX;
 	int tries = 0;
 	do {
-		r_cons_clear00 ();
-		r_cons_printf ("Retries: %d\n", tries);
+		r_kons_clear00 (core->cons);
+		r_kons_printf (core->cons, "Retries: %d\n", tries);
 		char *begstr = r_time_usecs_tostring (begin);
-		r_cons_printf ("Locked ts: %s\n", begstr);
+		r_kons_printf (core->cons, "Locked ts: %s\n", begstr);
 		free (begstr);
 		if (last != UT64_MAX) {
 			char *endstr = r_time_usecs_tostring (last);
-			r_cons_printf ("Last try: %s\n", endstr);
+			r_kons_printf (core->cons, "Last try: %s\n", endstr);
 			free (endstr);
 		}
-		r_cons_newline ();
-		r_cons_flush ();
+		r_cons_newline (core->cons);
+		r_cons_flush (core->cons);
 		char *msg = r_cons_password ("radare2 password: ");
 		if (msg && !strcmp (msg, pass)) {
 			running = false;
@@ -213,7 +213,7 @@ static int log_callback_r2(RCore *core, int count, const char *line) {
 	if (*line == ':') {
 		char *cmd = expr2cmd (core->log, line);
 		if (cmd) {
-			r_cons_printf ("%s\n", cmd);
+			r_kons_printf (core->cons, "%s\n", cmd);
 			r_core_cmd (core, cmd, 0);
 			free (cmd);
 		}
@@ -221,8 +221,8 @@ static int log_callback_r2(RCore *core, int count, const char *line) {
 	return 0;
 }
 
-static int log_callback_all(RCore *log, int count, const char *line) {
-	r_cons_printf ("%.2d %s\n", count, line);
+static int log_callback_all(RCore *core, int count, const char *line) {
+	r_kons_printf (core->cons, "%.2d %s\n", count, line);
 	return 0;
 }
 
@@ -231,22 +231,22 @@ R_API void r_core_log_view(RCore *core, int num, int shift) {
 		num = 1;
 	}
 	int i;
-	int cons_width = r_cons_get_size (NULL);
+	int cons_width = r_cons_get_size (core->cons, NULL);
 	if (cons_width < 1) {
 		cons_width = 60;
 	}
 	for (i = num - 3; i < num + 3; i++) {
-		r_cons_printf ("%s", (num == i)? "* ": "  ");
+		r_kons_printf (core->cons, "%s", (num == i)? "* ": "  ");
 		if (i < 1) {
-			r_cons_printf ("   ^\n");
+			r_kons_printf (core->cons, "   ^\n");
 			continue;
 		}
 		if (i >= core->log->last) {
-			r_cons_printf ("   $\n");
+			r_kons_printf (core->cons, "   $\n");
 			continue;
 		}
 		if (i < core->log->first) {
-			r_cons_printf ("   ^\n");
+			r_kons_printf (core->cons, "   ^\n");
 			continue;
 		}
 		const char *msg = r_strpool_get_i (core->log->sp, i);
@@ -260,27 +260,25 @@ R_API void r_core_log_view(RCore *core, int num, int shift) {
 			if (nl) {
 				*nl = 0;
 			}
-			r_cons_printf ("%.2d %s\n", i, m);
+			r_kons_printf (core->cons, "%.2d %s\n", i, m);
 			free (m);
 		} else {
-			r_cons_printf ("%.2d ..\n", i);
+			r_kons_printf (core->cons, "%.2d ..\n", i);
 		}
 	}
 }
 
 static int cmd_log(void *data, const char *input) {
 	RCore *core = (RCore *) data;
-	const char *arg, *input2;
-	int n, n2;
 
 	if (!input) {
 		return 1;
 	}
 
-	input2 = (input && *input)? input + 1: "";
-	arg = strchr (input2, ' ');
-	n = atoi (input2);
-	n2 = arg? atoi (arg + 1): 0;
+	const char *input2 = (input && *input)? input + 1: "";
+	const char *arg = strchr (input2, ' ');
+	int n = atoi (input2);
+	int n2 = arg? atoi (arg + 1): 0;
 
 	switch (*input) {
 	case 'e': // "Te" shell: less
@@ -317,7 +315,7 @@ static int cmd_log(void *data, const char *input) {
 		}
 		break;
 	case 'l': // "Tl"
-		r_cons_printf ("%.2d\n", core->log->last - 1);
+		r_kons_printf (core->cons, "%.2d\n", core->log->last - 1);
 		break;
 	case '-': //  "T-"
 		r_core_log_del (core, n);
@@ -326,7 +324,7 @@ static int cmd_log(void *data, const char *input) {
 		r_core_cmd_help (core, help_msg_T);
 		break;
 	case 'T': // "TT" Ts ? as ms?
-		if (r_cons_is_interactive ()) {
+		if (r_cons_is_interactive (core->cons)) {
 			textlog_chat (core);
 		} else {
 			R_LOG_ERROR ("The TT command needs scr.interactive=true");
@@ -335,14 +333,14 @@ static int cmd_log(void *data, const char *input) {
 	case '=': // "T="
 		if (input[1] == '&') { //  "T=&"
 			if (input[2] == '&') { // "T=&&"
-				r_cons_break_push (NULL, NULL);
-				while (!r_cons_is_breaked ()) {
+				r_cons_break_push (core->cons, NULL, NULL);
+				while (!r_cons_is_breaked (core->cons)) {
 					r_core_cmd_call (core, "T=");
-					void *bed = r_cons_sleep_begin();
+					void *bed = r_cons_sleep_begin (core->cons);
 					r_sys_sleep (1);
-					r_cons_sleep_end (bed);
+					r_cons_sleep_end (core->cons, bed);
 				}
-				r_cons_break_pop ();
+				r_cons_break_pop (core->cons);
 			} else {
 				// TODO: Sucks that we can't enqueue functions, only commands
 				R_LOG_INFO ("Background thread syncing with http.sync started");
@@ -364,7 +362,7 @@ static int cmd_log(void *data, const char *input) {
 					r_core_log_run (core, res, log_callback);
 					free (res);
 				} else {
-					r_cons_printf ("Please check e http.sync\n");
+					r_kons_printf (core->cons, "Please check e http.sync\n");
 				}
 			}
 		}
@@ -430,7 +428,7 @@ static int cmd_plugins(void *data, const char *input) {
 			PJ *pj = r_core_pj_new (core);
 			r_bin_list (core->bin, pj, 'j');
 			char *s = pj_drain (pj);
-			r_cons_println (s);
+			r_cons_println (core->cons, s);
 			free (s);
 		} else {
 			r_bin_list (core->bin, NULL, 0);
@@ -538,10 +536,10 @@ static int cmd_plugins(void *data, const char *input) {
 					pj_end (pj);
 					break;
 				case 'q':
-					r_cons_printf ("%s\n", item->meta.name);
+					r_kons_printf (core->cons, "%s\n", item->meta.name);
 					break;
 				default:
-					r_cons_printf ("%-12s %5s %s (%s)\n",
+					r_kons_printf (core->cons, "%-12s %5s %s (%s)\n",
 						item->meta.name,
 						item->meta.license,
 						item->meta.desc,
@@ -552,7 +550,7 @@ static int cmd_plugins(void *data, const char *input) {
 			if (pj) {
 				pj_end (pj);
 				char *s = pj_drain (pj);
-				r_cons_printf ("%s\n", s);
+				r_kons_printf (core->cons, "%s\n", s);
 				free (s);
 			}
 		}
@@ -574,7 +572,7 @@ static int cmd_plugins(void *data, const char *input) {
 				}
 				pj_end (pj);
 				char *s = pj_drain (pj);
-				r_cons_printf ("%s\n", s);
+				r_kons_printf (core->cons, "%s\n", s);
 				free (s);
 			}
 		} else {
@@ -600,7 +598,7 @@ static int cmd_plugins(void *data, const char *input) {
 			pj_end (pj);
 			pj_end (pj);
 			char *s = pj_drain (pj);
-			r_cons_printf ("%s\n", s);
+			r_kons_printf (core->cons, "%s\n", s);
 			free (s);
 			r_list_free (list);
 			free (decos);
@@ -616,7 +614,7 @@ static int cmd_plugins(void *data, const char *input) {
 		} else if (input[1] == ',') { // "Ll,"
 			r_core_list_lang (core, ',');
 		} else if (input[1] == '?') { // "Ll?"
-			r_cons_printf ("Usage: Ll[,jq] - list r_lang plugins\n");
+			r_kons_printf (core->cons, "Usage: Ll[,jq] - list r_lang plugins\n");
 		} else {
 			r_core_list_lang (core, 0);
 		}
@@ -664,7 +662,7 @@ static int cmd_plugins(void *data, const char *input) {
 				pj_end (pj);
 			}
 			pj_end (pj);
-			r_cons_println (pj_string (pj));
+			r_cons_println (core->cons, pj_string (pj));
 			pj_free (pj);
 			break;
 			}
@@ -694,12 +692,12 @@ static int cmd_plugins(void *data, const char *input) {
 			break;
 		case 'q':
 			r_list_foreach (core->rcmd->plist, iter, cp) {
-				r_cons_printf ("%s\n", cp->meta.name);
+				r_kons_printf (core->cons, "%s\n", cp->meta.name);
 			}
 			break;
 		case 0:
 			r_list_foreach (core->rcmd->plist, iter, cp) {
-				r_cons_printf ("%-10s %s\n", cp->meta.name, cp->meta.desc);
+				r_kons_printf (core->cons, "%-10s %s\n", cp->meta.name, cp->meta.desc);
 			}
 			break;
 		case '?':

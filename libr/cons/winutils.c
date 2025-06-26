@@ -27,7 +27,7 @@ R_IPI void r_cons_win_clear(RCons *cons) {
 	COORD startCoords;
 	DWORD dummy;
 	if (cons->vtmode) {
-		r_cons_print (Color_RESET R_CONS_CLEAR_SCREEN);
+		r_kons_print (cons, Color_RESET R_CONS_CLEAR_SCREEN);
 		return;
 	}
 	if (cons->is_wine == 1) {
@@ -52,7 +52,7 @@ R_IPI void r_cons_win_gotoxy(RCons *cons, int fd, int x, int y) {
 	HANDLE *hConsole = (fd == 1)? &cons->hStdout : &cons->hStderr;
 	COORD coord = { .X = x, .Y = y };
 	if (cons->vtmode) {
-		r_cons_printf ("\x1b[%d;%dH", y, x);
+		r_kons_printf (cons, "\x1b[%d;%dH", y, x);
 		return;
 	}
 	if (cons->is_wine == 1) {
@@ -116,7 +116,7 @@ static int win_hprint(RCons *cons, DWORD hdl, const char *ptr, int len, bool vmo
 	int linelen = 0;
 	int ll = 0;
 	int raw_ll = 0;
-	int lines, cols = r_cons_get_size (&lines);
+	int lines, cols = r_cons_get_size (cons, &lines);
 	if (I->is_wine == -1) {
 		I->is_wine = r_file_is_directory ("/proc")? 1: 0;
 	}

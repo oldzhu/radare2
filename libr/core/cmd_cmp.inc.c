@@ -243,10 +243,10 @@ R_API bool r_core_cmpwatch_show(RCore *core, ut64 addr, int mode) {
 			char *cmd_output = cwcmd (core, w);
 			if (cmd_output) {
 				r_kons_print (core->cons, "\n  cmd: ");
-				r_kons_println (core->cons, cmd_output);
+				r_cons_println (core->cons, cmd_output);
 				free (cmd_output);
 			} else {
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 			}
 			break;
 		}
@@ -257,7 +257,7 @@ R_API bool r_core_cmpwatch_show(RCore *core, ut64 addr, int mode) {
 		char *out;
 		pj_end (pj);
 		out = pj_drain (pj);
-		r_kons_println (core->cons, out);
+		r_cons_println (core->cons, out);
 		free (out);
 	}
 
@@ -477,7 +477,7 @@ static int radare_compare(RCore *core, const ut8 *f, const ut8 *d, int len, int 
 		pj_ki (pj, "total_bytes", len);
 		pj_end (pj); // End array
 		pj_end (pj); // End object
-		r_kons_println (core->cons, pj_string (pj));
+		r_cons_println (core->cons, pj_string (pj));
 	}
 	return len - eq;
 }
@@ -875,7 +875,7 @@ static int cmp_bits(RCore *core, ut64 addr) {
 	for (i = 7; i >= 0; i--) {
 		r_kons_printf (core->cons, "%s%d%s%s", b_colors[i], b_bits[i], color_end, i? " ": "");
 	}
-	r_cons_newline ();
+	r_cons_newline (core->cons);
 
 	// 0 if equal, 1 if not equal
 	// same return pattern as ?==
@@ -1142,9 +1142,9 @@ static void cmd_curl(RCore *core, const char *arg) {
 				? r_socket_http_post (arg, NULL, postdata, NULL, &len)
 				: r_socket_http_get (arg, NULL, NULL, &len);
 			if (s) {
-				r_kons_write (core->cons, s, len);
+				r_cons_write (core->cons, s, len);
 				free (s);
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 			}
 		} else {
 			r_core_cmd_help_match (core, help_msg_cu, "curl");
@@ -1212,7 +1212,7 @@ static int cmd_cmp(void *data, const char *input) {
 			if (*path == '$') {
 				char *v_str = r_core_slurp (core, path, NULL);
 				if (v_str) {
-					r_kons_println (core->cons, v_str);
+					r_cons_println (core->cons, v_str);
 					free (v_str);
 				}
 			} else if (*path) {
@@ -1673,12 +1673,11 @@ r_cons_global (core->cons);
 		break;
 	case 'l': // "cl"
 		if (strchr (input, 'f')) {
-			r_cons_flush ();
+			r_cons_flush (core->cons);
 		} else if (input[1] == 0) {
-			r_cons_fill_line ();
-			// r_cons_clear_line (0);
+			r_cons_fill_line (core->cons);
 		} else if (!strchr (input, '0')) {
-			r_cons_clear00 ();
+			r_kons_clear00 (core->cons);
 		}
 		break;
 	case 'm': // "cmp"

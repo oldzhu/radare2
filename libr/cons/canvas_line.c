@@ -245,16 +245,16 @@ static void draw_horizontal_line(RConsCanvas *c, int x, int y, int width, int st
 	}
 
 	const char *hline = useUtf8 ? utf8_line_horiz (cons, dot_style) : "-";
-	r_kons_break_push (c->cons, NULL, NULL);
+	r_cons_break_push (c->cons, NULL, NULL);
 	for (i = x + 1; i < x + width - 1; i++) {
-		if (r_kons_is_breaked (c->cons)) {
+		if (r_cons_is_breaked (c->cons)) {
 			break;
 		}
 		if (G (i, y)) {
 			W (hline);
 		}
 	}
-	r_kons_break_pop (c->cons);
+	r_cons_break_pop (c->cons);
 
 	if (G (x + width - 1, y)) {
 		W (r_corner);
@@ -272,16 +272,16 @@ static void draw_vertical_line(RConsCanvas *c, int x, int y, int height, int dot
 		return;
 	}
 	const char *vline = useUtf8 ? utf8_line_vert (cons, dot_style) : "|";
-	r_kons_break_push (c->cons, NULL, NULL);
+	r_cons_break_push (c->cons, NULL, NULL);
 	for (i = y; i < y + height; i++) {
-		if (r_kons_is_breaked (c->cons)) {
+		if (r_cons_is_breaked (c->cons)) {
 			break;
 		}
 		if (G (x, i)) {
 			W (vline);
 		}
 	}
-	r_kons_break_pop (c->cons);
+	r_cons_break_pop (c->cons);
 }
 
 R_API void r_cons_canvas_line_diagonal(RConsCanvas *c, int x, int y, int x2, int y2, RCanvasLineStyle *style) {

@@ -3,7 +3,7 @@
 #include <r_cons.h>
 #include <r_regex.h>
 #include <r_util.h>
-#include "pager_private.h"
+#include "private.h"
 
 static const char *r_cons_less_help = \
 	" u/space  - page up/down (same as ^F / ^B)\n"
@@ -18,7 +18,7 @@ static const char *r_cons_less_help = \
 
 R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, const char * R_NULLABLE exitkeys) {
 	R_RETURN_VAL_IF_FAIL (R_STR_ISNOTEMPTY (str), 0);
-	if (!r_kons_is_interactive (cons)) {
+	if (!r_cons_is_interactive (cons)) {
 		R_LOG_ERROR ("Internal less requires scr.interactive=true");
 		return 0;
 	}
@@ -55,12 +55,12 @@ R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, co
 	for (i = 0; i < lines_count; i++) {
 		mla[i] = r_list_new ();
 	}
-	r_kons_set_raw (cons, true);
-	r_kons_show_cursor (cons, false);
-	r_kons_reset (cons);
+	r_cons_set_raw (cons, true);
+	r_cons_show_cursor (cons, false);
+	r_cons_reset (cons);
 	h = 0;
 	while (ui) {
-		w = r_kons_get_size (cons, &h);
+		w = r_cons_get_size (cons, &h);
 		to = R_MIN (lines_count, from + h);
 		if (from + 3 > lines_count) {
 			from = lines_count - 3;
@@ -68,7 +68,7 @@ R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, co
 		if (from < 0) {
 			from = 0;
 		}
-		pager_printpage (p, lines, mla, from, to, w);
+		pager_printpage (cons, p, lines, mla, from, to, w);
 		ch = r_cons_readchar (cons);
 		if (exitkeys && strchr (exitkeys, ch)) {
 			for (i = 0; i < lines_count; i++) {
@@ -118,7 +118,7 @@ R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, co
 		case 'K': from = (from >= h)? from - h: 0;
 			break;
 		case '/': 	/* search */
-			r_kons_reset_colors (cons);
+			r_cons_reset_colors (cons);
 			r_line_set_prompt (cons->line, "/");
 			sreg = r_line_readline (cons);
 			from = R_MIN (lines_count - 1, from);
@@ -139,7 +139,7 @@ R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, co
 			if (pager_all_matches (p, rx, mla, lines, lines_count)) {
 				from = pager_next_match (from, mla, lines_count);
 			}
-			r_kons_set_raw (cons, true);
+			r_cons_set_raw (cons, true);
 			break;
 		case 'n': 	/* next match */
 			/* search already performed */
@@ -162,9 +162,9 @@ R_API int r_cons_less_str(RCons * R_NONNULL cons, const char * R_NONNULL str, co
 	r_regex_free (rx);
 	free (lines);
 	free (p);
-	r_kons_reset_colors (cons);
-	r_kons_set_raw (cons, false);
-	r_kons_show_cursor (cons, true);
+	r_cons_reset_colors (cons);
+	r_cons_set_raw (cons, false);
+	r_cons_show_cursor (cons, true);
 	free (ostr);
 	return 0;
 }

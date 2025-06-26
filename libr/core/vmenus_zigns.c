@@ -43,7 +43,7 @@ static RList *__signs(RCoreVisualViewZigns *status, ut64 addr, bool update) {
 
 R_API int __core_visual_view_zigns_update(RCore *core, RCoreVisualViewZigns *status) {
 	RCons *cons = core->cons;
-	int h, w = r_kons_get_size (cons, &h);
+	int h, w = r_cons_get_size (cons, &h);
 	r_kons_clear00 (cons);
 	int colh = h -2;
 	int colw = w -1;
@@ -57,7 +57,7 @@ R_API int __core_visual_view_zigns_update(RCore *core, RCoreVisualViewZigns *sta
 	}
 	r_cons_print_at (cons, col0str, 0, 2, colw, colh);
 	r_list_free (col0);
-	r_cons_flush ();
+	r_cons_flush (core->cons);
 	return 0;
 }
 
@@ -149,7 +149,7 @@ R_API int r_core_visual_view_zigns(RCore *core) {
 			" q     - quit this visual mode\n"
 			" _     - enter the hud\n"
 			" :     - enter command\n");
-			r_kons_flush (core->cons);
+			r_cons_flush (core->cons);
 			r_cons_any_key (core->cons, NULL);
 			break;
 		case 'q':
@@ -158,16 +158,16 @@ R_API int r_core_visual_view_zigns(RCore *core) {
 		case ':': // TODO: move this into a separate helper function
 			{
 			char cmd[1024] = {0};
-			r_cons_show_cursor (true);
-			r_kons_set_raw (core->cons, 0);
+			r_cons_show_cursor (core->cons, true);
+			r_cons_set_raw (core->cons, 0);
 			r_line_set_prompt (core->cons->line, ":> ");
 			if (r_cons_fgets (core->cons, cmd, sizeof (cmd), 0, NULL) < 0) {
 				cmd[0] = '\0';
 			}
 			cmd[sizeof (cmd) - 1] = 0;
 			r_core_cmd_task_sync (core, cmd, 1);
-			r_kons_set_raw (core->cons, 1);
-			r_kons_show_cursor (core->cons, false);
+			r_cons_set_raw (core->cons, 1);
+			r_cons_show_cursor (core->cons, false);
 			if (cmd[0]) {
 				r_cons_any_key (core->cons, NULL);
 			}

@@ -364,10 +364,10 @@ static void _print_strings(RCore *core, RList *list, PJ *pj, int mode, int va) {
 	if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "fs strings");
+		r_cons_println (core->cons, "fs strings");
 	} else if (IS_MODE_SET (mode) && r_config_get_i (core->config, "bin.strings")) {
 		r_flag_space_set (core->flags, R_FLAGS_FS_STRINGS);
-		r_kons_break_push (core->cons, NULL, NULL);
+		r_cons_break_push (core->cons, NULL, NULL);
 	} else if (IS_MODE_NORMAL (mode)) {
 		r_table_set_columnsf (table, "nXXnnsss", "nth", "paddr", "vaddr", "len", "size", "section", "type", "string");
 	}
@@ -414,7 +414,7 @@ static void _print_strings(RCore *core, RList *list, PJ *pj, int mode, int va) {
 			}
 		}
 		if (IS_MODE_SET (mode)) {
-			if (r_kons_is_breaked (core->cons)) {
+			if (r_cons_is_breaked (core->cons)) {
 				break;
 			}
 			r_meta_set (core->anal, R_META_TYPE_STRING, vaddr, string->size, string->string);
@@ -436,7 +436,7 @@ static void _print_strings(RCore *core, RList *list, PJ *pj, int mode, int va) {
 			r_kons_printf (core->cons, "0x%"PFMT64x" %d %d %s\n", vaddr,
 				string->size, string->length, string->string);
 		} else if (IS_MODE_SIMPLEST (mode)) {
-			r_kons_println (core->cons, string->string);
+			r_cons_println (core->cons, string->string);
 		} else if (IS_MODE_JSON (mode)) {
 			int *block_list;
 			pj_o (pj);
@@ -553,7 +553,7 @@ static void _print_strings(RCore *core, RList *list, PJ *pj, int mode, int va) {
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	} else if (IS_MODE_SET (mode)) {
-		r_kons_break_pop (core->cons);
+		r_cons_break_pop (core->cons);
 	} else if (IS_MODE_NORMAL (mode)) {
 		bool show_table = true;
 		if (core->table_query) {
@@ -1071,7 +1071,7 @@ static bool bin_info(RCore *core, PJ *pj, int mode, ut64 laddr) {
 				for (j = 0; j < h->len; j++) {
 					r_kons_printf (core->cons, "%02x", h->buf[j]);
 				}
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 			}
 		}
 		if (IS_MODE_JSON (mode)) {
@@ -1183,14 +1183,14 @@ static bool bin_addrline(RCore *core, PJ *pj, int mode) {
 		return false;
 	}
 
-	r_kons_break_push (core->cons, NULL, NULL);
+	r_cons_break_push (core->cons, NULL, NULL);
 	/* cache file:line contents */
 	HtPP* file_lines = ht_pp_new (NULL, file_lines_free_kv, NULL);
 
 	SetP *set = set_p_new ();
 	// XXX this leaks like there's no stopper
 	r_list_foreach (list, iter, row) {
-		if (r_kons_is_breaked (core->cons)) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		if (mode) {
@@ -1276,7 +1276,7 @@ static bool bin_addrline(RCore *core, PJ *pj, int mode) {
 		pj_end (pj);
 	}
 	set_p_free (set);
-	r_kons_break_pop (core->cons);
+	r_cons_break_pop (core->cons);
 	ht_pp_free (file_lines);
 	r_list_free (ownlist);
 	return true;
@@ -1371,7 +1371,7 @@ static bool bin_source(RCore *core, PJ *pj, int mode) {
 	RList *files = r_bin_addrline_files (core->bin);
 	if (files) {
 		char *s = r_str_list_join (files, "\n");
-		r_kons_println (core->cons, s);
+		r_cons_println (core->cons, s);
 		free (s);
 	}
 #else
@@ -1470,7 +1470,7 @@ static bool bin_entry(RCore *core, PJ *pj, int mode, ut64 laddr, int va, bool in
 		if (r_list_empty (entries)) {
 			return true;
 		}
-		r_kons_println (core->cons, "'fs+symbols");
+		r_cons_println (core->cons, "'fs+symbols");
 	} else if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
 	}
@@ -1598,7 +1598,7 @@ static bool bin_entry(RCore *core, PJ *pj, int mode, ut64 laddr, int va, bool in
 			r_core_seek (core, at, false);
 		}
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "'fs-");
+		r_cons_println (core->cons, "'fs-");
 	} else if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	}
@@ -1947,7 +1947,7 @@ static bool bin_relocs(RCore *core, PJ *pj, int mode, int va) {
 	}
 
 	if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "fs relocs");
+		r_cons_println (core->cons, "fs relocs");
 	} else if (IS_MODE_NORMAL (mode)) {
 		r_table_set_columnsf (table, "XXsds", "vaddr", "paddr", "type", "ntype", "name");
 	} else if (IS_MODE_JSON (mode)) {
@@ -2221,7 +2221,7 @@ static bool bin_imports(RCore *core, PJ *pj, int mode, int va, const char *name)
 	if (IS_MODE_JSON (mode)) {
 		pj_a (pj);
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "fs imports");
+		r_cons_println (core->cons, "fs imports");
 	} else if (IS_MODE_NORMAL (mode)) {
 		r_table_set_columnsf (table, "nXssss", "nth", "vaddr", "bind", "type", "lib", "name");
 	}
@@ -2255,7 +2255,7 @@ static bool bin_imports(RCore *core, PJ *pj, int mode, int va, const char *name)
 		} else if (IS_MODE_SIMPLE (mode)) {
 			r_kons_printf (core->cons, "%s%s%s\n", r_str_get (libname), libname ? " " : "", symname);
 		} else if (IS_MODE_SIMPLEST (mode)) {
-			r_kons_println (core->cons, symname);
+			r_cons_println (core->cons, symname);
 		} else if (IS_MODE_JSON (mode)) {
 			pj_o (pj);
 			pj_ki (pj, "ordinal", import->ordinal);
@@ -2295,7 +2295,7 @@ static bool bin_imports(RCore *core, PJ *pj, int mode, int va, const char *name)
 				r_kons_printf (core->cons, " descriptor=%s", import->descriptor);
 			}
 			if (!IS_MODE_NORMAL (mode)) {
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 			}
 		}
 		R_FREE (symname);
@@ -2543,9 +2543,9 @@ static bool bin_symbols(RCore *core, PJ *pj, int mode, ut64 laddr, int va, ut64 
 	}
 
 	RBinSymbol *symbol;
-	r_kons_break_push (core->cons, NULL, NULL);
+	r_cons_break_push (core->cons, NULL, NULL);
 	R_VEC_FOREACH (symbols, symbol) {
-		if (r_kons_is_breaked (core->cons)) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		const char *rawname = r_bin_name_tostring2 (symbol->name, 'o');
@@ -2767,7 +2767,7 @@ next:
 			break;
 		}
 	}
-	r_kons_break_pop (core->cons);
+	r_cons_break_pop (core->cons);
 	if (IS_MODE_NORMAL (mode)) {
 		if (core->table_query) {
 			if (!r_table_query (table, core->table_query)) {
@@ -3069,7 +3069,7 @@ static bool bin_sections(RCore *core, PJ *pj, int mode, ut64 laddr, int va, ut64
 	}
 	char *hashtypes = filter_hash_string (chksum);
 	if (IS_MODE_EQUAL (mode)) {
-		int cols = r_kons_get_size (core->cons, NULL);
+		int cols = r_cons_get_size (core->cons, NULL);
 		RList *list = r_list_newf ((RListFree) r_listinfo_free);
 		if (!list) {
 			free (hashtypes);
@@ -3447,7 +3447,7 @@ static bool bin_fields(RCore *core, PJ *pj, int mode, int va) {
 		r_core_bin_export_info (core, R_MODE_SET);
 		pj_a (pj);
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "'fs+header");
+		r_cons_println (core->cons, "'fs+header");
 	}
 	r_list_foreach (fields, iter, field) {
 		const bool haveComment = R_STR_ISNOTEMPTY (field->comment);
@@ -3515,7 +3515,7 @@ static bool bin_fields(RCore *core, PJ *pj, int mode, int va) {
 				field->vaddr, field->paddr, v, r_bin_name_tostring2 (field->name, pref),
 				haveComment? "; ": "",
 				haveComment? cmt: "");
-			r_kons_newline (core->cons);
+			r_cons_newline (core->cons);
 		} else if (IS_MODE_SET (mode)) {
 			// nothing
 		} else {
@@ -3527,7 +3527,7 @@ static bool bin_fields(RCore *core, PJ *pj, int mode, int va) {
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "'fs-");
+		r_cons_println (core->cons, "'fs-");
 	}
 
 	return true;
@@ -3734,7 +3734,7 @@ static void classdump_cxx(RCore *core, RBinClass *c) {
 			free (n);
 		}
 	}
-	r_kons_println (core->cons, "};\n");
+	r_cons_println (core->cons, "};\n");
 }
 
 static void classdump_objc(RCore *core, RBinClass *c) {
@@ -3776,7 +3776,7 @@ static void classdump_objc(RCore *core, RBinClass *c) {
 			}
 		}
 	}
-	r_kons_println (core->cons, "}");
+	r_cons_println (core->cons, "}");
 	r_list_foreach (c->methods, iter3, sym) {
 		const char *sname = r_bin_name_tostring2 (sym->name, pref);
 		char *rp = NULL;
@@ -3923,7 +3923,7 @@ static bool bin_classes(RCore *core, PJ *pj, int mode) {
 	} else if (IS_MODE_SET (mode)) {
 		r_flag_space_set (core->flags, R_FLAGS_FS_CLASSES);
 	} else if (IS_MODE_RAD (mode) && !IS_MODE_CLASSDUMP (mode)) {
-		r_kons_println (core->cons, "fs classes");
+		r_cons_println (core->cons, "fs classes");
 	}
 	const bool bin_filter = r_config_get_b (core->config, "bin.filter");
 	r_list_foreach (cs, iter, c) {
@@ -4203,7 +4203,7 @@ static bool bin_classes(RCore *core, PJ *pj, int mode) {
 			r_kons_printf (core->cons, "0x%08"PFMT64x" [0x%08"PFMT64x" - 0x%08"PFMT64x"] %6"PFMT64d" %s class %d %s",
 				c->addr, at_min, at_max, (at_max - at_min), cl, c->index, cname);
 			if (r_list_empty (c->super)) {
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 			} else {
 				char *csv = csv_supers (c->super);
 				if (r_str_startswith (csv, "_T")) {
@@ -4283,7 +4283,7 @@ static bool bin_libs(RCore *core, PJ *pj, int mode) {
 			pj_s (pj, lib);
 		} else {
 			// simple and normal print mode
-			r_kons_println (core->cons, lib);
+			r_cons_println (core->cons, lib);
 		}
 	}
 	if (IS_MODE_JSON (mode)) {
@@ -4423,7 +4423,7 @@ static void bin_pe_versioninfo(RCore *core, PJ *pj, int mode) {
 			r_kons_printf (core->cons, "  FileOS: 0x%"PFMT64x"\n", sdb_num_get (sdb, "FileOS", 0));
 			r_kons_printf (core->cons, "  FileType: 0x%"PFMT64x"\n", sdb_num_get (sdb, "FileType", 0));
 			r_kons_printf (core->cons, "  FileSubType: 0x%"PFMT64x"\n", sdb_num_get (sdb, "FileSubType", 0));
-			r_kons_newline (core->cons);
+			r_cons_newline (core->cons);
 		}
 		free (file_version);
 		free (product_version);
@@ -4722,7 +4722,7 @@ static void bin_pe_resources(RCore *core, PJ *pj, int mode) {
 	if (IS_MODE_JSON (mode)) {
 		pj_end (pj);
 	} else if (IS_MODE_RAD (mode)) {
-		r_kons_println (core->cons, "fs *");
+		r_cons_println (core->cons, "fs *");
 	}
 }
 
@@ -4795,7 +4795,7 @@ static bool bin_signature(RCore *core, PJ *pj, int mode) {
 				pj_k (pj, "signature");
 				pj_j (pj, signature);
 			} else {
-				r_kons_println (core->cons, signature);
+				r_cons_println (core->cons, signature);
 			}
 			free (signature);
 		}

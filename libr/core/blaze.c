@@ -183,11 +183,11 @@ static void printFunctionCommands(RCore *core, fcn_t* fcn, const char *name) {
 	RListIter *fcn_iter;
 	bb_t *cur = NULL;
 	char *_name = function_name (core, name, fcn->addr);
-	r_cons_printf ("af+ 0x%08" PFMT64x " %s\n", fcn->addr, _name);
+	r_kons_printf (core->cons, "af+ 0x%08" PFMT64x " %s\n", fcn->addr, _name);
 	free (_name);
 
 	r_list_foreach (fcn->bbs, fcn_iter, cur) {
-		r_cons_printf ("afb+ 0x%08" PFMT64x " 0x%08" PFMT64x " %"PFMT64u" 0x%08"PFMT64x" 0x%08"PFMT64x"\n",
+		r_kons_printf (core->cons, "afb+ 0x%08" PFMT64x " 0x%08" PFMT64x " %"PFMT64u" 0x%08"PFMT64x" 0x%08"PFMT64x"\n",
 			fcn->addr, cur->start, cur->end - cur->start, cur->jump, cur->fail);
 	}
 }
@@ -259,7 +259,7 @@ R_API bool core_anal_bbs(RCore *core, const char* input) {
 	R_LOG_DEBUG ("Creating basic blocks");
 	ut64 cur = 0, base = 0;
 	while (cur >= base && cur < size) {
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		// magic number to fix huge section of invalid code fuzz files
@@ -372,7 +372,7 @@ R_API bool core_anal_bbs(RCore *core, const char* input) {
 			R_LOG_ERROR ("Failed to get next block from list");
 			continue;
 		}
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 
@@ -435,7 +435,7 @@ R_API bool core_anal_bbs(RCore *core, const char* input) {
 	R_LOG_DEBUG ("Trying to create functions");
 
 	r_list_foreach (result, iter, block) {
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		if (block && (block->reached == 0 || block->called >= 1)) {
@@ -568,7 +568,7 @@ R_API bool core_anal_bbs_range(RCore *core, const char* input) {
 			b_start = lista[x];
 			lista[x] = 0;
 			while (cur < size) {
-				if (r_cons_is_breaked ()) {
+				if (r_cons_is_breaked (core->cons)) {
 					break;
 				}
 				// magic number to fix huge section of invalid code fuzz files
@@ -678,7 +678,7 @@ R_API bool core_anal_bbs_range(RCore *core, const char* input) {
 			R_LOG_ERROR ("Failed to get next block from list");
 			continue;
 		}
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 
@@ -742,7 +742,7 @@ R_API bool core_anal_bbs_range(RCore *core, const char* input) {
 	R_LOG_DEBUG ("Trying to create functions");
 
 	r_list_foreach (result, iter, block) {
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		if (block && (block->reached == 0)) {

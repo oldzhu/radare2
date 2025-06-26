@@ -68,7 +68,7 @@ static void r_core_debug_breakpoint_hit(RCore *core, RBreakpointItem *bpi) {
 	const bool bpcmd_exists = R_STR_ISNOTEMPTY (bpi->data);
 	const bool may_output = (cmdbp_exists || bpcmd_exists);
 	if (may_output) {
-		r_kons_push (core->cons);
+		r_cons_push (core->cons);
 	}
 	if (cmdbp_exists) {
 		r_core_cmd0 (core, cmdbp);
@@ -77,8 +77,8 @@ static void r_core_debug_breakpoint_hit(RCore *core, RBreakpointItem *bpi) {
 		r_core_cmd0 (core, bpi->data);
 	}
 	if (may_output) {
-		r_kons_flush (core->cons);
-		r_kons_pop (core->cons);
+		r_cons_flush (core->cons);
+		r_cons_pop (core->cons);
 	}
 }
 
@@ -86,7 +86,7 @@ static void r_core_debug_syscall_hit(RCore *core) {
 	const char *cmdhit = r_config_get (core->config, "cmd.onsyscall");
 	if (R_STR_ISNOTEMPTY (cmdhit)) {
 		r_core_cmd0 (core, cmdhit);
-		r_kons_flush (core->cons);
+		r_cons_flush (core->cons);
 	}
 }
 
@@ -312,26 +312,26 @@ static bool __syncDebugMaps(RCore *core) {
 
 R_API char *r_core_cmd_call_str_at(RCore *core, ut64 addr, const char *cmd) {
 	R_RETURN_VAL_IF_FAIL (core && core->cons, NULL);
-	r_kons_push (core->cons);
+	r_cons_push (core->cons);
 	core->cons->context->noflush = true;
 	core->cons->context->cmd_str_depth++;
 	if (cmd && r_core_cmd_call_at (core, addr, cmd) == -1) {
 		//eprintf ("Invalid command: %s\n", cmd);
 		if (--core->cons->context->cmd_str_depth == 0) {
 			core->cons->context->noflush = false;
-			r_kons_flush (core->cons);
+			r_cons_flush (core->cons);
 		}
-		r_kons_pop (core->cons);
+		r_cons_pop (core->cons);
 		return NULL;
 	}
 	if (--core->cons->context->cmd_str_depth == 0) {
 		core->cons->context->noflush = false;
 	}
-	r_kons_filter (core->cons);
+	r_cons_filter (core->cons);
 	const char *static_str = r_cons_get_buffer ();
 	char *retstr = strdup (r_str_get (static_str));
-	r_kons_pop (core->cons);
-	r_cons_echo (NULL);
+	r_cons_pop (core->cons);
+	r_cons_echo (core->cons, NULL);
 	return retstr;
 }
 
@@ -729,7 +729,7 @@ static void autocomplete_alias(RLineCompletion *completion, RCmd *cmd, const cha
 
 		char *v = r_cmd_alias_val_strdup ((RCmdAliasVal *)val);
 		r_kons_printf (cons, "$%s=%s%s\n", k, val->is_data? "$": "", v);
-		r_kons_flush (cons);
+		r_cons_flush (cons);
 
 		char *completed_alias = r_str_newf ("$%s", k);
 		r_line_completion_push (completion, completed_alias);
@@ -1364,7 +1364,7 @@ static bool find_autocomplete(RCore *core, RLineCompletion *completion, RLineBuf
 			}
 			if (desc && desc->help_msg) {
 				r_core_cmd_help (core, desc->help_msg);
-				r_kons_flush (core->cons);
+				r_cons_flush (core->cons);
 				return true;
 			}
 			// fallback to command listing
@@ -2153,7 +2153,7 @@ static void r_core_setenv(RCore *core) {
 }
 
 static int mywrite(const ut8 *buf, int len) {
-	return r_kons_write (r_cons_singleton (), (const char *)buf, len);
+	return r_cons_write (r_cons_singleton (), (const char *)buf, len);
 }
 
 static bool exists_var(RPrint *print, ut64 func_addr, char *str) {
@@ -2476,7 +2476,7 @@ static void cmdusr1(int p) {
 	const char *cmd = r_config_get (Gcore->config, "cmd.usr1");
 	if (R_STR_ISNOTEMPTY (cmd)) {
 		r_core_cmd0 (Gcore, cmd);
-		r_kons_flush (r_cons_singleton ());
+		r_cons_flush (r_cons_singleton ());
 	}
 }
 
@@ -2484,7 +2484,7 @@ static void cmdusr2(int p) {
 	const char *cmd = r_config_get (Gcore->config, "cmd.usr2");
 	if (R_STR_ISNOTEMPTY (cmd)) {
 		r_core_cmd0 (Gcore, cmd);
-		r_kons_flush (r_cons_singleton ());
+		r_cons_flush (r_cons_singleton ());
 	}
 }
 #endif
@@ -2786,9 +2786,9 @@ R_API void __cons_cb_fkey(RCore *core, int fkey) {
 	snprintf (buf, sizeof (buf), "key.f%d", fkey);
 	const char *v = r_config_get (core->config, buf);
 	if (v && *v) {
-		r_kons_println (core->cons, v);
+		r_cons_println (core->cons, v);
 		r_core_cmd0 (core, v);
-		r_kons_flush (core->cons);
+		r_cons_flush (core->cons);
 	}
 }
 
@@ -2949,7 +2949,7 @@ static void chop_prompt(RCore *core, const char *filename, char *tmp, size_t max
 	unsigned int OTHRSCH = 3;
 	const char DOTS[] = "...";
 
-	int w = r_kons_get_size (core->cons, NULL);
+	int w = r_cons_get_size (core->cons, NULL);
 	size_t file_len = strlen (filename);
 	size_t tmp_len = strlen (tmp);
 	int p_len = R_MAX (0, w - 6);
@@ -3049,19 +3049,19 @@ R_API void r_core_cmd_queue_wait(RCore *core) {
 	if (!interactive) {
 		return;
 	}
-	r_kons_push (core->cons);
-	r_cons_break_push (NULL, NULL);
-	while (!r_cons_is_breaked ()) {
+	r_cons_push (core->cons);
+	r_cons_break_push (core->cons, NULL, NULL);
+	while (!r_cons_is_breaked (core->cons)) {
 		char *cmd = r_list_pop (core->cmdqueue);
 		if (cmd) {
 			r_core_cmd0 (core, cmd);
-			r_kons_flush (core->cons);
+			r_cons_flush (core->cons);
 			free (cmd);
 		}
 		r_sys_usleep (100);
 	}
-	r_cons_break_pop ();
-	r_kons_pop (core->cons);
+	r_cons_break_pop (core->cons);
+	r_cons_pop (core->cons);
 }
 
 R_API void r_core_cmd_queue(RCore *core, const char *line) {
@@ -3124,8 +3124,8 @@ R_API int r_core_prompt_exec(RCore *r) {
 			}
 			r->cons->context->use_tts = false;
 		}
-		r_kons_echo (r->cons, NULL);
-		r_kons_flush (r->cons); // double free
+		r_cons_echo (r->cons, NULL);
+		r_cons_flush (r->cons); // double free
 		if (r->cons && r->cons->line && r->cons->line->zerosep) {
 			r_kons_zero (r->cons);
 		}
@@ -3257,14 +3257,14 @@ R_API bool r_core_serve(RCore *core, RIODesc *file) {
 	RSocket *fd = rior->fd;
 	const char *arg = r_config_get (core->config, "rap.loop");
 	R_LOG_INFO ("RAP Server started (rap.loop=%s)", arg);
-	r_cons_break_push (rap_break, rior);
+	r_cons_break_push (core->cons, rap_break, rior);
 reaccept:
-	while (!r_cons_is_breaked ()) {
+	while (!r_cons_is_breaked (core->cons)) {
 		RSocket *c = r_socket_accept (fd);
 		if (!c) {
 			break;
 		}
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			goto out_of_function;
 		}
 		if (!c) {
@@ -3273,7 +3273,7 @@ reaccept:
 			goto out_of_function;
 		}
 		R_LOG_INFO ("rap: client connected");
-		for (;!r_cons_is_breaked ();) {
+		for (;!r_cons_is_breaked (core->cons);) {
 			if (!r_socket_read_block (c, &cmd, 1)) {
 				R_LOG_INFO ("rap: connection closed");
 				if (r_config_get_i (core->config, "rap.loop")) {
@@ -3542,7 +3542,7 @@ reaccept:
 		r_socket_free (c);
 	}
 out_of_function:
-	r_kons_break_pop (core->cons);
+	r_cons_break_pop (core->cons);
 	return false;
 }
 
@@ -3579,7 +3579,7 @@ R_API int r_core_search_cb(RCore *core, ut64 from, ut64 to, RCoreSearchCallback 
 #endif
 
 R_API char *r_core_editor(const RCore *core, const char *file, const char *str) {
-	const bool interactive = r_cons_is_interactive ();
+	const bool interactive = r_cons_is_interactive (core->cons);
 	const char *editor = r_config_get (core->config, "cfg.editor");
 	char *name = NULL, *ret = NULL;
 	int fd;
@@ -3899,7 +3899,7 @@ R_API char *r_core_cmd_str_r(RCore *core, const char *cmd) {
 	}
 	RThreadChannelMessage *message = r_th_channel_message_new (core->chan, (const ut8*)cmd, strlen (cmd) + 1);
 	RThreadChannelPromise *promise = r_th_channel_query (core->chan, message);
-	r_cons_break_push (channel_stop, promise);
+	r_cons_break_push (core->cons, channel_stop, promise);
 	RThreadChannelMessage *response = r_th_channel_promise_wait (promise);
 	char *res = NULL;
 	if (response) {
@@ -3911,6 +3911,6 @@ R_API char *r_core_cmd_str_r(RCore *core, const char *cmd) {
 	if (response && message != response) {
 		r_th_channel_message_free (response);
 	}
-	r_cons_break_pop ();
+	r_cons_break_pop (core->cons);
 	return res;
 }

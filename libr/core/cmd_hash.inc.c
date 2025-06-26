@@ -30,7 +30,7 @@ static int cmd_hash_bang(RCore *core, const char *input) {
 			RLangPlugin *lp = r_lang_get_by_name (core->lang, name);
 			if (lp) {
 				if (lp->example) {
-					r_cons_println (lp->example);
+					r_cons_println (core->cons, lp->example);
 				} else {
 					R_LOG_ERROR ("%s plugin does not provide an example", name);
 				}
@@ -88,7 +88,7 @@ static int cmd_hash_bang(RCore *core, const char *input) {
 					}
 				}
 			} else {
-				if (r_cons_is_interactive ()) {
+				if (r_cons_is_interactive (core->cons)) {
 					r_lang_prompt (core->lang);
 				} else {
 					R_LOG_ERROR ("scr.interactive required to run the rlang prompt");

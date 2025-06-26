@@ -399,7 +399,7 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 	if (symname && !mode) {
 		const char *un = r_bin_import_tags (core->bin, symname);
 		if (R_STR_ISNOTEMPTY (un)) {
-			r_kons_println (core->cons, un);
+			r_cons_println (core->cons, un);
 		}
 		return;
 	}
@@ -459,7 +459,7 @@ static void cmd_iic2(RCore *core, int mode, const char *symname) {
 			RList *nres = r_list_uniq (rrrr, valstr);
 			char *ref;
 			r_list_foreach (nres, iter, ref) {
-				r_kons_println (core->cons, ref);
+				r_cons_println (core->cons, ref);
 			}
 			free (s);
 			r_list_free (rrrr);
@@ -1090,7 +1090,7 @@ static void cmd_ic0(RCore *core, RBinObject *obj, int mode, PJ *pj, bool is_arra
 				const char *comma = iter2->p? " ": "";
 				r_kons_printf (core->cons, "%s0x%"PFMT64x, comma, iova? sym->vaddr: sym->paddr);
 			}
-			r_kons_newline (core->cons);
+			r_cons_newline (core->cons);
 			break;
 		case 'j':
 			{
@@ -1295,7 +1295,7 @@ static void cmd_ic(RCore *core, const char *input, PJ *pj, bool is_array, bool v
 										iova? sym->vaddr: sym->paddr);
 							}
 							if (!r_list_empty (cls->methods)) {
-								r_kons_newline (core->cons);
+								r_cons_newline (core->cons);
 							}
 						}
 					}
@@ -1551,7 +1551,7 @@ static void cmd_iSm(RCore *core, const char *input, PJ **_pj, int mode, const bo
 				}
 				r_kons_printf (core->cons, " = %d symbols\n", count);
 			} else {
-				r_kons_newline (core->cons);
+				r_cons_newline (core->cons);
 				r_list_foreach (symbols, iter2, sym) {
 					if (inrange (sec, sym)) {
 						r_kons_printf (core->cons, "    - %8d %s\n",
@@ -1904,7 +1904,7 @@ static void cmd_id(RCore *core, PJ *pj, const char *input, bool is_array, int mo
 				break;
 			case 0:
 				if (linkname) {
-					r_kons_println (core->cons, info->dbglink);
+					r_cons_println (core->cons, info->dbglink);
 				}
 				break;
 			default:
@@ -2717,7 +2717,7 @@ static int cmd_info(void *data, const char *input) {
 			pj_end (pj);
 		}
 #endif
-		r_kons_println (core->cons, pj_string (pj));
+		r_cons_println (core->cons, pj_string (pj));
 		pj_free (pj);
 	}
 	return 0;

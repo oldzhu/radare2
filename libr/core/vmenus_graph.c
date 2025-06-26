@@ -231,11 +231,11 @@ static void __sync_status_with_cursor(RCoreVisualViewGraph *status) {
 
 R_API int __core_visual_view_graph_update(RCore *core, RCoreVisualViewGraph *status) {
 	RCons *cons = core->cons;
-	int h, w = r_kons_get_size (cons, &h);
+	int h, w = r_cons_get_size (cons, &h);
 	const int colw = w / 4;
 	const int colh = h / 2;
 	const int colx = w / 3;
-	r_cons_clear00 ();
+	r_kons_clear00 (core->cons);
 
 	char *xrefsColstr = r_str_widget_list (core, status->xrefsCol, colh, 0, print_item);
 	char *mainColstr = r_str_widget_list (core, status->mainCol, colh, status->cur, print_item);
@@ -261,7 +261,7 @@ R_API int __core_visual_view_graph_update(RCore *core, RCoreVisualViewGraph *sta
 	int disy = colh + 2;
 	r_cons_print_at (cons, output, 10, disy, w, h - disy);
 	free (output);
-	r_kons_flush (cons);
+	r_cons_flush (cons);
 
 	free (xrefsColstr);
 	free (mainColstr);
@@ -394,14 +394,14 @@ R_API int r_core_visual_view_graph(RCore *core) {
 			" _     - enter the hud\n"
 			" .     - go back to the initial function list view\n"
 			" :     - enter command\n");
-			r_kons_flush (core->cons);
+			r_cons_flush (core->cons);
 			r_cons_any_key (core->cons, NULL);
 			break;
 		case '/':
 			{
 				char cmd[1024];
-				r_cons_show_cursor (true);
-				r_kons_set_raw (core->cons, 0);
+				r_cons_show_cursor (core->cons, true);
+				r_cons_set_raw (core->cons, 0);
 				cmd[0] = '\0';
 				r_line_set_prompt (core->cons->line, ":> ");
 				if (r_cons_fgets (core->cons, cmd, sizeof (cmd), 0, NULL) < 0) {
@@ -409,9 +409,9 @@ R_API int r_core_visual_view_graph(RCore *core) {
 				}
 				r_config_set (core->config, "scr.highlight", cmd);
 				// r_core_cmd_task_sync (core, cmd, 1);
-				r_kons_set_raw (core->cons, 1);
-				r_cons_show_cursor (false);
-				r_cons_clear ();
+				r_cons_set_raw (core->cons, 1);
+				r_cons_show_cursor (core->cons, false);
+				r_kons_clear (core->cons);
 			}
 			break;
 		case 'q':
@@ -419,8 +419,8 @@ R_API int r_core_visual_view_graph(RCore *core) {
 		case ':': // TODO: move this into a separate helper function
 			{
 			char cmd[1024];
-			r_kons_show_cursor (core->cons, true);
-			r_kons_set_raw (core->cons, 0);
+			r_cons_show_cursor (core->cons, true);
+			r_cons_set_raw (core->cons, 0);
 			cmd[0]='\0';
 			r_line_set_prompt (core->cons->line, ":> ");
 			if (r_cons_fgets (core->cons, cmd, sizeof (cmd), 0, NULL) < 0) {
@@ -428,8 +428,8 @@ R_API int r_core_visual_view_graph(RCore *core) {
 			}
 			r_core_cmd0 (core, cmd);
 			//r_core_cmd_task_sync (core, cmd, 1);
-			r_kons_set_raw (core->cons, 1);
-			r_cons_show_cursor (false);
+			r_cons_set_raw (core->cons, 1);
+			r_cons_show_cursor (core->cons, false);
 			if (cmd[0]) {
 				r_cons_any_key (core->cons, NULL);
 			}

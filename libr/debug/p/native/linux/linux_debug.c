@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2009-2024 - pancake */
+/* radare - LGPL - Copyright 2009-2025 - pancake */
 
 #include <r_userconf.h>
 
@@ -88,6 +88,7 @@ static void linux_dbg_wait_break(RDebug *dbg);
 static RDebugReasonType linux_handle_new_task(RDebug *dbg, int tid);
 
 int linux_handle_signals(RDebug *dbg, int tid) {
+	RCore *core = dbg->coreb.core;
 	siginfo_t siginfo = {0};
 	int ret = r_debug_ptrace (dbg, PTRACE_GETSIGINFO, tid, 0, (r_ptrace_data_t)&siginfo);
 	if (ret == -1) {
@@ -160,7 +161,7 @@ int linux_handle_signals(RDebug *dbg, int tid) {
 		default:
 			break;
 		}
-		if (dbg->reason.signum != SIGTRAP && (dbg->reason.signum != SIGINT || !r_cons_is_breaked ())) {
+		if (dbg->reason.signum != SIGTRAP && (dbg->reason.signum != SIGINT || !r_cons_is_breaked (core->cons))) {
 			const char *name = r_signal_tostring (dbg->reason.signum);
 			eprintf ("[+] SIGNAL %d (aka %s) errno=%d addr=0x%08"PFMT64x " code=%d si_pid=%d ret=%d\n",
 				siginfo.si_signo, name, siginfo.si_errno,
@@ -379,13 +380,14 @@ bool linux_set_options(RDebug *dbg, int pid) {
 	}
 	/* SIGTRAP | 0x80 on signal handler .. not supported on all archs */
 	traceflags |= PTRACE_O_TRACESYSGOOD;
+	RCore *core = dbg->coreb.core;
 
 	// PTRACE_SETOPTIONS can fail because of the asynchronous nature of ptrace
 	// If the target is traced, the loop will always end with success
 	while (r_debug_ptrace (dbg, PTRACE_SETOPTIONS, pid, 0, (r_ptrace_data_t)(size_t)traceflags) == -1) {
-		void *bed = r_cons_sleep_begin ();
+		void *bed = r_cons_sleep_begin (core->cons);
 		usleep (1000);
-		r_cons_sleep_end (bed);
+		r_cons_sleep_end (core->cons, bed);
 	}
 	return true;
 }
@@ -499,18 +501,18 @@ RDebugReasonType linux_dbg_wait(RDebug *dbg, int pid) {
 		RCore *core = dbg->coreb.core;
 		const bool is_main = r_kons_context_is_main (core->cons);
 		if (is_main) {
-			r_cons_break_push ((RConsBreak)linux_dbg_wait_break_main, dbg);
+			r_cons_break_push (core->cons, (RConsBreak)linux_dbg_wait_break_main, dbg);
 		} else {
-			r_cons_break_push ((RConsBreak)linux_dbg_wait_break, dbg);
+			r_cons_break_push (core->cons, (RConsBreak)linux_dbg_wait_break, dbg);
 		}
-		void *bed = r_cons_sleep_begin ();
+		void *bed = r_cons_sleep_begin (core->cons);
 		if (dbg->continue_all_threads) {
 			ret = waitpid (-1, &status, flags);
 		} else {
 			ret = waitpid (pid, &status, flags);
 		}
-		r_cons_sleep_end (bed);
-		r_cons_break_pop ();
+		r_cons_sleep_end (core->cons, bed);
+		r_cons_break_pop (core->cons);
 
 		if (ret < 0) {
 			// Continue when interrupted by user;

@@ -1,4 +1,4 @@
-/* radare2 - LGPL - Copyright 2009-2024 - pancake */
+/* radare2 - LGPL - Copyright 2009-2025 - pancake */
 
 #if R_INCLUDE_BEGIN
 
@@ -107,7 +107,7 @@ static void cmd_eval_table(RCore *core, const char *input) {
 		char *s = (fmt == 'j')
 			? r_table_tojson (t)
 			: r_table_tostring (t);
-		r_cons_printf ("%s\n", s);
+		r_kons_printf (core->cons, "%s\n", s);
 		free (s);
 	}
 	r_table_free (t);
@@ -123,7 +123,7 @@ static bool nextpal_item(RCore *core, PJ *pj, int mode, const char *file) {
 		pj_s (pj, fn);
 		break;
 	case 'l': // list
-		r_cons_println (fn);
+		r_cons_println (core->cons, fn);
 		break;
 	case 'p': // previous
 		// TODO: move logic here
@@ -256,7 +256,7 @@ R_API RList *r_core_list_themes(RCore *core) {
 }
 
 static void nextpal(RCore *core, int mode) {
-// TODO: use r_core_list_themes() here instead of rewalking all the time
+	// TODO: use r_core_list_themes() here instead of rewalking all the time
 	RList *files = NULL;
 	RListIter *iter;
 	const char *fn;
@@ -358,7 +358,7 @@ done:
 	files = NULL;
 	if (mode == 'j') {
 		pj_end (pj);
-		r_cons_println (pj_string (pj));
+		r_cons_println (core->cons, pj_string (pj));
 		pj_free (pj);
 	}
 }
@@ -368,14 +368,14 @@ R_API void r_core_echo(RCore *core, const char *input) {
 		char *buf = strdup (input);
 		r_base64_decode ((ut8*)buf, input + 3, -1);
 		if (*buf) {
-			r_cons_echo (buf);
+			r_cons_echo (core->cons, buf);
 		}
 		free (buf);
 	} else {
 		char *p = strchr (input, ' ');
 		if (p) {
-			r_cons_print (p + 1);
-			r_cons_newline ();
+			r_kons_print (core->cons, p + 1);
+			r_cons_newline (core->cons);
 		}
 	}
 }
@@ -417,7 +417,7 @@ static bool cmd_ec(RCore *core, const char *input) {
 				}
 				char *theme_script = get_theme_script (core, theme_name);
 				if (R_STR_ISNOTEMPTY (theme_script)) {
-					r_cons_printf ("%s\n", theme_script);
+					r_kons_printf (core->cons, "%s\n", theme_script);
 				} else {
 					R_LOG_ERROR ("Cannot find theme '%s'", theme_name);
 				}
@@ -451,11 +451,11 @@ static bool cmd_ec(RCore *core, const char *input) {
 			while (theme && theme->name) {
 				const char *th = theme->name;
 				if (input[2] == 'q') {
-					r_cons_printf ("%s\n", th);
+					r_kons_printf (core->cons, "%s\n", th);
 				} else if (core->theme && !strcmp (core->theme, th)) {
-					r_cons_printf ("- %s\n", th);
+					r_kons_printf (core->cons, "- %s\n", th);
 				} else {
-					r_cons_printf ("  %s\n", th);
+					r_kons_printf (core->cons, "  %s\n", th);
 				}
 				theme++;
 			}
@@ -464,11 +464,11 @@ static bool cmd_ec(RCore *core, const char *input) {
 					continue;
 				}
 				if (input[2] == 'q') {
-					r_cons_printf ("%s\n", th);
+					r_kons_printf (core->cons, "%s\n", th);
 				} else if (core->theme && !strcmp (core->theme, th)) {
-					r_cons_printf ("- %s\n", th);
+					r_kons_printf (core->cons, "- %s\n", th);
 				} else {
-					r_cons_printf ("  %s\n", th);
+					r_kons_printf (core->cons, "  %s\n", th);
 				}
 			}
 			r_list_free (themes_list);
@@ -587,7 +587,7 @@ static bool cmd_ec(RCore *core, const char *input) {
 			  r_meta_set_string (core->anal, R_META_TYPE_HIGHLIGHT, core->addr, "");
 			  const char *str = r_meta_get_string (core->anal, R_META_TYPE_HIGHLIGHT, core->addr);
 			  char *dup = r_str_newf ("%s \"%s%s\"", r_str_get (str), r_str_get (word),
-					  color_code ? color_code : r_cons_singleton ()->context->pal.wordhl);
+					  color_code ? color_code : core->cons->context->pal.wordhl);
 			  r_meta_set_string (core->anal, R_META_TYPE_HIGHLIGHT, core->addr, dup);
 			  r_str_argv_free (argv);
 			  free (color_code);
@@ -649,7 +649,7 @@ static void r2rc_set(RCore *core, const char * R_NULLABLE k, const char * R_NULL
 						r_strbuf_appendf (sb, "'e %s=%s\n", k, v);
 					}
 				} else {
-					r_cons_println (line);
+					r_cons_println (core->cons, line);
 				}
 				found = true;
 			} else {
@@ -670,7 +670,7 @@ static void r2rc_set(RCore *core, const char * R_NULLABLE k, const char * R_NULL
 			r_strbuf_free (sb);
 		}
 	} else {
-		r_cons_println (rcdata);
+		r_cons_println (core->cons, rcdata);
 	}
 	free (rcdata);
 	free (rcfile);
@@ -730,7 +730,7 @@ static int cmd_eval(void *data, const char *input) {
 			if (node) {
 				const char *type = r_config_node_type (node);
 				if (type && *type) {
-					r_kons_println (cons, type);
+					r_cons_println (cons, type);
 				}
 			}
 		} else {
@@ -760,7 +760,7 @@ static int cmd_eval(void *data, const char *input) {
 			}
 			pj_end (pj);
 			char *s = pj_drain (pj);
-			r_kons_println (cons, s);
+			r_cons_println (cons, s);
 			free (s);
 		} else if (!strcmp (input + 1, "v*")) {
 			char **e = r_sys_get_environ ();
@@ -777,13 +777,13 @@ static int cmd_eval(void *data, const char *input) {
 			}
 			char *p = r_sys_getenv (var);
 			if (p) {
-				r_kons_println (cons, p);
+				r_cons_println (cons, p);
 				free (p);
 			} else if (!var || !*var) {
 				char **e = r_sys_get_environ ();
 				if (e != NULL) {
 					while (*e) {
-						r_kons_println (cons, *e);
+						r_cons_println (cons, *e);
 						e++;
 					}
 				}
@@ -831,7 +831,7 @@ static int cmd_eval(void *data, const char *input) {
 		} else if (input[1] == '*') {
 			char *file = r_file_home (".radare2rc");
 			char *data = r_file_slurp (file, NULL);
-			r_kons_println (cons, data);
+			r_cons_println (cons, data);
 			free (data);
 			free (file);
 		} else if (input[1] == '+') {
@@ -848,7 +848,7 @@ static int cmd_eval(void *data, const char *input) {
 			}
 		} else {
 			char *file = r_file_home (".radare2rc");
-			if (r_kons_is_interactive (cons)) {
+			if (r_cons_is_interactive (cons)) {
 				r_file_touch (file);
 				char *res = r_cons_editor (cons, file, NULL);
 				if (res) {

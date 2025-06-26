@@ -1,4 +1,5 @@
 // Copyright (c) 2014-2017, The Lemon Man, All rights reserved. LGPLv3
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -86,7 +87,7 @@ struct _WindCtx {
 };
 
 bool winkd_lock_enter(WindCtx *ctx) {
-	r_cons_break_push (winkd_break, ctx);
+	// r_cons_break_push (winkd_break, ctx);
 	r_th_lock_enter (ctx->dontmix);
 	return true;
 }
@@ -95,12 +96,12 @@ bool winkd_lock_tryenter(WindCtx *ctx) {
 	if (!r_th_lock_tryenter (ctx->dontmix)) {
 		return false;
 	}
-	r_cons_break_push (winkd_break, ctx);
+	// r_cons_break_push (winkd_break, ctx);
 	return true;
 }
 
 bool winkd_lock_leave(WindCtx *ctx) {
-	r_cons_break_pop ();
+	// r_cons_break_pop ();
 	r_th_lock_leave (ctx->dontmix);
 	return true;
 }

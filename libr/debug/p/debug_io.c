@@ -1,6 +1,7 @@
-/* radare - LGPL - Copyright 2016-2022 pancake */
+/* radare - LGPL - Copyright 2016-2025 pancake */
 
 #include <r_debug.h>
+#include <r_core.h>
 #include <r_asm.h>
 
 static bool __io_step(RDebug *dbg) {
@@ -24,6 +25,8 @@ static RList *__io_maps(RDebug *dbg) {
 	ut64 map_start, map_end;
 	char perm[32];
 	char name[512];
+	RCore *core = dbg->coreb.core;
+	RCons *cons = core->cons;
 	for (;;) {
 		char *nl = strchr (str, '\n');
 		if (nl) {
@@ -65,7 +68,7 @@ static RList *__io_maps(RDebug *dbg) {
 		}
 	}
 	free (ostr);
-	r_cons_reset();
+	r_cons_reset (cons);
 	return list;
 }
 
@@ -80,35 +83,40 @@ static bool __io_attach(RDebug *dbg, int pid) {
 
 // "drp" register profile
 static char *__io_reg_profile(RDebug *dbg) {
-	r_cons_push ();
+	RCore *core = dbg->coreb.core;
+	RCons *cons = core->cons;
+	r_cons_push (cons);
 	char *drp = dbg->iob.system (dbg->iob.io, "drp");
 	if (drp) {
 		return drp;
 	}
-	const char *buf = r_cons_get_buffer ();
-	if (buf && *buf) {
+	const char *buf = r_kons_get_buffer (cons, NULL);
+	if (R_STR_ISNOTEMPTY (buf)) {
 		char *ret = strdup (buf);
-		r_cons_pop ();
+		r_cons_pop (cons);
 		return ret;
 	}
+	// r_cons_pop (cons);
 	return r_anal_get_reg_profile (dbg->anal);
 }
 
 // "dr8" read register state
 static bool __reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
-	r_cons_push ();
+	RCore *core = dbg->coreb.core;
+	RCons *cons = core->cons;
+	r_cons_push (cons);
 	char *dr8 = dbg->iob.system (dbg->iob.io, "dr8");
 	if (!dr8) {
 		const char *fb = r_cons_get_buffer ();
 		if (R_STR_ISEMPTY (fb)) {
 			R_LOG_ERROR ("Failed to get dr8 from io");
-			r_cons_pop ();
+			r_cons_pop (cons);
 			return false;
 		}
 		dr8 = strdup (fb);
-		r_cons_reset ();
+		r_cons_reset (cons);
 	}
-	r_cons_pop ();
+	r_cons_pop (cons);
 	ut8 *bregs = calloc (1, strlen (dr8));
 	if (!bregs) {
 		free (dr8);
@@ -127,7 +135,6 @@ static bool __reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 // "dc" continue execution
 static bool __io_continue(RDebug *dbg, int pid, int tid, int sig) {
 	dbg->iob.system (dbg->iob.io, "dc");
-	r_cons_flush ();
 	return true;
 }
 
@@ -135,7 +142,6 @@ static bool __io_continue(RDebug *dbg, int pid, int tid, int sig) {
 static bool __io_kill(RDebug *dbg, int pid, int tid, int sig) {
 	r_strf_var (cmd, 32, "dk %d", sig);
 	dbg->iob.system (dbg->iob.io, cmd);
-	r_cons_flush ();
 	return true;
 }
 

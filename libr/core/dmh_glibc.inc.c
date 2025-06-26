@@ -514,7 +514,7 @@ static void GH(print_arena_stats)(RCore *core, GHT m_arena, MallocState *main_ar
 		PRINTF_GA ("0x%"PFMT64x"->bk = ", (ut64)bin);
 		PRINTF_BA ("0x%"PFMT64x, (ut64)main_arena->GH(bins)[i + 1] );
 		PRINT_GA (", ");
-		r_cons_newline ();
+		r_cons_newline (core->cons);
 	}
 
 	PRINT_GA ("}\n");
@@ -1423,7 +1423,7 @@ static void GH(print_heap_segment)(RCore *core, MallocState *main_arena,
 		return;
 	}
 
-	w = r_kons_get_size (core->cons, &h);
+	w = r_cons_get_size (core->cons, &h);
 	int flags = r_cons_canvas_flags (core->cons);
 	RConsCanvas *can = r_cons_canvas_new (core->cons, w, h, flags);
 	if (!can) {
@@ -1682,7 +1682,7 @@ static void GH(print_heap_segment)(RCore *core, MallocState *main_arena,
 		pj_kn (pj, "brk", brk_start);
 		pj_kn (pj, "end", brk_end);
 		pj_end (pj);
-		r_cons_print (pj_string (pj));
+		r_kons_print (core->cons, pj_string (pj));
 		pj_free (pj);
 		break;
 	case '*':
@@ -1705,7 +1705,7 @@ static void GH(print_heap_segment)(RCore *core, MallocState *main_arena,
 		break;
 	}
 
-	r_cons_newline ();
+	r_cons_newline (core->cons);
 	free (g);
 	free (top_data);
 	free (top_title);

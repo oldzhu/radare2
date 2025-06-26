@@ -7,6 +7,7 @@
 char *getcommapath(RCore *core);
 
 typedef struct {
+	RCore *core;
 	ut64 filter_offset;
 	int filter_format;
 	size_t filter_count;
@@ -182,7 +183,7 @@ static bool print_meta_offset(RCore *core, ut64 addr, PJ *pj) {
 	}
 	int line = al->line;
 
-	r_cons_printf ("file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n", al->file, line, al->column, addr);
+	r_kons_printf (core->cons, "file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n", al->file, line, al->column, addr);
 	int line_old = line;
 	if (line >= 2) {
 		line -= 2;
@@ -192,7 +193,7 @@ static bool print_meta_offset(RCore *core, ut64 addr, PJ *pj) {
 		for (i = 0; i < 5; i++) {
 			char *row = r_file_slurp_line (al->file, line + i, 0);
 			if (row) {
-				r_cons_printf ("%c %.3x  %s\n", al->line + i == line_old ? '>' : ' ', line + i, row);
+				r_kons_printf (core->cons, "%c %.3x  %s\n", al->line + i == line_old ? '>' : ' ', line + i, row);
 				free (row);
 			}
 		}
@@ -214,15 +215,15 @@ static bool print_addrinfo_json(void *user, const char *k, const char *v) {
 		colonpos = strchr (subst, ':');
 	}
 	if (!colonpos) {
-		r_cons_printf ("%s\n", subst);
+		r_kons_printf (fs->core->cons, "%s\n", subst);
 	}
 	if (colonpos && (fs->filter_offset == UT64_MAX || fs->filter_offset == offset)) {
 		if (fs->filter_format) {
 			*colonpos = ':';
-	//		r_cons_printf ("CL %s %s\n", k, subst);
+	//		r_kons_printf (core->cons, "CL %s %s\n", k, subst);
 		} else {
 			*colonpos = 0;
-	//		r_cons_printf ("file: %s\nline: %s\naddr: 0x%08"PFMT64x"\n", subst, colonpos + 1, offset);
+	//		r_kons_printf (core->cons, "file: %s\nline: %s\naddr: 0x%08"PFMT64x"\n", subst, colonpos + 1, offset);
 		}
 		fs->filter_count++;
 	}
@@ -267,10 +268,10 @@ static bool print_addrinfo2_json(void *user, RBinAddrline *item) {
 	if (colonpos && (fs->filter_offset == UT64_MAX || fs->filter_offset == offset)) {
 		if (fs->filter_format) {
 			*colonpos = ':';
-	//		r_cons_printf ("CL %s %s\n", k, subst);
+	//		r_kons_printf (core->cons, "CL %s %s\n", k, subst);
 		} else {
 			*colonpos = 0;
-	//		r_cons_printf ("file: %s\nline: %s\naddr: 0x%08"PFMT64x"\n", subst, colonpos + 1, offset);
+	//		r_kons_printf (core->cons, "file: %s\nline: %s\naddr: 0x%08"PFMT64x"\n", subst, colonpos + 1, offset);
 		}
 		fs->filter_count++;
 	}
@@ -316,9 +317,9 @@ static bool print_addrinfo2(void *user, RBinAddrline *item) {
 	if (fs->filter_offset == UT64_MAX || fs->filter_offset == offset) {
 		if (fs->filter_format) {
 			// TODO add column if defined
-			r_cons_printf ("'CL 0x%08"PFMT64x" %s:%d\n", item->addr, item->file, item->line);
+			r_kons_printf (fs->core->cons, "'CL 0x%08"PFMT64x" %s:%d\n", item->addr, item->file, item->line);
 		} else {
-			r_cons_printf ("file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n",
+			r_kons_printf (fs->core->cons, "file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n",
 				item->file, item->line, item->column, item->addr);
 		}
 		fs->filter_count++;
@@ -341,11 +342,11 @@ static bool print_addrinfo(void *user, const char *k, const char *v) {
 		colonpos = strchr (subst, ':'); // : for shell and | for db.. imho : everywhere
 	}
 	if (!colonpos) {
-		r_cons_printf ("%s\n", subst);
+		r_kons_printf (fs->core->cons, "%s\n", subst);
 	} else if (fs->filter_offset == UT64_MAX || fs->filter_offset == offset) {
 		if (fs->filter_format) {
 			*colonpos = ':';
-			r_cons_printf ("'CL %s %s\n", k, subst);
+			r_kons_printf (fs->core->cons, "'CL %s %s\n", k, subst);
 		} else {
 			*colonpos++ = 0;
 			int line = atoi (colonpos);
@@ -355,7 +356,7 @@ static bool print_addrinfo(void *user, const char *k, const char *v) {
 				*columnpos ++ = 0;
 				colu = atoi (columnpos);
 			}
-			r_cons_printf ("file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n",
+			r_kons_printf (fs->core->cons, "file: %s\nline: %d\ncolu: %d\naddr: 0x%08"PFMT64x"\n",
 				subst, line, colu, offset);
 		}
 		fs->filter_count++;
@@ -405,7 +406,7 @@ static int cmd_meta_lineinfo(RCore *core, const char *input) {
 	const char *p = input;
 	char *file_line = NULL;
 
-	FilterStruct fs = { UT64_MAX, 0, 0, NULL };
+	FilterStruct fs = { core, UT64_MAX, 0, 0, NULL };
 
 	if (*p == '?') {
 		r_core_cmd_help (core, help_msg_CL);
@@ -423,7 +424,7 @@ static int cmd_meta_lineinfo(RCore *core, const char *input) {
 		}
 		char *text = r_bin_addrline_tostring (core->bin, at, 0);
 		if (R_STR_ISNOTEMPTY (text)) {
-			r_cons_printf ("0x%08"PFMT64x"  %s\n", at, text);
+			r_kons_printf (core->cons, "0x%08"PFMT64x"  %s\n", at, text);
 		}
 		free (text);
 		return 0;
@@ -449,7 +450,7 @@ retry:
 		}
 		if (s) {
 			r_str_after (s, ':');
-			r_cons_println (s);
+			r_cons_println (core->cons, s);
 			free (s);
 			r_core_return_code (core, 0);
 		} else {
@@ -571,7 +572,7 @@ retry:
 			pj_end (pj);
 			char *s = pj_drain (pj);
 			if (s) {
-				r_cons_printf ("%s\n", s);
+				r_kons_printf (core->cons, "%s\n", s);
 				free (s);
 			}
 		}
@@ -615,7 +616,7 @@ static int cmd_meta_comment(RCore *core, const char *input) {
 				char *cmtfile = r_str_between (comment, ",(", ")");
 				if (R_STR_ISNOTEMPTY (cmtfile)) {
 					char *cwd = getcommapath (core);
-					r_cons_printf ("%s"R_SYS_DIR"%s\n", cwd, cmtfile);
+					r_kons_printf (core->cons, "%s"R_SYS_DIR"%s\n", cwd, cmtfile);
 					free (cwd);
 				}
 				free (cmtfile);
@@ -627,7 +628,7 @@ static int cmd_meta_comment(RCore *core, const char *input) {
 			ut64 at = input[2]? r_num_math (core->num, input + 2): addr;
 			const char *comment = r_meta_get_string (core->anal, R_META_TYPE_COMMENT, at);
 			if (R_STR_ISNOTEMPTY (comment)) {
-				r_cons_println (comment);
+				r_cons_println (core->cons, comment);
 			}
 		}
 		break;
@@ -839,7 +840,7 @@ static int cmd_meta_vartype_comment(RCore *core, const char *input) {
 		ut64 at = input[2]? r_num_math (core->num, input + 2): addr;
 		const char *comment = r_meta_get_string (core->anal, R_META_TYPE_VARTYPE, at);
 		if (R_STR_ISNOTEMPTY (comment)) {
-			r_cons_println (comment);
+			r_cons_println (core->cons, comment);
 		}
 		}
 		break;
@@ -894,7 +895,7 @@ static int cmd_meta_others(RCore *core, const char *input) {
 		switch (input[0]) {
 		case 'f': // "Cf?"
 			r_core_cmd_help_match (core, help_msg_C, "Cf");
-			r_cons_println (
+			r_cons_println (core->cons,
 				"'sz' indicates the byte size taken up by struct.\n"
 				"'fmt' is a 'pf?' style format string. It controls only the display format.\n\n"
 				"You may wish to have 'sz' != sizeof (fmt) when you have a large struct\n"
@@ -906,7 +907,7 @@ static int cmd_meta_others(RCore *core, const char *input) {
 			r_core_cmd_help (core, help_msg_Cs);
 			break;
 		default:
-			r_cons_println ("See C?");
+			r_cons_println (core->cons, "See C?");
 			break;
 		}
 		break;
@@ -971,7 +972,7 @@ static int cmd_meta_others(RCore *core, const char *input) {
 			RAnalMetaItem *mi = r_meta_get_at (core->anal, addr, type, &size);
 			if (mi) {
 				r_meta_print (core->anal, mi, addr, size, input[2], NULL, NULL, false);
-				r_cons_newline ();
+				r_cons_newline (core->cons);
 			}
 			break;
 		}
@@ -995,15 +996,15 @@ static int cmd_meta_others(RCore *core, const char *input) {
 				break;
 			}
 			if (esc_str) {
-				r_cons_printf ("\"%s\"\n", esc_str);
+				r_kons_printf (core->cons, "\"%s\"\n", esc_str);
 				free (esc_str);
 			} else {
-				r_cons_println ("<oom>");
+				r_cons_println (core->cons, "<oom>");
 			}
 		} else if (type == 'd') {
-			r_cons_printf ("%"PFMT64u"\n", size);
+			r_kons_printf (core->cons, "%"PFMT64u"\n", size);
 		} else {
-			r_cons_println (mi->str);
+			r_cons_println (core->cons, mi->str);
 		}
 		break;
 	case 's': // "Css"
@@ -1317,7 +1318,7 @@ static void comment_var_help(RCore *core, char type) {
 		r_core_cmd_help (core, help_msg_Cvr);
 		break;
 	case '?':
-		r_cons_printf ("See Cvb?, Cvs? and Cvr?\n");
+		r_kons_printf (core->cons, "See Cvb?, Cvs? and Cvr?\n");
 	}
 }
 
@@ -1350,10 +1351,10 @@ static void cmd_Cv(RCore *core, const char *input) {
 				if (!b64) {
 					continue;
 				}
-				r_cons_printf ("'@0x%08"PFMT64x"'Cv%c %s base64:%s\n", fcn->addr, kind, var->name, b64);
+				r_kons_printf (core->cons, "'@0x%08"PFMT64x"'Cv%c %s base64:%s\n", fcn->addr, kind, var->name, b64);
 				free (b64);
 			} else {
-				r_cons_printf ("%s : %s\n", var->name, var->comment);
+				r_kons_printf (core->cons, "%s : %s\n", var->name, var->comment);
 			}
 		}
 		}
@@ -1382,7 +1383,7 @@ static void cmd_Cv(RCore *core, const char *input) {
 					free (var->comment);
 					var->comment = text;
 				} else {
-					r_cons_println (var->comment);
+					r_cons_println (core->cons, var->comment);
 				}
 			} else if (R_STR_ISNOTEMPTY (comment)) {
 				var->comment = strdup (comment);

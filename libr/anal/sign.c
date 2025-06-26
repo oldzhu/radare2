@@ -938,19 +938,20 @@ static char *real_function_name(RAnal *a, RAnalFunction *fcn) {
 
 R_API int r_sign_all_functions(RAnal *a, bool merge) {
 	R_RETURN_VAL_IF_FAIL (a, 0);
+	RCore *core = a->coreb.core;
+	RCons *cons = core->cons;
 	RAnalFunction *fcn = NULL;
 	RListIter *iter = NULL;
 	int count = 0;
 	r_list_sort (a->fcns, fcn_sort);
 	const RSpace *sp = r_spaces_current (&a->zign_spaces);
 	char *prev_name = NULL;
-	r_cons_break_push (NULL, NULL);
+	r_cons_break_push (cons, NULL, NULL);
 	RCoreBind cb = a->coreb;
-	RCore *core = cb.core;
 	bool do_mangled = cb.cfgGetI (core, "zign.mangled");
 	bool zign_dups = a->opt.zigndups;
 	r_list_foreach_prev (a->fcns, iter, fcn) {
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (core->cons)) {
 			break;
 		}
 		char *realname = do_mangled? strdup (fcn->name): real_function_name (a, fcn);
@@ -978,7 +979,7 @@ R_API int r_sign_all_functions(RAnal *a, bool merge) {
 			prev_name = NULL;
 		}
 	}
-	r_cons_break_pop ();
+	r_cons_break_pop (cons);
 	free (prev_name);
 	return count;
 }
@@ -2843,11 +2844,13 @@ static inline bool suggest_check(RAnal *a, struct metric_ctx *ctx) {
 R_API int r_sign_metric_search(RAnal *a, RSignSearchMetrics *sm) {
 	R_RETURN_VAL_IF_FAIL (a && sm, -1);
 	RListIter *iter;
+	RCore *core = a->coreb.core;
+	RCons *cons = core->cons;
 	r_list_sort (a->fcns, fcn_sort);
-	r_cons_break_push (NULL, NULL);
+	r_cons_break_push (cons, NULL, NULL);
 	struct metric_ctx ctx = { 0, NULL, sm, NULL, NULL };
 	r_list_foreach (a->fcns, iter, ctx.fcn) {
-		if (r_cons_is_breaked ()) {
+		if (r_cons_is_breaked (cons)) {
 			break;
 		}
 		ctx.it = metric_build_item (sm, ctx.fcn);
@@ -2856,7 +2859,7 @@ R_API int r_sign_metric_search(RAnal *a, RSignSearchMetrics *sm) {
 		}
 		r_sign_item_free (ctx.it);
 	}
-	r_cons_break_pop ();
+	r_cons_break_pop (core->cons);
 	free (ctx.suggest);
 	return ctx.matched;
 }

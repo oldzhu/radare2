@@ -476,10 +476,10 @@ static int r_line_readchar_win(RCons *cons, ut8 *s, int slen) {
 	GetConsoleMode (h, &mode);
 	SetConsoleMode (h, new_mode);
 	if (cons->line->zerosep) {
-		bed = r_kons_sleep_begin (cons);
+		bed = r_cons_sleep_begin (cons);
 		DWORD rsz = 0;
 		BOOL ret = ReadFile (h, s, 1, &rsz, NULL);
-		r_kons_sleep_end (cons, bed);
+		r_cons_sleep_end (cons, bed);
 		SetConsoleMode (h, mode);
 		if (!ret || rsz != 1) {
 			return 0;
@@ -487,13 +487,13 @@ static int r_line_readchar_win(RCons *cons, ut8 *s, int slen) {
 		return 1;
 	}
 do_it_again:
-	bed = r_kons_sleep_begin (cons);
+	bed = r_cons_sleep_begin (cons);
 	if (cons->term_xterm) {
 		ret = ReadFile (h, buf, 1, &out, NULL);
 	} else {
 		ret = ReadConsoleInput (h, &irInBuf, 1, &out);
 	}
-	r_kons_sleep_end (cons, bed);
+	r_cons_sleep_end (cons, bed);
 	if (ret < 1) {
 		return 0;
 	}
@@ -708,7 +708,7 @@ R_API int r_line_hist_list(RLine *line, bool full) {
 		i = full? 0: line->history.load_index;
 		for (; i < line->history.size && line->history.data[i]; i++) {
 			const char *pad = r_str_pad (' ', 32 - strlen (line->history.data[i]));
-			r_cons_printf ("%s %s # !%d\n", line->history.data[i], pad, i);
+			r_kons_printf (line->cons, "%s %s # !%d\n", line->history.data[i], pad, i);
 		}
 	}
 	return i;
@@ -819,24 +819,24 @@ static void selection_widget_draw(RCons *cons) {
 
 	for (y = 0; y < sel_widget->h; y++) {
 		if (sel_widget->direction == R_SELWIDGET_DIR_UP) {
-			r_kons_gotoxy (cons, pos_x + 1, pos_y - y - 1);
+			r_cons_gotoxy (cons, pos_x + 1, pos_y - y - 1);
 		} else {
-			r_kons_gotoxy (cons, pos_x + 1, pos_y + y + 1);
+			r_cons_gotoxy (cons, pos_x + 1, pos_y + y + 1);
 		}
 		int scroll = R_MAX (0, sel_widget->selection - sel_widget->scroll);
 		const char *option = y < sel_widget->options_len? sel_widget->options[y + scroll]: "";
 		r_kons_printf (cons, "%s", sel_widget->selection == y + scroll? selected_color: background_color);
 		r_kons_printf (cons, "%-*.*s", sel_widget->w, sel_widget->w, option);
 		if (scrollbar && R_BETWEEN (scrollbar_y, y, scrollbar_y + scrollbar_l)) {
-			r_kons_write (cons, Color_INVERT " "Color_INVERT_RESET, 10);
+			r_cons_write (cons, Color_INVERT " "Color_INVERT_RESET, 10);
 		} else {
-			r_kons_write (cons, " ", 1);
+			r_cons_write (cons, " ", 1);
 		}
 	}
 
-	r_kons_gotoxy (cons, pos_x + line->buffer.length, pos_y);
-	r_kons_write (cons, Color_RESET_BG, 5);
-	r_kons_flush (cons);
+	r_cons_gotoxy (cons, pos_x + line->buffer.length, pos_y);
+	r_cons_write (cons, Color_RESET_BG, 5);
+	r_cons_flush (cons);
 }
 
 static void selection_widget_up(RLine *line, int steps) {
@@ -889,7 +889,7 @@ static void print_rline_task(void *_core) {
 	RLine *line = cons->line;
 	r_kons_clear_line (cons, 0);
 	r_kons_printf (cons, "%s%s%s", Color_RESET, line->prompt, line->buffer.data);
-	r_kons_flush (cons);
+	r_cons_flush (cons);
 }
 
 static void selection_widget_erase(RLine *line) {
@@ -953,7 +953,7 @@ static void selection_widget_update(RLine *line) {
 		line->sel_widget->direction = R_SELWIDGET_DIR_UP;
 	}
 	selection_widget_draw (line->cons);
-	r_kons_flush (line->cons);
+	r_cons_flush (line->cons);
 	return;
 }
 
@@ -962,7 +962,7 @@ R_API void r_line_autocomplete(RCons *cons) {
 	const char **argv = NULL;
 	int argc = 0, i, j, plen, len = 0;
 	bool opt = false;
-	int cols = (int) (r_kons_get_size (cons, NULL) * 0.82);
+	int cols = (int) (r_cons_get_size (cons, NULL) * 0.82);
 
 	RLine *line = cons->line;
 	/* prepare argc and argv */
@@ -1157,14 +1157,14 @@ static void __print_prompt(RCons *cons) {
 		R_LOG_WARN ("printing prompt without cons is wrong");
 	}
 	RLine *line = cons->line;
-	int columns = r_cons_get_size (NULL) - 2;
+	int columns = r_cons_get_size (cons, NULL) - 2;
 	int len, i, cols = R_MAX (1, columns - r_str_ansi_len (line->prompt) - 2);
 	if (cons->line->prompt_type == R_LINE_PROMPT_OFFSET) {
-		r_cons_gotoxy (0, cons->rows);
-		r_cons_flush ();
+		r_cons_gotoxy (cons, 0, cons->rows);
+		r_cons_flush (cons);
 	}
 	// printf ("%s", promptcolor ());
-	r_cons_clear_line (0);
+	r_kons_clear_line (cons, 0);
 	if (cons->context->color_mode > 0) {
 		printf ("\r%s%s%s", Color_RESET, promptcolor (cons), line->prompt);
 	} else {
@@ -1712,16 +1712,16 @@ R_API const char *r_line_readline_cb(RCons *cons, RLineReadCallback cb, void *us
 	}
 
 	memset (&buf, 0, sizeof buf);
-	r_kons_set_raw (cons, 1);
+	r_cons_set_raw (cons, 1);
 
 	if (cons->line->echo) {
 		__print_prompt (cons);
 	}
-	r_kons_break_push (cons, NULL, NULL);
-	r_kons_enable_mouse (cons, cons->line->hud);
+	r_cons_break_push (cons, NULL, NULL);
+	r_cons_enable_mouse (cons, cons->line->hud);
 	for (;;) {
 		D.yank_flag = false;
-		if (r_kons_is_breaked (cons)) {
+		if (r_cons_is_breaked (cons)) {
 			break;
 		}
 #if 0
@@ -1743,7 +1743,7 @@ R_API const char *r_line_readline_cb(RCons *cons, RLineReadCallback cb, void *us
 #if USE_UTF8
 		utflen = readchar_utf8 (cons, (ut8 *) buf, sizeof (buf));
 		if (utflen < (line->demo? 0: 1)) {
-			r_cons_break_pop ();
+			r_cons_break_pop (cons);
 			return NULL;
 		}
 		buf[utflen] = 0;
@@ -1758,7 +1758,7 @@ R_API const char *r_line_readline_cb(RCons *cons, RLineReadCallback cb, void *us
 		{
 			int len = r_line_readchar_win (cons, (ut8 *) buf, sizeof (buf));
 			if (len < 1) {
-				r_cons_break_pop ();
+				r_cons_break_pop (cons);
 				return NULL;
 			}
 			buf[len] = 0;
@@ -1766,7 +1766,7 @@ R_API const char *r_line_readline_cb(RCons *cons, RLineReadCallback cb, void *us
 #else
 		ch = r_cons_readchar (cons);
 		if (ch == -1) {
-			r_cons_break_pop ();
+			r_cons_break_pop (cons);
 			return NULL;
 		}
 		buf[0] = ch;
@@ -1775,10 +1775,10 @@ R_API const char *r_line_readline_cb(RCons *cons, RLineReadCallback cb, void *us
 		bool o_do_setup_match = line->history.do_setup_match;
 		line->history.do_setup_match = true;
 		if (line->echo && cons->context->color_mode) {
-			r_cons_clear_line (0);
+			r_kons_clear_line (cons, 0);
 		}
 repeat:
-		(void) r_cons_get_size (&rows);
+		(void) r_cons_get_size (cons, &rows);
 		switch (*buf) {
 		case 0:	// control-space
 			/* ignore atm */
@@ -1837,8 +1837,8 @@ repeat:
 				if (line->echo) {
 					eprintf ("^D\n");
 				}
-				r_kons_set_raw (cons, false);
-				r_kons_break_pop (cons);
+				r_cons_set_raw (cons, false);
+				r_cons_break_pop (cons);
 				return NULL;
 			}
 			if (line->buffer.index < line->buffer.length) {
@@ -2038,7 +2038,7 @@ repeat:
 				if (line->vtmode == 2) {
 					buf[1] = r_cons_readchar_timeout (cons, 50);
 					if (buf[1] == -1) { // alt+e
-						r_kons_break_pop (cons);
+						r_cons_break_pop (cons);
 						__print_prompt (cons);
 						continue;
 					}
@@ -2067,19 +2067,19 @@ repeat:
 							buf[1] = r_cons_readchar (cons);
 							if (buf[1] == 126) {
 								// handle SUPR key
-								r_kons_break_pop (cons);
+								r_cons_break_pop (cons);
 								__print_prompt (cons);
 								continue;
 							}
 							if (buf[1] == -1) {
-								r_kons_break_pop (cons);
+								r_cons_break_pop (cons);
 								return NULL;
 							}
 						}
 						for (;;) {
 							ch = r_cons_readchar (cons);
 							if (ch < 20) {
-								r_cons_break_pop ();
+								r_cons_break_pop (cons);
 								return NULL;
 							}
 							if (isupper (ch)) {	// read until 'M'
@@ -2145,7 +2145,7 @@ repeat:
 						} else {
 							line->history.do_setup_match = o_do_setup_match;
 							if (r_line_hist_up (line) == -1) {
-								r_kons_break_pop (line->cons);
+								r_cons_break_pop (line->cons);
 								return NULL;
 							}
 						}
@@ -2165,7 +2165,7 @@ repeat:
 						} else {
 							line->history.do_setup_match = o_do_setup_match;
 							if (r_line_hist_down (line) == -1) {
-								r_kons_break_pop (line->cons);
+								r_cons_break_pop (line->cons);
 								return NULL;
 							}
 						}
@@ -2230,7 +2230,7 @@ repeat:
 							}
 							break;
 						}
-						r_cons_set_raw (true);
+						r_cons_set_raw (cons, true);
 						break;
 					case 0x37: // HOME xrvt-unicode
 						r_cons_readchar (cons);
@@ -2398,9 +2398,9 @@ repeat:
 		}
 	}
 _end:
-	r_kons_break_pop (cons);
-	r_cons_set_raw (false);
-	r_kons_enable_mouse (cons, mouse_status);
+	r_cons_break_pop (cons);
+	r_cons_set_raw (cons, false);
+	r_cons_enable_mouse (cons, mouse_status);
 #if 0
 	if (line->buffer.length > 1024) {	// R2_590 - use line->maxlength
 		line->buffer.data[0] = 0;
