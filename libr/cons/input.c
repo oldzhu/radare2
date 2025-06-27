@@ -400,9 +400,9 @@ beach:
 
 R_API int r_cons_any_key(RCons *cons, const char *msg) {
 	if (R_STR_ISNOTEMPTY (msg)) {
-		r_kons_printf (cons, "\n-- %s --\n", msg);
+		r_cons_printf (cons, "\n-- %s --\n", msg);
 	} else {
-		r_kons_print (cons, "\n--press any key--\n");
+		r_cons_print (cons, "\n--press any key--\n");
 	}
 	r_cons_flush (cons);
 	return r_cons_readchar (cons);
@@ -590,29 +590,29 @@ R_API int r_cons_readchar_timeout(RCons *cons, ut32 msec) {
 #endif
 }
 
-R_API bool r_cons_readpush(const char *str, int len) {
-	InputState *input_state = r_cons_input_state ();
-	char *res = (len + input_state->readbuffer_length > 0)
-		? realloc (input_state->readbuffer, len + input_state->readbuffer_length)
+R_API bool r_cons_readpush(RCons *cons, const char *str, int len) {
+	InputState *is = &cons->input_state;
+	char *res = (len + is->readbuffer_length > 0)
+		? realloc (is->readbuffer, len + is->readbuffer_length)
 		: NULL;
 	if (res) {
-		input_state->readbuffer = res;
-		memmove (input_state->readbuffer + input_state->readbuffer_length, str, len);
-		input_state->readbuffer_length += len;
+		is->readbuffer = res;
+		memmove (is->readbuffer + is->readbuffer_length, str, len);
+		is->readbuffer_length += len;
 		return true;
 	}
 	return false;
 }
 
-R_API void r_cons_readflush(void) {
-	InputState *input_state = r_cons_input_state ();
-	R_FREE (input_state->readbuffer);
-	input_state->readbuffer_length = 0;
+R_API void r_cons_readflush(RCons *cons) {
+	InputState *is = &cons->input_state;
+	R_FREE (is->readbuffer);
+	is->readbuffer_length = 0;
 }
 
-R_API void r_cons_switchbuf(bool active) {
-	InputState *input_state = r_cons_input_state ();
-	input_state->bufactive = active;
+R_API void r_cons_switchbuf(RCons *cons, bool active) {
+	InputState *is = &cons->input_state;
+	is->bufactive = active;
 }
 
 #if !R2__WINDOWS__
@@ -678,7 +678,7 @@ R_API int r_cons_readchar(RCons *cons) {
 #endif
 }
 
-R_API bool r_kons_yesno(RCons *cons, int def, const char *fmt, ...) {
+R_API bool r_cons_yesno(RCons *cons, int def, const char *fmt, ...) {
 	va_list ap;
 	ut8 key = (ut8)def;
 	va_start (ap, fmt);
