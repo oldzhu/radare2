@@ -20,6 +20,7 @@ typedef struct {
 } QjsContext;
 #define QJS_CORE_MAGIC 0x07534617
 
+// TODO: deprecate
 typedef struct qjs_core_plugin {
 	char *name;
 	QjsContext qctx;
@@ -84,7 +85,7 @@ typedef struct qjs_plugin_manager_t {
 	RVecAsmPlugin asm_plugins;
 } QjsPluginManager;
 
-static QjsPluginManager *Gpm = NULL; // XXX globals
+// static QjsPluginManager *Gpm = NULL; // XXX globals
 static bool plugin_manager_init(QjsPluginManager *pm, RCore *core, JSRuntime *rt) {
 	pm->core = core;
 	pm->rt = rt;
@@ -186,6 +187,7 @@ static bool plugin_manager_remove_core_plugin(QjsPluginManager *pm, const char *
 	ut64 index = RVecCorePlugin_find_index (&pm->core_plugins, (void*) name, compare_core_plugin_name);
 	if (index != UT64_MAX) {
 		pm->core->lang->cmdf (pm->core, "L-%s", name);
+		//JS_FreeValue(pm->default_ctx.ctx, pm->default_ctx.call_func);
 		RVecCorePlugin_remove (&pm->core_plugins, index);
 		return true;
 	}
@@ -252,7 +254,7 @@ static bool plugin_manager_remove_plugin(QjsPluginManager *pm, const char *type,
 	return false;
 }
 
-static void plugin_manager_fini (QjsPluginManager *pm) {
+static void plugin_manager_fini(QjsPluginManager *pm) {
 	RVecCorePlugin_fini (&pm->core_plugins);
 	RVecArchPlugin_fini (&pm->arch_plugins);
 	RVecIoPlugin_fini (&pm->io_plugins);
@@ -921,12 +923,7 @@ static bool init(RLangSession *ls) {
 		return false;
 	}
 	QjsPluginManager *pm = R_NEW0 (QjsPluginManager);
-	if (!pm) {
-		JS_FreeContext (ctx);
-		JS_FreeRuntime (rt);
-		return false;
-	}
-	Gpm = pm;
+	// Gpm = pm;
 	pm->magic = QJS_CORE_MAGIC;
 	RCore *core = ls->lang->user;
 	plugin_manager_init (pm, core, rt);

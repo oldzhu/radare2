@@ -5585,6 +5585,11 @@ static bool is_important(RBinElfReloc *reloc) {
 	case 1026:
 		return true;
 	}
+	// ignored
+	switch (reloc->type) {
+	case 7:
+		return false;
+	}
 
 	R_LOG_DEBUG ("Reloc type %d not used for imports", reloc->type);
 	return false;

@@ -3500,7 +3500,7 @@ static void search_similar_pattern(RCore *core, int count, struct search_paramet
 
 static bool isArm(RCore *core) {
 	RAsm *as = core ? core->rasm : NULL;
-	if (as && as->config && as->config->arch) {
+	if (as && as->config) {
 		if (r_str_startswith (as->config->arch, "arm")) {
 			if (as->config->bits < 64) {
 				return true;
@@ -4742,27 +4742,22 @@ reread:
 					sp++;
 					char *hashName = s;
 					ut8 *hashValue = (ut8*)strdup (sp);
-					if (hashValue) {
-						if (!r_str_startswith ((const char *)hashValue, "0x")) {
-							// TODO: support bigger hashes
-							int hashLength = 4;
-							ut32 n = (ut32)r_num_get (NULL, (const char *)hashValue);
-							memcpy (hashValue, (const ut8*)&n, sizeof (ut32));
+					if (!r_str_startswith ((const char *)hashValue, "0x")) {
+						// TODO: support bigger hashes
+						int hashLength = 4;
+						ut32 n = (ut32)r_num_get (NULL, (const char *)hashValue);
+						memcpy (hashValue, (const ut8*)&n, sizeof (ut32));
+						search_collisions (core, hashName, hashValue, hashLength, mode);
+					} else {
+						int hashLength = r_hex_str2bin (sp, hashValue);
+						if (hashLength > 0) {
 							search_collisions (core, hashName, hashValue, hashLength, mode);
 						} else {
-							int hashLength = r_hex_str2bin (sp, hashValue);
-							if (hashLength > 0) {
-								search_collisions (core, hashName, hashValue, hashLength, mode);
-							} else {
-								eprintf ("Invalid expected hash hexpairs.\n");
-							}
+							eprintf ("Invalid expected hash hexpairs.\n");
 						}
-						free (hashValue);
-						r_core_return_value (core, 0);
-					} else {
-						eprintf ("Cannot allocate memory.\n");
-						r_core_return_value (core, 1);
 					}
+					free (hashValue);
+					r_core_return_value (core, 0);
 				} else {
 					r_core_cmd_help (core, help_msg_slash_cc);
 				}

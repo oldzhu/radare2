@@ -5,13 +5,13 @@
 
 #define COUNT_LINES 1
 
+static R_TH_LOCAL RCons *I = NULL;
+
 R_LIB_VERSION (r_cons);
 
 static RCons s_cons_global = {0};
 
 static void __break_signal(int sig);
-// XXX this is wrong
-static R_TH_LOCAL RCons *I = NULL;
 
 #define MOAR (4096 * 8)
 
@@ -76,12 +76,9 @@ static void grep_word_free(RConsGrepWord *gw) {
 
 static void cons_grep_reset(RConsGrep *grep) {
 	if (grep) {
-		free (grep->str);
-		grep->str = NULL;
-		if (grep->strings) {
-			r_list_free (grep->strings);
-			grep->strings = r_list_newf ((RListFree)grep_word_free);
-		}
+		R_FREE (grep->str);
+		r_list_free (grep->strings);
+		grep->strings = r_list_newf ((RListFree)grep_word_free);
 		ZERO_FILL (*grep);
 		grep->line = -1;
 		grep->sort = -1;
@@ -152,9 +149,12 @@ static void cons_stack_load(RConsContext *C, RConsStack *data, bool free_current
 }
 
 static void cons_context_deinit(RConsContext *ctx) {
-	return;
+	if (!ctx) {
+		return;
+	}
 	// r_stack_free (ctx->cons_stack);
 	r_list_free (ctx->marks);
+	ctx->marks = NULL;
 	ctx->cons_stack = NULL;
 	r_stack_free (ctx->break_stack);
 	ctx->break_stack = NULL;
@@ -313,6 +313,7 @@ R_API void r_cons_free2(RCons * R_NULLABLE cons) {
 		r_cons_pop (cons);
 	}
 	r_cons_context_free (cons->context);
+	r_list_free (cons->ctx_stack);
 #if 0
 	RConsContext *ctx = cons->context;
 	R_FREE (ctx->buffer);
@@ -344,23 +345,13 @@ static inline void init_cons_instance(void) {
 #endif
 }
 
-static RConsContext *getctx(void) {
-	init_cons_instance ();
-	return I->context;
-}
-
-R_API InputState *r_cons_input_state(void) {
-	init_cons_instance ();
-	return &I->input_state;
-}
-
 R_API bool r_cons_is_initialized(void) {
 	return I != NULL;
 }
 
-R_API RColor r_cons_color_random(ut8 alpha) {
+R_API RColor r_cons_color_random(RCons *cons, ut8 alpha) {
 	RColor rcolor = {0};
-	RConsContext *ctx = getctx ();
+	RConsContext *ctx = cons->context;
 	if (ctx->color_mode > COLOR_MODE_16) {
 		rcolor.r = r_num_rand (0xff);
 		rcolor.g = r_num_rand (0xff);
@@ -535,10 +526,12 @@ R_API bool r_cons_is_interactive(RCons *cons) {
 	return cons->context->is_interactive;
 }
 
+#if 0
 R_API bool r_cons_default_context_is_interactive(void) {
 	// XXX this is pure evil
 	return I->context->is_interactive;
 }
+#endif
 
 R_API bool r_cons_was_breaked(RCons *cons) {
 #if WANT_DEBUGSTUFF
@@ -734,6 +727,7 @@ R_API void r_cons_free(RCons *cons) {
 	if (cons == I) {
 		I = NULL; // hack for globals
 	}
+	free (cons);
 }
 
 R_API void r_cons_fill_line(RCons *cons) {
@@ -1248,6 +1242,7 @@ R_API void r_cons_bind(RCons *cons, RConsBind *bind) {
 	bind->get_size = r_cons_get_size;
 	bind->get_cursor = r_cons_get_cursor;
 	bind->cb_printf = r_cons_printf;
+	bind->cb_write = r_cons_write;
 	bind->cb_flush = r_cons_flush;
 	bind->cb_grep = mygrep;
 	bind->is_breaked = r_cons_is_breaked;
@@ -1354,8 +1349,9 @@ R_API void r_cons_memset(RCons *cons, char ch, int len) {
 	}
 }
 
-R_API int r_cons_write(RCons *cons, const char *str, int len) {
-	R_RETURN_VAL_IF_FAIL (str && len >= 0, -1);
+R_API int r_cons_write(RCons *cons, const void *data, int len) {
+	R_RETURN_VAL_IF_FAIL (data && len >= 0, -1);
+	const char *str = data;
 	RConsContext *ctx = cons->context;
 	if (len < 1 || ctx->breaked) {
 		return 0;
@@ -1445,9 +1441,9 @@ R_API void r_cons_clear_buffer(RCons *cons) {
 	}
 }
 
-R_API void r_cons_set_raw(RCons *I, bool is_raw) {
-	if (I->oldraw != 0) {
-		if (is_raw == I->oldraw - 1) {
+R_API void r_cons_set_raw(RCons *cons, bool is_raw) {
+	if (cons->oldraw != 0) {
+		if (is_raw == cons->oldraw - 1) {
 			return;
 		}
 	}
@@ -1456,36 +1452,36 @@ R_API void r_cons_set_raw(RCons *I, bool is_raw) {
 #elif R2__UNIX__
 	struct termios *term_mode;
 	if (is_raw) {
-		I->term_raw.c_lflag &= ~(ECHO|ECHONL|ICANON|ISIG|IEXTEN);
-		term_mode = &I->term_raw;
+		cons->term_raw.c_lflag &= ~(ECHO|ECHONL|ICANON|ISIG|IEXTEN);
+		term_mode = &cons->term_raw;
 	} else {
-		term_mode = &I->term_buf;
+		term_mode = &cons->term_buf;
 	}
 	if (tcsetattr (0, TCSANOW, term_mode) == -1) {
 		return;
 	}
 #elif R2__WINDOWS__
-	if (I->term_xterm) {
+	if (cons->term_xterm) {
 		char *stty = r_file_path ("stty");
 		if (!stty || *stty == 's') {
-			I->term_xterm = false;
+			cons->term_xterm = false;
 		}
 		free (stty);
 	}
-	if (I->term_xterm) {
+	if (cons->term_xterm) {
 		const char *cmd = is_raw
 			? "stty raw -echo"
 			: "stty raw echo";
 		r_sandbox_system (cmd, 1);
 	} else {
-		if (!SetConsoleMode (h, is_raw? I->term_raw: I->term_buf)) {
+		if (!SetConsoleMode (h, is_raw? cons->term_raw: cons->term_buf)) {
 			return;
 		}
 	}
 #else
 #warning No raw console supported for this platform
 #endif
-	I->oldraw = is_raw + 1;
+	cons->oldraw = is_raw + 1;
 }
 
 R_API void r_cons_newline(RCons *cons) {
@@ -1598,6 +1594,9 @@ R_API void r_cons_context_free(RConsContext * R_NULLABLE ctx) {
 		r_cons_context_pal_free (ctx);
 		r_stack_free (ctx->break_stack);
 
+		// Free the marks list
+		r_list_free (ctx->marks);
+
 		// Free the grep strings list
 		r_list_free (ctx->grep.strings);
 
@@ -1624,14 +1623,14 @@ R_API RConsContext *r_cons_context_clone(RConsContext *ctx) {
 	if (ctx->lastOutput) {
 		c->lastOutput = r_mem_dup (ctx->lastOutput, ctx->lastLength);
 	}
+	// Don't clone marks to avoid double free issues
+	c->marks = r_list_newf ((RListFree)mark_free);
 	if (ctx->sorted_lines) {
 		c->sorted_lines = r_list_clone (ctx->sorted_lines, (RListClone)strdup);
 	}
 	if (ctx->unsorted_lines) {
 		c->unsorted_lines = r_list_clone (ctx->unsorted_lines, (RListClone)strdup);
 	}
-	// Don't clone marks - avoid double free issues
-	c->marks = NULL;
 	c->pal.rainbow = NULL;
 	pal_clone (c);
 	// rainbow_clone (c);
@@ -1796,10 +1795,10 @@ R_API void r_cons_echo(RCons *cons, const char *msg) {
 	}
 }
 
-R_API void r_cons_show_cursor(RCons *I, int cursor) {
-	RConsContext *C = I->context;
+R_API void r_cons_show_cursor(RCons *cons, int cursor) {
+	RConsContext *C = cons->context;
 #if R2__WINDOWS__
-	if (I->vtmode) {
+	if (cons->vtmode) {
 #endif
 		if (write (1, cursor ? "\x1b[?25h" : "\x1b[?25l", 6) != 6) {
 			C->breaked = true;

@@ -64,11 +64,11 @@ static RCoreHelpMessage help_msg_T = {
 
 static void screenlock(RCore *core) {
 	//  char *pass = r_cons_input ("Enter new password: ");
-	char *pass = r_cons_password (Color_INVERT "Enter new password:"Color_INVERT_RESET);
-	if (!pass || !*pass) {
+	char *pass = r_cons_password (core->cons, Color_INVERT "Enter new password:"Color_INVERT_RESET);
+	if (R_STR_ISEMPTY (pass)) {
 		return;
 	}
-	char *again = r_cons_password (Color_INVERT "Type it again:"Color_INVERT_RESET);
+	char *again = r_cons_password (core->cons, Color_INVERT "Type it again:"Color_INVERT_RESET);
 	if (!again || !*again) {
 		free (pass);
 		return;
@@ -97,7 +97,7 @@ static void screenlock(RCore *core) {
 		}
 		r_cons_newline (core->cons);
 		r_cons_flush (core->cons);
-		char *msg = r_cons_password ("radare2 password: ");
+		char *msg = r_cons_password (core->cons, "radare2 password: ");
 		if (msg && !strcmp (msg, pass)) {
 			running = false;
 		} else {
@@ -408,7 +408,9 @@ static int cmd_plugins(void *data, const char *input) {
 		r_core_cmd_help (core, help_msg_L);
 		break;
 	case '-':
-		r_lib_close (core->lib, r_str_trim_head_ro (input + 1));
+		if (!r_lib_close (core->lib, r_str_trim_head_ro (input + 1))) {
+			R_LOG_WARN ("Cannot find plugin");
+		}
 		break;
 	case ' ':
 		r_lib_open (core->lib, r_str_trim_head_ro (input + 1));
@@ -667,7 +669,10 @@ static int cmd_plugins(void *data, const char *input) {
 			break;
 			}
 		case '-':
-			r_core_cmd_callf (core, "L-%s", r_str_trim_head_ro (input + 2));
+			if (!r_lib_close (core->lib, r_str_trim_head_ro (input + 2))) {
+				R_LOG_WARN ("Cannot find plugin");
+			}
+			// r_core_cmd_callf (core, "L-%s", r_str_trim_head_ro (input + 2));
 			break;
 		case ' ':
 			{
