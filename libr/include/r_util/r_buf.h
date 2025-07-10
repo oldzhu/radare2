@@ -47,6 +47,8 @@ typedef enum {
 	R_BUFFER_SPARSE,
 	R_BUFFER_REF,
 	R_BUFFER_CACHE,
+	// last
+	R_BUFFER_COUNT
 } RBufferType;
 
 typedef struct r_buf_file_t {
@@ -67,8 +69,9 @@ typedef struct r_buf_bytes_t {
 } RBufferBytes;
 
 typedef struct r_buf_mmap_t {
-	// NOTE: this needs to be first, so that bytes operations will work without changes
-	RBufferBytes bytes;
+// NOTE: this needs to be first, so that bytes operations will work without changes
+//	RBufferBytes bytes;
+	ut64 offset;
 	RMmap *mmap;
 } RBufferMmap;
 

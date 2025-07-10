@@ -25,13 +25,13 @@
 #include <process.h>
 #endif
 
+#define BS 1024
+
 #if R2__UNIX__ && !defined(__serenity__)
 #define RDWR_FLAGS O_RDWR | O_SYNC
 #else
 #define RDWR_FLAGS O_RDWR
 #endif
-
-#define BS 1024
 
 static int file_stat(const char *file, struct stat* const pStat) {
 	R_RETURN_VAL_IF_FAIL (file && pStat, -1);
@@ -369,7 +369,7 @@ R_API char *r_stdin_readline(int *sz) {
 
 R_API char *r_stdin_slurp(int *sz) {
 #if (R2__UNIX__ || R2__WINDOWS__) && !__wasi__
-	int i, ret, newfd;
+	int i, ret;
 	char *buf = NULL;
 #if R2__WINDOWS__
 	int stdinfd = _fileno (stdin);
@@ -377,7 +377,8 @@ R_API char *r_stdin_slurp(int *sz) {
 #else
 	int stdinfd = fileno (stdin);
 #endif
-	if ((newfd = dup (stdinfd)) < 0) {
+	int newfd = dup (stdinfd);
+	if (newfd < 0) {
 		goto beach;
 	}
 	buf = malloc (BS);
@@ -964,278 +965,19 @@ R_API char *r_file_readlink(const char *path) {
 #if R2__UNIX__
 		int ret;
 		char pathbuf[4096] = {0};
-		strncpy (pathbuf, path, sizeof (pathbuf) - 1);
-		repeat:
-		ret = readlink (path, pathbuf, sizeof (pathbuf)-1);
-		if (ret != -1) {
+		r_str_ncpy (pathbuf, path, sizeof (pathbuf));
+		for (;;) {
+			ret = readlink (path, pathbuf, sizeof (pathbuf)-1);
+			if (ret == -1) {
+				break;
+			}
 			pathbuf[ret] = 0;
 			path = pathbuf;
-			goto repeat;
 		}
 		return strdup (pathbuf);
 #endif
 	}
 	return NULL;
-}
-
-R_API int r_file_mmap_write(const char *file, ut64 addr, const ut8 *buf, int len) {
-#if R2__WINDOWS__
-	HANDLE fh = INVALID_HANDLE_VALUE;
-	DWORD written = 0;
-	LPTSTR file_ = NULL;
-	int ret = -1;
-
-	if (r_sandbox_enable (0)) {
-		return -1;
-	}
-	file_ = r_sys_conv_utf8_to_win (file);
-	fh = CreateFile (file_, GENERIC_READ|GENERIC_WRITE,
-		FILE_SHARE_READ | FILE_SHARE_WRITE,
-		NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if (fh == INVALID_HANDLE_VALUE) {
-		r_sys_perror ("r_file_mmap_write/CreateFile");
-		goto err_r_file_mmap_write;
-	}
-	SetFilePointer (fh, addr, NULL, FILE_BEGIN);
-	if (!WriteFile (fh, buf, (DWORD)len,  &written, NULL)) {
-		r_sys_perror ("r_file_mmap_write/WriteFile");
-		goto err_r_file_mmap_write;
-	}
-	ret = len;
-err_r_file_mmap_write:
-	free (file_);
-	if (fh != INVALID_HANDLE_VALUE) {
-		CloseHandle (fh);
-	}
-	return ret;
-#elif __wasi__ || EMSCRIPTEN
-	return -1;
-#elif R2__UNIX__
-	int fd = r_sandbox_open (file, RDWR_FLAGS, 0644);
-	const int pagesize = getpagesize ();
-	int mmlen = len + pagesize;
-	int rest = addr % pagesize;
-	ut8 *mmap_buf;
-	if (fd == -1) {
-		return -1;
-	}
-	if ((st64)addr < 0) {
-		return -1;
-	}
-	mmap_buf = mmap (NULL, mmlen * 2, PROT_READ|PROT_WRITE, MAP_SHARED, fd, (off_t)addr - rest);
-	if (((int)(size_t)mmap_buf) == -1) {
-		return -1;
-	}
-	memcpy (mmap_buf + rest, buf, len);
-#if !defined(__serenity__)
-	msync (mmap_buf + rest, len, MS_INVALIDATE);
-#endif
-	munmap (mmap_buf, mmlen * 2);
-	close (fd);
-	return len;
-#else
-	return -1;
-#endif
-}
-
-R_API int r_file_mmap_read(const char *file, ut64 addr, ut8 *buf, int len) {
-#if R2__WINDOWS__
-	HANDLE fm = NULL, fh = INVALID_HANDLE_VALUE;
-	LPTSTR file_ = NULL;
-	int ret = -1;
-	if (r_sandbox_enable (0)) {
-		return -1;
-	}
-	file_ = r_sys_conv_utf8_to_win (file);
-	fh = CreateFile (file_, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
-	if (fh == INVALID_HANDLE_VALUE) {
-		r_sys_perror ("r_file_mmap_read/CreateFile");
-		goto err_r_file_mmap_read;
-	}
-	fm = CreateFileMapping (fh, NULL, PAGE_READONLY, 0, 0, NULL);
-	if (!fm) {
-		r_sys_perror ("CreateFileMapping");
-		goto err_r_file_mmap_read;
-	}
-	ut8 *obuf = MapViewOfFile (fm, FILE_MAP_READ, 0, 0, len);
-	if (!obuf) {
-		goto err_r_file_mmap_read;
-	}
-	memcpy (obuf, buf, len);
-	UnmapViewOfFile (obuf);
-	ret = len;
-err_r_file_mmap_read:
-	if (fh != INVALID_HANDLE_VALUE) {
-		CloseHandle (fh);
-	}
-	if (fm) {
-		CloseHandle (fm);
-	}
-	free (file_);
-	return ret;
-#elif __wasi__ || EMSCRIPTEN
-	return 0;
-#elif R2__UNIX__
-	int fd = r_sandbox_open (file, O_RDONLY, 0644);
-	const int pagesize = 4096;
-	int mmlen = len + pagesize;
-	int rest = addr % pagesize;
-	if (fd == -1) {
-		return -1;
-	}
-	ut8 *mmap_buf = mmap (NULL, mmlen * 2, PROT_READ, MAP_SHARED, fd, (off_t)addr - rest);
-	if (((int)(size_t)mmap_buf) == -1) {
-		return -1;
-	}
-	memcpy (buf, mmap_buf + rest, len);
-	munmap (mmap_buf, mmlen * 2);
-	close (fd);
-	return len;
-#else
-	return 0;
-#endif
-}
-
-#if __wasi__ || EMSCRIPTEN
-static RMmap *r_file_mmap_unix(RMmap *m, int fd) {
-	return NULL;
-}
-#elif R2__UNIX__
-static RMmap *r_file_mmap_unix(RMmap *m, int fd) {
-	ut8 empty = m->len == 0;
-	m->buf = mmap (NULL, (empty?BS:m->len) ,
-		m->rw?PROT_READ|PROT_WRITE:PROT_READ,
-		MAP_SHARED, fd, (off_t)m->base);
-	if (m->buf == MAP_FAILED) {
-		m->buf = NULL;
-	}
-	return m;
-}
-#elif R2__WINDOWS__
-static RMmap *r_file_mmap_windows(RMmap *m, const char *file) {
-	LPTSTR file_ = r_sys_conv_utf8_to_win (file);
-	bool success = false;
-
-	m->fh = CreateFile (file_, GENERIC_READ | (m->rw ? GENERIC_WRITE : 0),
-		FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-		OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if (m->fh == INVALID_HANDLE_VALUE) {
-		r_sys_perror ("CreateFile");
-		goto err_r_file_mmap_windows;
-	}
-	m->fm = CreateFileMapping (m->fh, NULL, PAGE_READONLY, 0, 0, NULL);
-		//m->rw?PAGE_READWRITE:PAGE_READONLY, 0, 0, NULL);
-	if (!m->fm) {
-		r_sys_perror ("CreateFileMapping");
-		goto err_r_file_mmap_windows;
-
-	}
-	m->buf = MapViewOfFile (m->fm,
-		// m->rw?(FILE_MAP_READ|FILE_MAP_WRITE):FILE_MAP_READ,
-		FILE_MAP_COPY,
-		UT32_HI (m->base), UT32_LO (m->base), 0);
-	success = true;
-err_r_file_mmap_windows:
-	if (!success) {
-		if (m->fh != INVALID_HANDLE_VALUE) {
-			CloseHandle (m->fh);
-		}
-		R_FREE (m);
-	}
-	free (file_);
-	return m;
-}
-#else
-static RMmap *file_mmap_other(RMmap *m) {
-	ut8 empty = m->len == 0;
-	m->buf = malloc ((empty? BS: m->len));
-	if (!empty && m->buf) {
-		lseek (m->fd, (off_t)0, SEEK_SET);
-		read (m->fd, m->buf, m->len);
-	} else {
-		R_FREE (m);
-	}
-	return m;
-}
-#endif
-
-R_API RMmap *r_file_mmap_arch(RMmap *mmap, const char *filename, int fd) {
-#if R2__WINDOWS__
-	(void)fd;
-	return r_file_mmap_windows (mmap, filename);
-#elif R2__UNIX__
-	(void)filename;
-	return r_file_mmap_unix (mmap, fd);
-#else
-	(void)filename;
-	(void)fd;
-	return file_mmap_other (mmap);
-#endif
-}
-
-// TODO: add rwx support?
-R_API RMmap *r_file_mmap(const char *file, bool rw, ut64 base) {
-	if (!rw && !r_file_exists (file)) {
-		return NULL;
-	}
-	int fd = r_sandbox_open (file, rw? RDWR_FLAGS: O_RDONLY, 0644);
-	if (fd == -1 && !rw) {
-		R_LOG_ERROR ("r_file_mmap: file (%s) does not exist", file);
-		//m->buf = malloc (m->len);
-		return NULL;
-	}
-	RMmap *m = R_NEW (RMmap);
-	m->base = base;
-	m->rw = rw;
-	m->fd = fd;
-	m->len = fd != -1? lseek (fd, (off_t)0, SEEK_END) : 0;
-	m->filename = strdup (file);
-
-	if (m->fd == -1) {
-		return m;
-	}
-
-	if (m->len == (off_t)-1) {
-		close (fd);
-		R_FREE (m);
-		return NULL;
-	}
-#if R2__UNIX__
-	return r_file_mmap_unix (m, fd);
-#elif R2__WINDOWS__
-	close (fd);
-	m->fd = -1;
-	return r_file_mmap_windows (m, file);
-#else
-	return file_mmap_other (m);
-#endif
-}
-
-R_API void r_file_mmap_free(RMmap *m) {
-	if (!m) {
-		return;
-	}
-#if R2__WINDOWS__
-	if (m->fm != INVALID_HANDLE_VALUE) {
-		CloseHandle (m->fm);
-	}
-	if (m->fh != INVALID_HANDLE_VALUE) {
-		CloseHandle (m->fh);
-	}
-	if (m->buf) {
-		UnmapViewOfFile (m->buf);
-	}
-#endif
-	if (m->fd == -1) {
-		free (m);
-		return;
-	}
-	free (m->filename);
-#if R2__UNIX__ && !__wasi__
-	munmap (m->buf, m->len);
-#endif
-	close (m->fd);
-	free (m);
 }
 
 R_API char *r_file_temp(const char * R_NULLABLE prefix) {

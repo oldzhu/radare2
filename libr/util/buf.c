@@ -1,16 +1,15 @@
-/* radare - LGPL - Copyright 2009-2024 - ret2libc, pancake */
+/* radare - LGPL - Copyright 2009-2025 - ret2libc, pancake */
 
-#include <r_types.h>
 #include <r_util.h>
 #include <r_io.h>
 
-#include "buf_file.c"
-#include "buf_sparse.c"
-#include "buf_bytes.c"
-#include "buf_mmap.c"
-#include "buf_io.c"
-#include "buf_ref.c"
-#include "buf_cache.c"
+#include "buf_file.inc.c"
+#include "buf_sparse.inc.c"
+#include "buf_bytes.inc.c"
+#include "buf_mmap.inc.c"
+#include "buf_io.inc.c"
+#include "buf_ref.inc.c"
+#include "buf_cache.inc.c"
 
 static bool buf_init(RBuffer *b, const void *user) {
 	R_RETURN_VAL_IF_FAIL (b && b->methods, false);
@@ -36,14 +35,14 @@ static ut64 buf_get_size(RBuffer *b) {
 	return get_size? get_size (b): UT64_MAX;
 }
 
-static st64 buf_read(RBuffer *b, ut8 *buf, size_t len) {
+static inline st64 buf_read(RBuffer *b, ut8 *buf, size_t len) {
 	R_RETURN_VAL_IF_FAIL (b && b->methods, -1);
 	const RBufferRead bufread = b->methods->read;
 	R_RETURN_VAL_IF_FAIL (bufread, -1);
 	return bufread (b, buf, len);
 }
 
-static st64 buf_write(RBuffer *b, const ut8 *buf, size_t len) {
+static inline st64 buf_write(RBuffer *b, const ut8 *buf, size_t len) {
 	R_RETURN_VAL_IF_FAIL (b && b->methods, -1);
 	buf_wholefree (b);
 	const RBufferWrite bufwrite = b->methods->write;
@@ -62,6 +61,7 @@ static bool buf_resize(RBuffer *b, ut64 newsize) {
 	R_RETURN_VAL_IF_FAIL (b && b->methods, -1);
 	const RBufferResize bufresize = b->methods->resize;
 	R_RETURN_VAL_IF_FAIL (bufresize, false);
+	// eprintf("RESIZE TO %d\n", newsize);
 	return bufresize (b, newsize);
 }
 
@@ -257,16 +257,19 @@ R_API ut64 r_buf_tell(RBuffer *b) {
 
 R_API bool r_buf_set_bytes(RBuffer *b, const ut8 *buf, ut64 length) {
 	R_RETURN_VAL_IF_FAIL (b && buf && !b->readonly, false);
-	if (!r_buf_resize (b, 0)) {
+#if 0
+	if (r_buf_seek (b, 0, R_BUF_SET) == -1) {
 		return false;
 	}
-	if (r_buf_seek (b, 0, R_BUF_SET) == -1) {
+#endif
+	if (!r_buf_resize (b, 0)) {
 		return false;
 	}
 	if (!r_buf_append_bytes (b, buf, length)) {
 		return false;
 	}
-	return r_buf_seek (b, 0, R_BUF_SET) != -1;
+	return r_buf_seek (b, 0, R_BUF_SET) != -1; /// XXX must compare with length imho
+	// return r_buf_seek (b, 0, R_BUF_SET) == length;
 }
 
 R_API bool r_buf_prepend_bytes(RBuffer *b, const ut8 *buf, ut64 length) {
@@ -299,22 +302,31 @@ R_API ut8 *r_buf_drain(RBuffer *b, ut64 *size) {
 
 R_API bool r_buf_append_bytes(RBuffer *b, const ut8 *buf, ut64 length) {
 	R_RETURN_VAL_IF_FAIL (b && buf && !b->readonly, false);
-
+	if (b->type == R_BUFFER_MMAP) {
+		// only for mmap imho
+		ut64 oz = r_buf_size (b);
+		buf_resize (b, oz + length);
+		if (r_buf_seek (b, oz, R_BUF_SET) == -1) {
+			return false;
+		}
+		return r_buf_write (b, buf, length) == length;
+	}
 	if (r_buf_seek (b, 0, R_BUF_END) == -1) {
 		return false;
 	}
-	return r_buf_write (b, buf, length) >= 0;
+	return r_buf_write (b, buf, length) == length;
+	// return r_buf_write (b, buf, length) > 0;
 }
 
 R_API bool r_buf_append_nbytes(RBuffer *b, ut64 length) {
 	R_RETURN_VAL_IF_FAIL (b && !b->readonly, false);
-	ut8 *buf = R_NEWS0 (ut8, length);
-	if (!buf) {
-		return false;
+	ut8 *buf = calloc (1, length);
+	if (buf) {
+		bool res = r_buf_append_bytes (b, buf, length);
+		free (buf);
+		return res;
 	}
-	bool res = r_buf_append_bytes (b, buf, length);
-	free (buf);
-	return res;
+	return false;
 }
 
 R_API st64 r_buf_insert_bytes(RBuffer *b, ut64 addr, const ut8 *buf, ut64 length) {
@@ -682,30 +694,6 @@ R_API st64 r_buf_read_at(RBuffer *b, ut64 addr, ut8 *buf, ut64 len) {
 	return r;
 }
 
-#if 0
-static const char *bufnam(RBuffer *b) {
-	if (b->methods == &buffer_bytes_methods) {
-		return "bytes";
-	}
-	if (b->methods == &buffer_mmap_methods) {
-		return "mmap";
-	}
-	if (b->methods == &buffer_sparse_methods) {
-		return "sparse";
-	}
-	if (b->methods == &buffer_ref_methods) {
-		return "ref";
-	}
-	if (b->methods == &buffer_io_methods) {
-		return "io";
-	}
-	if (b->methods == &buffer_file_methods) {
-		return "file";
-	}
-	return "unknown";
-}
-#endif
-
 R_API st64 r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, ut64 len) {
 	R_RETURN_VAL_IF_FAIL (b && buf && !b->readonly, -1);
 	st64 o_addr = r_buf_seek (b, 0, R_BUF_CUR);
@@ -723,7 +711,7 @@ R_API st64 r_buf_write_at(RBuffer *b, ut64 addr, const ut8 *buf, ut64 len) {
 	return r;
 }
 
-// XXX R2_590 use r_ref api instead
+// XXX R2_600 use r_ref api instead
 R_API void r_buf_fini(RBuffer *b) {
 	if (!b) {
 		return;
@@ -743,7 +731,7 @@ R_API void r_buf_fini(RBuffer *b) {
 	buf_fini (b);
 }
 
-// XXX R2_590 use r_ref api instead
+// XXX R2_600 use r_ref api instead
 R_API void r_buf_free(RBuffer *b) {
 	if (b) {
 		bool unreferenced = b && b->refctr == 0;
@@ -830,30 +818,22 @@ R_API st64 r_buf_sleb128(RBuffer *b, st64 *v) {
 	return offset / 7;
 }
 
+static const char *buffer_type_strings[] = {
+	"file",
+	"io",
+	"bytes",
+	"mmap",
+	"sparse",
+	"ref",
+	"cache"
+};
+
+#define STATIC_ASSERT(cond, msg) typedef char static_assertion_##msg[(cond) ? 1 : -1]
+STATIC_ASSERT (sizeof (buffer_type_strings) / sizeof (buffer_type_strings[0]) == R_BUFFER_COUNT,
+		buffer_type_strings_mismatch_with_enum);
+
 R_API char *r_buf_describe(RBuffer *b) {
-	const char *type = "unknown";
-	switch (b->type) {
-	case R_BUFFER_CACHE:
-		type = "cache";
-		break;
-	case R_BUFFER_BYTES:
-		type = "bytes";
-		break;
-	case R_BUFFER_MMAP:
-		type = "mmap";
-		break;
-	case R_BUFFER_SPARSE:
-		type = "sparse";
-		break;
-	case R_BUFFER_FILE:
-		type = "file";
-		break;
-	case R_BUFFER_IO:
-		type = "io";
-		break;
-	case R_BUFFER_REF:
-		type = "ref";
-		break;
-	}
-	return r_str_newf ("RBuffer<%s>(.%s) @ %p", type, b->readonly? "ro": "rw", b);
+	const char *type = (b->type >= 0 && b->type < R_BUFFER_COUNT)
+		? buffer_type_strings[b->type]: "unknown";
+	return r_str_newf("RBuffer<%s>(.%s) @ %p", type, b->readonly? "ro": "rw", b);
 }
