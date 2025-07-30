@@ -877,8 +877,8 @@ static int r2pm_install_pkg(const char *pkg, bool clean, bool global) {
 		return 1;
 	}
 	char *s = have_builddir
-		? r_str_newf ("cd '%s'\nexport MAKE=make\nR2PM_FAIL(){\n  echo $@\n}\n%s", pkgdir, script)
-		: r_str_newf ("export MAKE=make\nR2PM_FAIL(){\n  echo $@\n}\n%s", script);
+		? r_str_newf ("cd '%s'\nexport MAKE=make\nR2PM_FAIL(){\n  echo $@\nexit 1\n}\n%s", pkgdir, script)
+		: r_str_newf ("export MAKE=make\nR2PM_FAIL(){\n  echo $@\nexit 1\n}\n%s", script);
 	// if no srcdir is defined because no file to pull just dont cd
 	free (pkgdir);
 	int res = r_sandbox_system (s, 1);
@@ -1385,11 +1385,15 @@ R_API int r_main_r2pm(int argc, const char **argv) {
 	if (r2pm.search) {
 		char *s = r2pm_search (argv[opt.ind], r2pm.json? 'j': 0);
 		if (s) {
-			r_cons_print (cons, s);
-			if (havetoflush) {
-				r_cons_flush (cons);
+			if (*s) {
+				r_cons_print (cons, s);
+				if (havetoflush) {
+					r_cons_flush (cons);
+				}
+				res = 0;
+			} else {
+				res = 1;
 			}
-			res = 0;
 			free (s);
 		} else {
 			res = 1;
