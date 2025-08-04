@@ -4887,9 +4887,6 @@ repeat_arroba:
 		}
 
 		r_str_trim_tail (ptr);
-		if (!ptr[0] && ptr[1]) {
-			ptr++;
-		}
 
 		if (ptr[1] == '?') {
 			r_core_cmd_help (core, help_msg_at);
@@ -4940,7 +4937,11 @@ repeat_arroba:
 				// WAT DU
 				R_LOG_TODO ("what do you expect for @. import offset from file maybe?");
 			}
-		} else if (ptr[0] && ptr[1] && ptr[2]) {
+		} else if (ptr[1] && ptr[2]) {
+			// hack2
+			if (!ptr[0] && ptr[1] == 'x' && ptr[2] && ptr[3] == ':') {
+				ptr++;
+			}
 			// TODO: getarg(ptr);
 			// TODO move into a separate function
 			switch (ptr[0]) {
