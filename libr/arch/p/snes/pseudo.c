@@ -1,4 +1,3 @@
-/*
 /* radare - MIT - Copyright 2025 - pancake */
 
 #include <r_asm.h>

@@ -84,8 +84,8 @@ EXPECT=<<EOF
 0x97bc 0x97d4 0x97dc 0x9854 0x97e4 0x9808
 0x9528 0x9530 0x9574
 0x9df0 0x9e34 0x9dd0
-0x95f4 0x9638 0x969c 0x977c
-0x98d8 0x991c 0x9948 0x9868 0x98c4 0x998c
+0x95f4 0x9638 0x9638 0x969c 0x969c 0x977c 0x977c
+0x98d8 0x991c 0x991c 0x9948 0x9868 0x98c4 0x998c 0x998c
 0x9ec4 0x12780 0x127c8
 0x126b0 0x126f8
 0x126c0 0x126d0
@@ -320,7 +320,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~exception()",
-        "flag": "method.std::exception.exception__",
+        "flag": "method.std::exception._exception__",
         "rawname": "_ZNSt9exceptionD0Ev",
         "lang": "c++",
         "addr": 34948
@@ -342,7 +342,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~bad_exception()",
-        "flag": "method.std::bad_exception.bad_exception__",
+        "flag": "method.std::bad_exception._bad_exception__",
         "rawname": "_ZNSt13bad_exceptionD0Ev",
         "lang": "c++",
         "addr": 34972
@@ -364,7 +364,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__forced_unwind()",
-        "flag": "method.__cxxabiv1::__forced_unwind.__forced_unwind__",
+        "flag": "method.__cxxabiv1::__forced_unwind.___forced_unwind__",
         "rawname": "_ZN10__cxxabiv115__forced_unwindD0Ev",
         "lang": "c++",
         "addr": 35012
@@ -379,7 +379,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__foreign_exception()",
-        "flag": "method.__cxxabiv1::__foreign_exception.__foreign_exception__",
+        "flag": "method.__cxxabiv1::__foreign_exception.___foreign_exception__",
         "rawname": "_ZN10__cxxabiv119__foreign_exceptionD0Ev",
         "lang": "c++",
         "addr": 35036
@@ -394,7 +394,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__eh_globals_init()",
-        "flag": "method.__eh_globals_init.__eh_globals_init__",
+        "flag": "method.__eh_globals_init.___eh_globals_init__",
         "rawname": "_ZN17__eh_globals_initD1Ev",
         "lang": "c++",
         "addr": 35204
@@ -431,7 +431,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__fundamental_type_info()",
-        "flag": "method.__cxxabiv1::__fundamental_type_info.__fundamental_type_info__",
+        "flag": "method.__cxxabiv1::__fundamental_type_info.___fundamental_type_info__",
         "rawname": "_ZN10__cxxabiv123__fundamental_type_infoD0Ev",
         "lang": "c++",
         "addr": 38116
@@ -446,7 +446,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~type_info()",
-        "flag": "method.std::type_info.type_info__",
+        "flag": "method.std::type_info._type_info__",
         "rawname": "_ZNSt9type_infoD0Ev",
         "lang": "c++",
         "addr": 38844
@@ -503,7 +503,7 @@ EXPECT=<<EOF
       },
       {
         "name": "~__pointer_type_info()",
-        "flag": "method.__cxxabiv1::__pointer_type_info.__pointer_type_info__",
+        "flag": "method.__cxxabiv1::__pointer_type_info.___pointer_type_info__",
         "rawname": "_ZN10__cxxabiv119__pointer_type_infoD0Ev",
         "lang": "c++",
         "addr": 38192
@@ -525,7 +525,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__pbase_type_info()",
-        "flag": "method.__cxxabiv1::__pbase_type_info.__pbase_type_info__",
+        "flag": "method.__cxxabiv1::__pbase_type_info.___pbase_type_info__",
         "rawname": "_ZN10__cxxabiv117__pbase_type_infoD0Ev",
         "lang": "c++",
         "addr": 40432
@@ -554,10 +554,17 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__si_class_type_info()",
-        "flag": "method.__cxxabiv1::__si_class_type_info.__si_class_type_info__",
+        "flag": "method.__cxxabiv1::__si_class_type_info.___si_class_type_info__",
         "rawname": "_ZN10__cxxabiv120__si_class_type_infoD0Ev",
         "lang": "c++",
         "addr": 38388
+      },
+      {
+        "name": "__do_find_public_src(int, void const*, __cxxabiv1::__class_type_info const*, void const*) const",
+        "flag": "method.__cxxabiv1::__si_class_type_info.__do_find_public_src_int__void_const____cxxabiv1::__class_type_info_const__void_const__const",
+        "rawname": "_ZNK10__cxxabiv120__si_class_type_info20__do_find_public_srcEiPKvPKNS_17__class_type_infoES2_",
+        "lang": "c++",
+        "addr": 38456
       },
       {
         "name": "__do_find_public_src(int, void const*, __cxxabiv1::__class_type_info const*, void const*) const",
@@ -572,6 +579,20 @@ EXPECT=<<EOF
         "rawname": "_ZNK10__cxxabiv120__si_class_type_info12__do_dyncastEiNS_17__class_type_info10__sub_kindEPKS1_PKvS4_S6_RNS1_16__dyncast_resultE",
         "lang": "c++",
         "addr": 38556
+      },
+      {
+        "name": "__do_dyncast(int, __cxxabiv1::__class_type_info::__sub_kind, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__dyncast_result&) const",
+        "flag": "method.__cxxabiv1::__si_class_type_info.__do_dyncast_int____cxxabiv1::__class_type_info::__sub_kind____cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info::__dyncast_result__const",
+        "rawname": "_ZNK10__cxxabiv120__si_class_type_info12__do_dyncastEiNS_17__class_type_info10__sub_kindEPKS1_PKvS4_S6_RNS1_16__dyncast_resultE",
+        "lang": "c++",
+        "addr": 38556
+      },
+      {
+        "name": "__do_upcast(__cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__upcast_result&) const",
+        "flag": "method.__cxxabiv1::__si_class_type_info.__do_upcast___cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info::__upcast_result__const",
+        "rawname": "_ZNK10__cxxabiv120__si_class_type_info11__do_upcastEPKNS_17__class_type_infoEPKvRNS1_15__upcast_resultE",
+        "lang": "c++",
+        "addr": 38780
       },
       {
         "name": "__do_upcast(__cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__upcast_result&) const",
@@ -590,10 +611,17 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~__class_type_info()",
-        "flag": "method.__cxxabiv1::__class_type_info.__class_type_info__",
+        "flag": "method.__cxxabiv1::__class_type_info.___class_type_info__",
         "rawname": "_ZN10__cxxabiv117__class_type_infoD0Ev",
         "lang": "c++",
         "addr": 39128
+      },
+      {
+        "name": "__do_upcast(__cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__upcast_result&) const",
+        "flag": "method.__cxxabiv1::__class_type_info.__do_upcast___cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info::__upcast_result__const",
+        "rawname": "_ZNK10__cxxabiv117__class_type_info11__do_upcastEPKS0_PKvRNS0_15__upcast_resultE",
+        "lang": "c++",
+        "addr": 39196
       },
       {
         "name": "__do_upcast(__cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__upcast_result&) const",
@@ -622,6 +650,13 @@ EXPECT=<<EOF
         "rawname": "_ZNK10__cxxabiv117__class_type_info20__do_find_public_srcEiPKvPKS0_S2_",
         "lang": "c++",
         "addr": 39108
+      },
+      {
+        "name": "__do_dyncast(int, __cxxabiv1::__class_type_info::__sub_kind, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__dyncast_result&) const",
+        "flag": "method.__cxxabiv1::__class_type_info.__do_dyncast_int____cxxabiv1::__class_type_info::__sub_kind____cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info_const__void_const____cxxabiv1::__class_type_info::__dyncast_result__const",
+        "rawname": "_ZNK10__cxxabiv117__class_type_info12__do_dyncastEiNS0_10__sub_kindEPKS0_PKvS3_S5_RNS0_16__dyncast_resultE",
+        "lang": "c++",
+        "addr": 39308
       },
       {
         "name": "__do_dyncast(int, __cxxabiv1::__class_type_info::__sub_kind, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info const*, void const*, __cxxabiv1::__class_type_info::__dyncast_result&) const",
@@ -676,7 +711,7 @@ EXPECT=<<EOF
       },
       {
         "name": "~__concurrence_lock_error()",
-        "flag": "method.__gnu_cxx::__concurrence_lock_error.__concurrence_lock_error__",
+        "flag": "method.__gnu_cxx::__concurrence_lock_error.___concurrence_lock_error__",
         "rawname": "_ZN9__gnu_cxx24__concurrence_lock_errorD0Ev",
         "lang": "c++",
         "addr": 75512
@@ -698,7 +733,7 @@ EXPECT=<<EOF
       },
       {
         "name": "~__concurrence_unlock_error()",
-        "flag": "method.__gnu_cxx::__concurrence_unlock_error.__concurrence_unlock_error__",
+        "flag": "method.__gnu_cxx::__concurrence_unlock_error.___concurrence_unlock_error__",
         "rawname": "_ZN9__gnu_cxx26__concurrence_unlock_errorD0Ev",
         "lang": "c++",
         "addr": 75472
@@ -713,7 +748,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~bad_cast()",
-        "flag": "method.std::bad_cast.bad_cast__",
+        "flag": "method.std::bad_cast._bad_cast__",
         "rawname": "_ZNSt8bad_castD0Ev",
         "lang": "c++",
         "addr": 76760
@@ -735,7 +770,7 @@ EXPECT=<<EOF
     "methods": [
       {
         "name": "~bad_typeid()",
-        "flag": "method.std::bad_typeid.bad_typeid__",
+        "flag": "method.std::bad_typeid._bad_typeid__",
         "rawname": "_ZNSt10bad_typeidD0Ev",
         "lang": "c++",
         "addr": 76844
@@ -836,15 +871,20 @@ fs classes
 'f class.__cxxabiv1::__si_class_type_info = 0x95f4
 'f method.__cxxabiv1::__si_class_type_info.~__si_class_type_info() = 0x95f4
 'f method.__cxxabiv1::__si_class_type_info.__do_find_public_src(int,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*)_const = 0x9638
+'f method.__cxxabiv1::__si_class_type_info.__do_find_public_src(int,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*)_const = 0x9638
 'f method.__cxxabiv1::__si_class_type_info.__do_dyncast(int,___cxxabiv1::__class_type_info::__sub_kind,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__dyncast_result&)_const = 0x969c
+'f method.__cxxabiv1::__si_class_type_info.__do_dyncast(int,___cxxabiv1::__class_type_info::__sub_kind,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__dyncast_result&)_const = 0x969c
+'f method.__cxxabiv1::__si_class_type_info.__do_upcast(__cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__upcast_result&)_const = 0x977c
 'f method.__cxxabiv1::__si_class_type_info.__do_upcast(__cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__upcast_result&)_const = 0x977c
 'td struct __cxxabiv1::__si_class_type_info { char empty[0];};
 'f class.__cxxabiv1::__class_type_info = 0x9868
 'f method.__cxxabiv1::__class_type_info.~__class_type_info() = 0x98d8
 'f method.__cxxabiv1::__class_type_info.__do_upcast(__cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__upcast_result&)_const = 0x991c
+'f method.__cxxabiv1::__class_type_info.__do_upcast(__cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__upcast_result&)_const = 0x991c
 'f method.__cxxabiv1::__class_type_info.__do_catch(std::type_info_const*,_void**,_unsigned_int)_const = 0x9948
 'f method.__cxxabiv1::__class_type_info.__do_upcast(__cxxabiv1::__class_type_info_const*,_void**)_const = 0x9868
 'f method.__cxxabiv1::__class_type_info.__do_find_public_src(int,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*)_const = 0x98c4
+'f method.__cxxabiv1::__class_type_info.__do_dyncast(int,___cxxabiv1::__class_type_info::__sub_kind,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__dyncast_result&)_const = 0x998c
 'f method.__cxxabiv1::__class_type_info.__do_dyncast(int,___cxxabiv1::__class_type_info::__sub_kind,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info_const*,_void_const*,___cxxabiv1::__class_type_info::__dyncast_result&)_const = 0x998c
 'td struct __cxxabiv1::__class_type_info { char empty[0];};
 'f class.__gnu_cxx = 0x9ec4
