@@ -113,9 +113,9 @@ static bool decode(RArchSession *a, RAnalOp *op, RArchDecodeMask mask) {
 					op->mnemonic = r_str_newf ("call %s", syscall_name);
 				} else {
 					// PC-relative call
-					st64 current_pc = op->addr / 8; 	 		// Current PC in instruction units
-					st64 target_pc = current_pc + imm + 1;  	// Target PC in instruction units
-					st64 target_addr = target_pc * 8;  			// Target address in bytes
+					st64 current_pc = op->addr / 8;        // Current PC in instruction units
+					st64 target_pc = current_pc + imm + 1; // Target PC in instruction units
+					st64 target_addr = target_pc * 8;      // Target address in bytes
 					op->mnemonic = r_str_newf ("call 0x%"PFMT64x, (ut64)target_addr);
 					// Set jump target for call instruction
 					op->jump = target_addr;
@@ -130,10 +130,46 @@ static bool decode(RArchSession *a, RAnalOp *op, RArchDecodeMask mask) {
 					op->size = insn->size;
 				}
 			} else {
-				op->mnemonic = r_str_newf ("%s%s%s",
-					insn->mnemonic,
-					insn->op_str[0]? " ": "",
-					insn->op_str);
+				switch (insn->id) {
+				case BPF_INS_JEQ:
+				case BPF_INS_JGT:
+				case BPF_INS_JGE:
+				case BPF_INS_JSET:
+				case BPF_INS_JNE:
+				case BPF_INS_JSGT:
+				case BPF_INS_JSGE:
+				case BPF_INS_JLT:
+				case BPF_INS_JLE:
+				case BPF_INS_JSLT:
+				case BPF_INS_JSLE:
+					{
+						char *opstr = strdup (insn->op_str);
+						char *comma = strchr (opstr, ',');
+						if (comma) {
+							comma = strchr (comma + 1, ',');
+							if (comma) {
+								*comma = 0;
+							}
+						}
+						op->mnemonic = r_str_newf ("%s %s, 0x%08"PFMT64x,
+								insn->mnemonic, opstr, JUMP (2));
+					}
+					break;
+#if CS_VERSION_MAJOR > 5
+				case BPF_INS_JAL:
+#else
+				case BPF_INS_JMP:
+#endif
+					op->mnemonic = r_str_newf ("%s 0x%08"PFMT64x,
+							insn->mnemonic, JUMP (0));
+					break;
+				default:
+					op->mnemonic = r_str_newf ("%s%s%s",
+							insn->mnemonic,
+							insn->op_str[0]? " ": "",
+							insn->op_str);
+					break;
+				}
 			}
 		}
 		if (insn->detail) {
@@ -840,39 +876,19 @@ static char *regs(RArchSession *as) {
 		"=SP    sp\n"
 		"=BP    r10\n"
 		"=SN    r0\n"
-		"gpr    z        .32 ?    0\n"
-		"gpr    a        .32 0    0\n"
-		"gpr    x        .32 4    0\n"
-		"gpr    m[0]     .32 8    0\n"
-		"gpr    m[1]     .32 12   0\n"
-		"gpr    m[2]     .32 16   0\n"
-		"gpr    m[3]     .32 20   0\n"
-		"gpr    m[4]     .32 24   0\n"
-		"gpr    m[5]     .32 28   0\n"
-		"gpr    m[6]     .32 32   0\n"
-		"gpr    m[7]     .32 36   0\n"
-		"gpr    m[8]     .32 40   0\n"
-		"gpr    m[9]     .32 44   0\n"
-		"gpr    m[10]    .32 48   0\n"
-		"gpr    m[11]    .32 52   0\n"
-		"gpr    m[12]    .32 56   0\n"
-		"gpr    m[13]    .32 60   0\n"
-		"gpr    m[14]    .32 64   0\n"
-		"gpr    m[15]    .32 68   0\n"
-		"gpr    pc       .64 72   0\n"
-		"gpr    r0       .64 80   0\n"
-		"gpr    r1       .64 88   0\n"
-		"gpr    r2       .64 96   0\n"
-		"gpr    r3       .64 104  0\n"
-		"gpr    r4       .64 112  0\n"
-		"gpr    r5       .64 120  0\n"
-		"gpr    r6       .64 128  0\n"
-		"gpr    r7       .64 136  0\n"
-		"gpr    r8       .64 144  0\n"
-		"gpr    r9       .64 152  0\n"
-		"gpr    r10      .64 160  0\n"
-		"gpr    sp       .64 160  0\n"
-		"gpr    tmp      .64 168  0\n";
+		"gpr    r0       .64 0    0\n"
+		"gpr    r1       .64 8    0\n"
+		"gpr    r2       .64 16   0\n"
+		"gpr    r3       .64 24   0\n"
+		"gpr    r4       .64 32   0\n"
+		"gpr    r5       .64 40   0\n"
+		"gpr    r6       .64 48   0\n"
+		"gpr    r7       .64 56   0\n"
+		"gpr    r8       .64 64   0\n"
+		"gpr    r9       .64 72   0\n"
+		"gpr    r10      .64 80   0\n"
+		"gpr    sp       .64 80   0\n"
+		"gpr    pc       .64 88   0\n";
 	return strdup (p);
 }
 
